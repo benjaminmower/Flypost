@@ -1,0 +1,24 @@
+{
+  "name": "flypost-v4-backend",
+  "version": "1.0.0",
+  "description": "Flypost v4 minimal backend - essential parse and publish endpoints",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "echo 'No tests yet'"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "cors": "^2.8.5", 
+    "dotenv": "^16.6.1",
+    "openai": "^4.104.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {},
+  "keywords": ["flypost", "events", "llm", "minimal"],
+  "author": "goflypost",
+  "license": "Apache-2.0"
+}

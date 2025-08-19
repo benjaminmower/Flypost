@@ -1,0 +1,234 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://goflypost.com/schemas/flypost-event-v4.schema.json",
+  "title": "Flypost Event Schema v4 (Minimal)",
+  "description": "Minimal schema definition for Flypost v4 Event, extending Schema.org's Event type with essential Flypost metadata.",
+  "type": "object",
+  "required": [
+    "@context",
+    "@type", 
+    "flypost",
+    "name",
+    "description",
+    "startDate",
+    "location",
+    "organizer"
+  ],
+  "properties": {
+    "@context": {
+      "type": "string",
+      "const": "https://schema.org",
+      "description": "The JSON-LD context for Schema.org."
+    },
+    "@type": {
+      "type": "string", 
+      "const": "Event",
+      "description": "The Schema.org type for this object."
+    },
+    "flypost": {
+      "type": "object",
+      "description": "Essential Flypost-specific metadata for the event.",
+      "required": [
+        "eventId",
+        "category",
+        "realTimeData",
+        "crawlable", 
+        "queryable",
+        "submissionTimestamp"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "description": "A unique identifier for the event within the Flypost system.",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "category": {
+          "type": "string",
+          "description": "The primary category of the event within the Flypost system.",
+          "enum": [
+            "apartments",
+            "garage-sales", 
+            "open-houses",
+            "job-postings",
+            "live-events",
+            "community-alerts",
+            "happy-hours",
+            "missing-pets"
+          ]
+        },
+        "realTimeData": {
+          "type": "boolean",
+          "description": "Indicates if this event represents real-time data that should be consumed proactively by agents.",
+          "default": true
+        },
+        "crawlable": {
+          "type": "boolean",
+          "description": "Indicates if this event's data is intended to be crawled by automated systems.",
+          "default": true
+        },
+        "queryable": {
+          "type": "boolean",
+          "description": "Indicates if this event's data is intended to be queryable via an API.",
+          "default": true
+        },
+        "submissionTimestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The UTC timestamp when the event data was submitted to Flypost."
+        }
+      },
+      "additionalProperties": false
+    },
+    "name": {
+      "type": "string",
+      "description": "The name of the event.",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "description": "A detailed description of the event.",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "startDate": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The start date and time of the event in ISO 8601 format."
+    },
+    "endDate": {
+      "type": "string", 
+      "format": "date-time",
+      "description": "The end date and time of the event in ISO 8601 format."
+    },
+    "location": {
+      "type": "object",
+      "description": "The location where the event will take place.",
+      "required": [
+        "@type",
+        "address"
+      ],
+      "properties": {
+        "@type": {
+          "type": "string",
+          "const": "Place",
+          "description": "The Schema.org type for the location."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the location (e.g., 'Main Street')."
+        },
+        "address": {
+          "type": "object",
+          "description": "The postal address of the event location.",
+          "required": [
+            "@type",
+            "streetAddress"
+          ],
+          "properties": {
+            "@type": {
+              "type": "string",
+              "const": "PostalAddress", 
+              "description": "The Schema.org type for the address."
+            },
+            "streetAddress": {
+              "type": "string",
+              "description": "The street address of the location.",
+              "minLength": 1
+            },
+            "addressLocality": {
+              "type": "string",
+              "description": "The locality (city) of the address."
+            },
+            "addressRegion": {
+              "type": "string",
+              "description": "The region (state/province) of the address."
+            },
+            "postalCode": {
+              "type": "string",
+              "description": "The postal code of the address."
+            },
+            "addressCountry": {
+              "type": "string",
+              "description": "The country of the address."
+            }
+          },
+          "additionalProperties": false
+        },
+        "geo": {
+          "type": "object",
+          "description": "Geographical coordinates of the event location (optional).",
+          "required": [
+            "@type",
+            "latitude",
+            "longitude"
+          ],
+          "properties": {
+            "@type": {
+              "type": "string",
+              "const": "GeoCoordinates",
+              "description": "The Schema.org type for geographical coordinates."
+            },
+            "latitude": {
+              "type": "number", 
+              "description": "The latitude of the location.",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "longitude": {
+              "type": "number",
+              "description": "The longitude of the location.",
+              "minimum": -180,
+              "maximum": 180
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "organizer": {
+      "type": "object",
+      "description": "The person or organization organizing the event.",
+      "required": [
+        "@type",
+        "name",
+        "email"
+      ],
+      "properties": {
+        "@type": {
+          "type": "string",
+          "enum": ["Person", "Organization"],
+          "description": "The Schema.org type for the organizer. Can be a Person or Organization."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the organizer.",
+          "minLength": 1
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The email address of the organizer."
+        },
+        "telephone": {
+          "type": "string", 
+          "description": "The telephone number of the organizer."
+        }
+      },
+      "additionalProperties": false
+    },
+    "keywords": {
+      "type": "array",
+      "description": "Keywords or tags associated with the event.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}
