@@ -62,6 +62,8 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
 
 ### Flypost Extensions
 - `flypost.eventId`: Unique identifier (8-64 characters, alphanumeric + _ -)
+  - Format: `evt_{random}_{timestamp}` (e.g., `evt_k7x9m2p4q_1641234567890`)
+  - Generated using base36 random string + JavaScript timestamp
 - `flypost.category`: One of predefined categories
 - `flypost.realTimeData`: Boolean flag for real-time processing
 - `flypost.crawlable`: Boolean flag for automated crawling
