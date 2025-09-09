@@ -44,15 +44,31 @@ app.get('/health', (req, res) => {
   })
 })
 
-// Parse and publish endpoint - core functionality
+// Parse and publish endpoint - core functionality (now with alias support)
 app.post('/api/parse-and-publish', async (req, res) => {
   try {
-    const { naturalLanguageInput, userContext } = req.body
+    const body = req.body || {}
+    // Accept aliases for ergonomics
+    let naturalLanguageInput =
+      body.naturalLanguageInput ??
+      body.text ??
+      body.input
 
-    if (!naturalLanguageInput || typeof naturalLanguageInput !== 'string') {
+    const userContext = body.userContext
+
+    if (typeof naturalLanguageInput !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'naturalLanguageInput is required and must be a string'
+        error: 'Missing event description. Provide "naturalLanguageInput" (preferred) or one of ["text","input"] as a non-empty string.',
+        providedKeys: Object.keys(body)
+      })
+    }
+
+    naturalLanguageInput = naturalLanguageInput.trim()
+    if (!naturalLanguageInput.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'Event description cannot be empty after trimming'
       })
     }
 
@@ -73,12 +89,10 @@ app.post('/api/parse-and-publish', async (req, res) => {
       })
     }
 
-    // Step 3: Enrich and store
+    // Step 3: Store
     const storedEvent = storeEvent(validation.data)
-    
-    console.log(`📦 Successfully stored event: ${storedEvent.flypost.eventId}`)
+    console.log(`📦 Stored event: ${storedEvent.flypost.eventId}`)
 
-    // Return success response
     res.json({
       success: true,
       data: {
@@ -94,7 +108,6 @@ app.post('/api/parse-and-publish', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Parse and publish error:', error)
-    
     res.status(500).json({
       success: false,
       error: error.message || 'Internal server error during processing',
@@ -109,7 +122,7 @@ app.get('/v1/events/near', (req, res) => {
     const { lat, lng, radius } = req.query
     
     // For MVP, just return all events regardless of location
-    const events = lat && lng ? 
+    const events = lat && lng ?
       getEventsNear(parseFloat(lat), parseFloat(lng), radius ? parseFloat(radius) : 10) :
       getEvents()
 
@@ -182,7 +195,7 @@ app.post('/api/test-add-event', (req, res) => {
       }
     },
     "organizer": {
-      "@type": "Person", 
+      "@type": "Person",
       "name": req.body.organizer || "Test Organizer",
       "email": req.body.email || "test@example.com"
     }
@@ -203,46 +216,16 @@ app.post('/api/test-add-event', (req, res) => {
     success: true,
     data: {
       eventId: storedEvent.flypost.eventId,
-      event: storedEvent,
-      note: "Mock event added for testing"
+      event: storedEvent
     }
   })
 })
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Endpoint not found',
-    available: [
-      'GET /health',
-      'POST /api/parse-and-publish',
-      'GET /v1/events/near',
-      'GET /api/schema',
-      'GET /api/stats',
-      'DELETE /api/events (debug)',
-      'POST /api/test-add-event (testing)'
-    ]
-  })
-})
-
-// Error handler
-app.use((error, req, res, next) => {
-  console.error('💥 Unhandled error:', error)
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: error.message
-  })
-})
-
-// Start server
 app.listen(port, () => {
   console.log('\n🚀 Flypost v4 Backend Server Started')
   console.log(`📡 Listening on port ${port}`)
   console.log(`🌐 Health check: http://localhost:${port}/health`)
   console.log(`🤖 Parse endpoint: POST http://localhost:${port}/api/parse-and-publish`)
-  console.log(`📋 Events endpoint: GET http://localhost:${port}/v1/events/near`)
-  console.log('\n💡 Ready for parse → publish → query loop testing!\n')
+  console.log(`📋 Events endpoint: GET http://localhost:${port}/v1/events/near\n`)
+  console.log('💡 Ready for parse → publish → query loop testing!')
 })
-
-export default app
