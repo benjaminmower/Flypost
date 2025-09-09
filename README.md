@@ -35,6 +35,23 @@ npm run dev
 
 Events follow a minimal JSON-LD schema based on Schema.org with Flypost extensions. See `docs/event-model.md` for details.
 
+## API Specification
+
+Complete API specification and design decisions are documented in:
+- **API Specification**: `docs/api-specification.md` - Complete API contracts and decision documentation
+- **Decision Tracker**: `docs/decision-tracker.md` - Implementation status of 8 key design decisions  
+- **Event Model**: `docs/event-model.md` - Event schema and validation rules
+
 ## Development Status
 
-This is an MVP implementation focusing on the core parse → publish → query loop.
+✅ **v4 Core Complete**: All 8 key API & data contract decisions have been implemented and documented:
+1. Initial API direction & goals
+2. Event ingest shape & normalization  
+3. /v1/events/near endpoint contract
+4. Minimal event object shape & JSON-LD surface
+5. Stable field table (required/optional/excluded)
+6. Unified error format & codes
+7. Controlled category vocabulary & synthetic windows
+8. Slug generation algorithm
+
+The system provides a fully functional parse → publish → query loop ready for OpenAI integration and Firestore storage.
