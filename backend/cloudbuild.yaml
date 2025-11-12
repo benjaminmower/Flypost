@@ -19,6 +19,6 @@ steps:
         --set-env-vars NODE_ENV=test,PORT=8080,FRONTEND_URL=${_FRONTEND_URL}
 substitutions:
   _REGION: 'us-central1'
-  _FRONTEND_URL: 'https://YOUR_NETLIFY_SITE.netlify.app'
+  _FRONTEND_URL: 'https://flypost.netlify.app'
 images:
 - 'gcr.io/$PROJECT_ID/goflypost-backend:$SHORT_SHA'
