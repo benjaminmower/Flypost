@@ -11,14 +11,15 @@ steps:
   args:
     - '-c'
     - |
-      gcloud run deploy goflypost-backend \
+      gcloud run deploy flypostv4 \
         --image gcr.io/$PROJECT_ID/goflypost-backend:$SHORT_SHA \
-        --region=${_REGION:-us-central1} \
+        --region=${_REGION:-us-west1} \
         --platform=managed \
         --allow-unauthenticated \
-        --set-env-vars NODE_ENV=test,PORT=8080,FRONTEND_URL=${_FRONTEND_URL}
+        --set-env-vars NODE_ENV=production,PORT=8080,FRONTEND_URL=${_FRONTEND_URL} \
+        --update-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest
 substitutions:
-  _REGION: 'us-central1'
+  _REGION: 'us-west1'
   _FRONTEND_URL: 'https://flypost.netlify.app'
 images:
 - 'gcr.io/$PROJECT_ID/goflypost-backend:$SHORT_SHA'
