@@ -9,15 +9,16 @@ RUN npm ci --production
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY . .
-# Optional build step if you add transpilation
-RUN npm run build || true
+RUN rm -rf node_modules
 
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 # Use the runtime deps
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app ./
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/schemas ./schemas
 # Cloud Run expects the app to listen on the PORT env var
 ENV PORT=8080
 EXPOSE 8080
