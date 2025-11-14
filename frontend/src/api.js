@@ -4,7 +4,7 @@
  */
 
 // Backend configuration
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://flypostv4-a7jlfl42zq-uw.a.run.app'
 
 /**
  * Parse and publish an event
