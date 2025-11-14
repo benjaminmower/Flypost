@@ -53,7 +53,7 @@ app.use(async (req, res) => {
 
     const response = await client.request(opts)
 
-    // Optional lightweight debug logging (remove after verification)
+    // Lightweight debug log for verification; remove later.
     console.log('proxy forwarded to', upstreamUrl, 'status=', response.status)
 
     // Mirror upstream status and content-type

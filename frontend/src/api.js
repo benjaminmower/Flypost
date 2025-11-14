@@ -102,11 +102,3 @@ export async function getStats() {
   
   return result
 }
-
-export default {
-  parseAndPublishEvent,
-  getEventsNear,
-  getSchema,
-  getHealth,
-  getStats
-}
