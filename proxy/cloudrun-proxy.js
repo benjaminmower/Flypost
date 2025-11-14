@@ -24,23 +24,21 @@ app.use((req, res, next) => {
   next()
 })
 
-// Optional: keep any explicit /api/... helpers (existing handlers may be preserved),
-// but the generic catch-all below will handle both /api/* and non-/api paths used by the frontend.
-
 // Generic proxy: forward any path to TARGET
 app.use(async (req, res) => {
   try {
     // If the incoming path starts with /api, strip the prefix when forwarding.
-    // That keeps compatibility with both frontend calling /api/... (proxy-style)
-    // and frontend calling root-level backend paths (/health, /v1/...).
     const upstreamPath = req.originalUrl.replace(/^\/api/, '') // includes query string
     const upstreamUrl = `${TARGET}${upstreamPath}`
 
     const client = await auth.getIdTokenClient(TARGET)
 
-    // Clone headers but remove host to avoid conflicts; Google-auth will add Authorization header.
+    // Clone headers but remove host to avoid conflicts.
+    // IMPORTANT: do not forward incoming Authorization header to upstream.
     const forwardHeaders = { ...req.headers }
     delete forwardHeaders.host
+    delete forwardHeaders.authorization
+    delete forwardHeaders.Authorization
 
     const opts = {
       url: upstreamUrl,
