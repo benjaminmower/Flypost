@@ -34,7 +34,8 @@ app.use(async (req, res) => {
     const client = await auth.getIdTokenClient(TARGET)
 
     // Clone headers but remove host to avoid conflicts.
-    // IMPORTANT: do not forward incoming Authorization header to upstream.
+    // IMPORTANT: do not forward incoming Authorization header to upstream;
+    // the id-token client will attach the proper Authorization header for TARGET.
     const forwardHeaders = { ...req.headers }
     delete forwardHeaders.host
     delete forwardHeaders.authorization
@@ -51,6 +52,9 @@ app.use(async (req, res) => {
     }
 
     const response = await client.request(opts)
+
+    // Optional lightweight debug logging (remove after verification)
+    console.log('proxy forwarded to', upstreamUrl, 'status=', response.status)
 
     // Mirror upstream status and content-type
     if (response.headers && response.headers['content-type']) {
