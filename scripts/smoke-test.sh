@@ -18,20 +18,31 @@ fi
 echo "proxy_url=${PROXY_URL}"
 echo "target_url=${TARGET_URL}"
 
-# Try to get an identity token impersonating the proxy service account (works for private or public target)
+# Try to get identity tokens impersonating the proxy service account
+# TOKEN_TARGET for direct backend calls (audience = target)
+# TOKEN_PROXY for proxy calls (audience = proxy)
 SA="flypost-proxy-service-account@${PROJECT}.iam.gserviceaccount.com"
-TOKEN=$(gcloud auth print-identity-token --impersonate-service-account="${SA}" --audiences="${TARGET_URL%/}" 2>/dev/null || true)
+TOKEN_TARGET=$(gcloud auth print-identity-token --impersonate-service-account="${SA}" --audiences="${TARGET_URL%/}" 2>/dev/null || true)
+TOKEN_PROXY=$(gcloud auth print-identity-token --impersonate-service-account="${SA}" --audiences="${PROXY_URL%/}" 2>/dev/null || true)
 
-if [[ -n "${TOKEN}" ]]; then
-  echo "calling target directly with impersonated identity token"
-  DIRECT=$(curl -sS -H "Authorization: Bearer ${TOKEN}" "${TARGET_URL%/}/health")
+if [[ -n "${TOKEN_TARGET}" ]]; then
+  echo "calling target directly with target-scoped identity token"
+  DIRECT=$(curl -sS -H "Authorization: Bearer ${TOKEN_TARGET}" "${TARGET_URL%/}/health")
 else
-  echo "no impersonation token, trying public call"
+  echo "no target token, trying public call to target"
   DIRECT=$(curl -sS "${TARGET_URL%/}/health")
 fi
 
-echo "calling proxy /api/health"
-PROXY=$(curl -sS "${PROXY_URL%/}/api/health")
+if [[ -n "${TOKEN_PROXY}" ]]; then
+  echo "calling proxy /api/health with proxy-scoped identity token"
+  PROXY=$(curl -sS -H "Authorization: Bearer ${TOKEN_PROXY}" "${PROXY_URL%/}/api/health")
+elif [[ -n "${TOKEN_TARGET}" ]]; then
+  echo "no proxy token, falling back to target token for proxy call"
+  PROXY=$(curl -sS -H "Authorization: Bearer ${TOKEN_TARGET}" "${PROXY_URL%/}/api/health")
+else
+  echo "no tokens available, trying public call to proxy"
+  PROXY=$(curl -sS "${PROXY_URL%/}/api/health")
+fi
 
 # If jq is available, compare structured fields; otherwise print raw JSONs
 if command -v jq >/dev/null 2>&1; then
