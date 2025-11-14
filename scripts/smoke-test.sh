@@ -18,20 +18,33 @@ fi
 echo "proxy_url=${PROXY_URL}"
 echo "target_url=${TARGET_URL}"
 
-# Try to get an identity token impersonating the proxy service account (works for private or public target)
+# Try to get identity tokens impersonating the proxy service account.
+# Request one token for the target and one for the proxy (audiences differ).
 SA="flypost-proxy-service-account@${PROJECT}.iam.gserviceaccount.com"
-TOKEN=$(gcloud auth print-identity-token --impersonate-service-account="${SA}" --audiences="${TARGET_URL%/}" 2>/dev/null || true)
+TOKEN_TARGET=$(gcloud auth print-identity-token --impersonate-service-account="${SA}" --audiences="${TARGET_URL%/}" 2>/dev/null || true)
+TOKEN_PROXY=$(gcloud auth print-identity-token --impersonate-service-account="${SA}" --audiences="${PROXY_URL%/}" 2>/dev/null || true)
 
-if [[ -n "${TOKEN}" ]]; then
+# Direct call to target
+if [[ -n "${TOKEN_TARGET}" ]]; then
   echo "calling target directly with impersonated identity token"
-  DIRECT=$(curl -sS -H "Authorization: Bearer ${TOKEN}" "${TARGET_URL%/}/health")
+  DIRECT=$(curl -sS -H "Authorization: Bearer ${TOKEN_TARGET}" "${TARGET_URL%/}/health")
 else
-  echo "no impersonation token, trying public call"
+  echo "no impersonation token for target, trying public call"
   DIRECT=$(curl -sS "${TARGET_URL%/}/health")
 fi
 
 echo "calling proxy /api/health"
-PROXY=$(curl -sS "${PROXY_URL%/}/api/health")
+# Prefer proxy-specific token; if unavailable, fall back to target token; else anonymous.
+if [[ -n "${TOKEN_PROXY}" ]]; then
+  echo "using proxy-specific impersonation token for proxy request"
+  PROXY=$(curl -sS -H "Authorization: Bearer ${TOKEN_PROXY}" "${PROXY_URL%/}/api/health")
+elif [[ -n "${TOKEN_TARGET}" ]]; then
+  echo "proxy-specific token not available; falling back to target token for proxy request"
+  PROXY=$(curl -sS -H "Authorization: Bearer ${TOKEN_TARGET}" "${PROXY_URL%/}/api/health")
+else
+  echo "no impersonation token available; calling proxy publicly"
+  PROXY=$(curl -sS "${PROXY_URL%/}/api/health")
+fi
 
 # If jq is available, compare structured fields; otherwise print raw JSONs
 if command -v jq >/dev/null 2>&1; then
