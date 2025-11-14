@@ -4,7 +4,7 @@ import { GoogleAuth } from 'google-auth-library'
 const app = express()
 const auth = new GoogleAuth()
 
-const TARGET = process.env.TARGET_URL || 'https://flypostv4-498798854474.us-west1.run.app'
+const TARGET = process.env.TARGET_URL || 'https://flypostv4-a7jlfl42zq-uw.a.run.app'
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'https://flypost.netlify.app'
 
 // parse JSON bodies so POST/PUT proxying works
