@@ -4,7 +4,7 @@
  */
 
 // Backend configuration
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://proxy-498798854474.us-west1.run.app'
 
 /**
  * Parse and publish an event
@@ -46,7 +46,7 @@ export async function getEventsNear(lat = null, lng = null, radius = 10) {
   if (lng !== null) params.append('lng', lng)
   if (radius !== null) params.append('radius', radius)
   
-  const url = `${API_BASE}/v1/events/near${params.toString() ? '?' + params.toString() : ''}`
+  const url = `${API_BASE}/api/v1/events/near${params.toString() ? '?' + params.toString() : ''}`
   
   const response = await fetch(url)
   const result = await response.json()
@@ -78,7 +78,7 @@ export async function getSchema() {
  * @returns {Promise<object>} - Health status
  */
 export async function getHealth() {
-  const response = await fetch(`${API_BASE}/health`)
+  const response = await fetch(`${API_BASE}/api/health`)
   const result = await response.json()
   
   if (!response.ok) {
