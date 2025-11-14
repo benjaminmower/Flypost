@@ -29,8 +29,7 @@ app.use((req, res, next) => {
   next()
 })
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+const healthHandler = (req, res) => {
   const stats = getStorageStats()
   res.json({
     status: 'healthy',
@@ -42,7 +41,10 @@ app.get('/health', (req, res) => {
     },
     uptime: stats.uptime
   })
-})
+}
+
+// Health check endpoint (temporary dual routing for compatibility)
+app.get(['/health', '/api/health'], healthHandler)
 
 // Parse and publish endpoint - core functionality (now with alias support)
 app.post('/api/parse-and-publish', async (req, res) => {
@@ -116,11 +118,11 @@ app.post('/api/parse-and-publish', async (req, res) => {
   }
 })
 
-// Get events near location - naive implementation
-app.get('/v1/events/near', (req, res) => {
+// Get events near location - naive implementation (temporary dual routing for compatibility)
+const getEventsNearHandler = (req, res) => {
   try {
     const { lat, lng, radius } = req.query
-    
+
     // For MVP, just return all events regardless of location
     const events = lat && lng ?
       getEventsNear(parseFloat(lat), parseFloat(lng), radius ? parseFloat(radius) : 10) :
@@ -140,13 +142,15 @@ app.get('/v1/events/near', (req, res) => {
 
   } catch (error) {
     console.error('❌ Events retrieval error:', error)
-    
+
     res.status(500).json({
       success: false,
       error: error.message || 'Internal server error during retrieval'
     })
   }
-})
+}
+
+app.get(['/v1/events/near', '/api/v1/events/near'], getEventsNearHandler)
 
 // Utility endpoints for development
 app.get('/api/schema', (req, res) => {
