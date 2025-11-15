@@ -12,7 +12,7 @@ module.exports = function createForwardMiddleware() {
   return async function forwardMiddleware(req, res) {
     if (!BACKEND_BASE) return res.status(500).json({ error: 'proxy backend not configured' })
 
-    const targetUrl = BACKEND_BASE + req.originalUrl // preserve path + query
+    const targetUrl = BACKEND_BASE + req.url // preserve path + query
     console.log('proxy forwarding to', targetUrl, 'method=', req.method)
 
     try {
