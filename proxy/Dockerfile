@@ -21,7 +21,7 @@ COPY --from=deps /app/node_modules ./node_modules
 # copy the app entrypoint and any other runtime files
 COPY --from=builder /app/cloudrun-proxy.js ./cloudrun-proxy.js
 COPY --from=builder /app/package.json ./package.json
-# Include runtime sources that exist in the repo
+# Include runtime sources that cloudrun-proxy.js requires
 COPY --from=builder /app/src ./src
 
 ENV PORT=8080
