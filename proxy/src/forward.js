@@ -29,7 +29,13 @@ module.exports = function createForwardMiddleware() {
 
       let body = undefined
       if (req.method !== 'GET' && req.method !== 'HEAD') {
-        if (req.body && Object.keys(req.body).length) {
+        if (
+          req.body &&
+          (
+            (typeof req.body === 'string' && req.body.length > 0) ||
+            (typeof req.body === 'object' && Object.keys(req.body).length > 0)
+          )
+        ) {
           body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
           headers['content-type'] = headers['content-type'] || 'application/json'
           headers['content-length'] = Buffer.byteLength(body)
