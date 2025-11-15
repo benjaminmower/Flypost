@@ -52,7 +52,12 @@ module.exports = function createForwardMiddleware() {
 
       const buf = Buffer.from(backendRes.data || '')
       const contentType = (backendRes.headers && backendRes.headers['content-type']) || ''
-      const snippet = buf.slice(0, 1024).toString('utf8').replace(/\n/g, '\\n')
+      let snippet = ''
+      if (contentType.includes('text/') || contentType.includes('application/json')) {
+        snippet = buf.slice(0, 1024).toString('utf8').replace(/\n/g, '\\n')
+      } else {
+        snippet = '<binary data>'
+      }
       console.log(`proxy received from backend status=${backendRes.status} content-type=${contentType} len=${buf.length} snippet="${snippet}"`)
 
       Object.entries(backendRes.headers || {}).forEach(([k, v]) => {
