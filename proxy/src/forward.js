@@ -1,5 +1,5 @@
 // Robust forwarder for proxy -> backend
-// Replaces existing forwarder implementation to preserve path and forward raw response
+// Preserves original path+query and forwards requests with an ID token for the backend audience.
 const { GoogleAuth } = require('google-auth-library')
 const url = require('url')
 
@@ -12,33 +12,35 @@ module.exports = function createForwardMiddleware() {
   return async function forwardMiddleware(req, res) {
     if (!BACKEND_BASE) return res.status(500).json({ error: 'proxy backend not configured' })
 
-    const targetUrl = BACKEND_BASE + req.url // preserve path + query
+    const targetUrl = BACKEND_BASE + req.originalUrl // preserve path + query
     console.log('proxy forwarding to', targetUrl, 'method=', req.method)
 
     try {
       const client = await auth.getIdTokenClient(BACKEND_BASE)
 
-      // Build headers - copy request headers but remove hop-by-hop
       const headers = { ...req.headers }
-      headers.host = url.parse(BACKEND_BASE).host
+      headers.host = new URL(BACKEND_BASE).host
 
       const HOP_BY_HOP = [
         'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
         'te', 'trailer', 'transfer-encoding', 'upgrade', 'accept-encoding'
       ]
       HOP_BY_HOP.forEach(h => delete headers[h])
+      delete headers['authorization']
+      delete headers['Authorization']
 
-      // Prepare body if present
       let body = undefined
       if (req.method !== 'GET' && req.method !== 'HEAD') {
-        if (req.body != null) {
-          if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) {
-            body = req.body;
-          } else {
-            body = JSON.stringify(req.body);
-            headers['content-type'] = headers['content-type'] || 'application/json';
-          }
-          headers['content-length'] = Buffer.byteLength(body);
+        if (
+          req.body &&
+          (
+            (typeof req.body === 'string' && req.body.length > 0) ||
+            (typeof req.body === 'object' && Object.keys(req.body).length > 0)
+          )
+        ) {
+          body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
+          headers['content-type'] = headers['content-type'] || 'application/json'
+          headers['content-length'] = Buffer.byteLength(body)
         }
       }
 
@@ -52,17 +54,14 @@ module.exports = function createForwardMiddleware() {
 
       const buf = Buffer.from(backendRes.data || '')
       const contentType = (backendRes.headers && backendRes.headers['content-type']) || ''
-      let snippet, snippetInfo;
-      if (/^(text\/|application\/(json|javascript|xml|x-www-form-urlencoded))/i.test(contentType)) {
-        snippet = buf.slice(0, 1024).toString('utf8').replace(/\n/g, '\\n');
-        snippetInfo = `"${snippet}"`;
+      let snippet = ''
+      if (contentType.includes('text/') || contentType.includes('application/json')) {
+        snippet = buf.slice(0, 1024).toString('utf8').replace(/\n/g, '\\n')
       } else {
-        snippet = buf.slice(0, 1024).toString('base64');
-        snippetInfo = `[base64] ${snippet}`;
+        snippet = '<binary data>'
       }
-      console.log(`proxy received from backend status=${backendRes.status} content-type=${contentType} len=${buf.length} snippet=${snippetInfo}`)
+      console.log(`proxy received from backend status=${backendRes.status} content-type=${contentType} len=${buf.length} snippet="${snippet}"`)
 
-      // Forward safe headers back to client
       Object.entries(backendRes.headers || {}).forEach(([k, v]) => {
         if (!k) return
         const key = k.toLowerCase()
