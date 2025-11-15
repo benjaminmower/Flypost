@@ -46,7 +46,7 @@ export async function getEventsNear(lat = null, lng = null, radius = 10) {
   if (lng !== null) params.append('lng', lng)
   if (radius !== null) params.append('radius', radius)
   
-  const url = `${API_BASE}/api/v1/events/near${params.toString() ? '?' + params.toString() : ''}`
+  const url = `${API_BASE}/v1/events/near${params.toString() ? '?' + params.toString() : ''}`
   
   const response = await fetch(url)
   const result = await response.json()
