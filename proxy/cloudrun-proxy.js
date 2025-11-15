@@ -1,4 +1,3 @@
-// Mount the forward middleware and add request logging
 const express = require('express')
 const bodyParser = require('body-parser')
 const createForward = require('./src/forward')
@@ -11,8 +10,9 @@ app.use((req, res, next) => {
   next()
 })
 
-// Preserve /api prefix and forward requests to backend
 app.use('/api', createForward())
+
+app.get('/', (req, res) => res.json({ proxy: 'ok' }))
 
 const port = process.env.PORT || 8080
 app.listen(port, () => console.log(`Proxy listening on ${port}`))
