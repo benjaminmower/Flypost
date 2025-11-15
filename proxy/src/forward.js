@@ -19,7 +19,7 @@ module.exports = function createForwardMiddleware() {
       const client = await auth.getIdTokenClient(BACKEND_BASE)
 
       const headers = { ...req.headers }
-      headers.host = url.parse(BACKEND_BASE).host
+      headers.host = new URL(BACKEND_BASE).host
 
       const HOP_BY_HOP = [
         'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
