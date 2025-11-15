@@ -1,7 +1,6 @@
 {
   "name": "flypost-proxy",
   "version": "0.1.0",
-  "type": "module",
   "main": "cloudrun-proxy.js",
   "scripts": {
     "start": "node cloudrun-proxy.js"
