@@ -4,7 +4,7 @@
  */
 
 // Backend configuration
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://proxy-498798854474.us-west1.run.app'
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://flypostv4-a7jlfl42zq-uw.a.run.app'
 
 /**
  * Parse and publish an event
@@ -101,12 +101,4 @@ export async function getStats() {
   }
   
   return result
-}
-
-export default {
-  parseAndPublishEvent,
-  getEventsNear,
-  getSchema,
-  getHealth,
-  getStats
 }
