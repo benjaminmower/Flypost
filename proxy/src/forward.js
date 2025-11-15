@@ -26,6 +26,8 @@ module.exports = function createForwardMiddleware() {
         'te', 'trailer', 'transfer-encoding', 'upgrade', 'accept-encoding'
       ]
       HOP_BY_HOP.forEach(h => delete headers[h])
+      delete headers['authorization']
+      delete headers['Authorization']
 
       let body = undefined
       if (req.method !== 'GET' && req.method !== 'HEAD') {
