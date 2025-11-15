@@ -31,10 +31,14 @@ module.exports = function createForwardMiddleware() {
       // Prepare body if present
       let body = undefined
       if (req.method !== 'GET' && req.method !== 'HEAD') {
-        if (req.body && Object.keys(req.body).length) {
-          body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
-          headers['content-type'] = headers['content-type'] || 'application/json'
-          headers['content-length'] = Buffer.byteLength(body)
+        if (req.body != null) {
+          if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) {
+            body = req.body;
+          } else {
+            body = JSON.stringify(req.body);
+            headers['content-type'] = headers['content-type'] || 'application/json';
+          }
+          headers['content-length'] = Buffer.byteLength(body);
         }
       }
 
