@@ -1,0 +1,115 @@
+# Cloud Build config for Flypost v4
+# - Builds backend and proxy images from this repo
+# - Deploys to Cloud Run services flypostv4 (backend) and proxyv4 (proxy)
+#
+# Trigger: on push to main
+
+substitutions:
+  # Adjust if you change project or region
+  _REGION: us-west1
+  _BACKEND_SERVICE: flypostv4
+  _PROXY_SERVICE: proxyv4
+  # Artifact Registry repo path (already used by your manual builds)
+  _REPO_PATH: us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # 1) Build backend image from backend/Dockerfile
+  - name: gcr.io/cloud-builders/docker
+    id: build-backend
+    dir: backend
+    args:
+      [
+        "build",
+        "-t",
+        "${_REPO_PATH}/${_BACKEND_SERVICE}:$SHORT_SHA",
+        "-f",
+        "Dockerfile",
+        ".",
+      ]
+
+  # 2) Push backend image
+  - name: gcr.io/cloud-builders/docker
+    id: push-backend
+    args:
+      [
+        "push",
+        "${_REPO_PATH}/${_BACKEND_SERVICE}:$SHORT_SHA",
+      ]
+
+  # 3) Build proxy image from proxy/Dockerfile
+  - name: gcr.io/cloud-builders/docker
+    id: build-proxy
+    dir: proxy
+    args:
+      [
+        "build",
+        "-t",
+        "${_REPO_PATH}/${_PROXY_SERVICE}:$SHORT_SHA",
+        "-f",
+        "Dockerfile",
+        ".",
+      ]
+
+  # 4) Push proxy image
+  - name: gcr.io/cloud-builders/docker
+    id: push-proxy
+    args:
+      [
+        "push",
+        "${_REPO_PATH}/${_PROXY_SERVICE}:$SHORT_SHA",
+      ]
+
+  # 5) Deploy backend to Cloud Run (flypostv4)
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-backend
+    entrypoint: gcloud
+    args:
+      [
+        "run",
+        "deploy",
+        "${_BACKEND_SERVICE}",
+        "--image",
+        "${_REPO_PATH}/${_BACKEND_SERVICE}:$SHORT_SHA",
+        "--region",
+        "${_REGION}",
+        "--platform",
+        "managed",
+        "--allow-unauthenticated",
+      ]
+
+  # 6) Deploy proxy to Cloud Run (proxyv4)
+  #    Note: BACKEND_URL is set dynamically based on the backend service URL.
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-proxy
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        set -euo pipefail
+        REGION="${_REGION}"
+        PROJECT="$(gcloud config get-value project)"
+
+        # Get backend URL dynamically
+        BACKEND_URL=$(gcloud run services describe "${_BACKEND_SERVICE}" \
+          --region="${REGION}" \
+          --format='value(status.url)')
+
+        if [[ -z "${BACKEND_URL}" ]]; then
+          echo "Failed to resolve backend URL for ${_BACKEND_SERVICE}" >&2
+          exit 1
+        fi
+
+        # Deploy proxy with BACKEND_URL and FRONTEND_ORIGIN
+        gcloud run deploy "${_PROXY_SERVICE}" \
+          --image "${_REPO_PATH}/${_PROXY_SERVICE}:$SHORT_SHA" \
+          --region "${REGION}" \
+          --platform managed \
+          --allow-unauthenticated \
+          --set-env-vars "BACKEND_URL=${BACKEND_URL},FRONTEND_ORIGIN=https://flypost.netlify.app"
+
+images:
+  - "${_REPO_PATH}/${_BACKEND_SERVICE}:$SHORT_SHA"
+  - "${_REPO_PATH}/${_PROXY_SERVICE}:$SHORT_SHA"
