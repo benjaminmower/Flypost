@@ -52,8 +52,15 @@ module.exports = function createForwardMiddleware() {
 
       const buf = Buffer.from(backendRes.data || '')
       const contentType = (backendRes.headers && backendRes.headers['content-type']) || ''
-      const snippet = buf.slice(0, 1024).toString('utf8').replace(/\n/g, '\\n')
-      console.log(`proxy received from backend status=${backendRes.status} content-type=${contentType} len=${buf.length} snippet="${snippet}"`)
+      let snippet, snippetInfo;
+      if (/^(text\/|application\/(json|javascript|xml|x-www-form-urlencoded))/i.test(contentType)) {
+        snippet = buf.slice(0, 1024).toString('utf8').replace(/\n/g, '\\n');
+        snippetInfo = `"${snippet}"`;
+      } else {
+        snippet = buf.slice(0, 1024).toString('base64');
+        snippetInfo = `[base64] ${snippet}`;
+      }
+      console.log(`proxy received from backend status=${backendRes.status} content-type=${contentType} len=${buf.length} snippet=${snippetInfo}`)
 
       // Forward safe headers back to client
       Object.entries(backendRes.headers || {}).forEach(([k, v]) => {
