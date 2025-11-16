@@ -9,6 +9,8 @@ import dotenv from 'dotenv'
 import { parseEventWithLLM } from './llmParser.js'
 import { validateEventData, getSchema } from './validation.js'
 import { storeEvent, getEvents, getEventsNear, getStorageStats, clearEvents } from './storage.js'
+import { computeEventHash } from './hashUtils.js'
+import { isFirestoreEnabled } from './firestoreClient.js'
 
 // Load environment variables
 dotenv.config()
@@ -36,8 +38,9 @@ const healthHandler = (req, res) => {
     timestamp: new Date().toISOString(),
     version: '4.0.0-mvp',
     storage: {
-      type: 'in-memory',
-      events: stats.totalEvents
+      type: isFirestoreEnabled() ? 'hybrid (memory + Firestore)' : 'in-memory',
+      events: stats.totalEvents,
+      firestore: isFirestoreEnabled()
     },
     uptime: stats.uptime
   })
@@ -80,7 +83,7 @@ app.post('/api/parse-and-publish', async (req, res) => {
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
 
-    // Step 2: Validate against schema
+    // Step 2: Validate against schema (LLM output should not have hash)
     const validation = validateEventData(parsedEvent)
     if (!validation.success) {
       console.error('❌ Validation failed:', validation.errors)
@@ -91,8 +94,17 @@ app.post('/api/parse-and-publish', async (req, res) => {
       })
     }
 
-    // Step 3: Store
-    const storedEvent = storeEvent(validation.data)
+    // Step 3: Compute hash of validated event
+    // Hash is computed AFTER validation and Flypost enrichment, BEFORE adding hash field itself
+    const eventHash = computeEventHash(validation.data)
+    const eventWithHash = {
+      ...validation.data,
+      hash: eventHash
+    }
+    console.log(`🔐 Computed event hash: ${eventHash.value.substring(0, 16)}...`)
+
+    // Step 4: Store event (with hash) to memory and Firestore
+    const storedEvent = await storeEvent(eventWithHash)
     console.log(`📦 Stored event: ${storedEvent.flypost.eventId}`)
 
     res.json({
@@ -103,6 +115,7 @@ app.post('/api/parse-and-publish', async (req, res) => {
         processing: {
           parsed: true,
           validated: true,
+          hashed: true,
           stored: true
         }
       }
@@ -118,15 +131,18 @@ app.post('/api/parse-and-publish', async (req, res) => {
   }
 })
 
-// Get events near location - naive implementation (temporary dual routing for compatibility)
-const getEventsNearHandler = (req, res) => {
+// Get events near location - supports Firestore geospatial queries
+const getEventsNearHandler = async (req, res) => {
   try {
     const { lat, lng, radius } = req.query
+    
+    // Determine whether to use Firestore based on availability
+    const useFirestore = isFirestoreEnabled()
 
-    // For MVP, just return all events regardless of location
+    // Query events with optional location filter
     const events = lat && lng ?
-      getEventsNear(parseFloat(lat), parseFloat(lng), radius ? parseFloat(radius) : 10) :
-      getEvents()
+      await getEventsNear(parseFloat(lat), parseFloat(lng), radius ? parseFloat(radius) : 10, useFirestore) :
+      await getEvents({}, useFirestore)
 
     console.log(`📋 Returning ${events.length} events`)
 
@@ -136,7 +152,10 @@ const getEventsNearHandler = (req, res) => {
         events: events,
         total: events.length,
         query: { lat, lng, radius },
-        note: "MVP implementation returns all events - geospatial filtering not yet implemented"
+        source: useFirestore ? 'Firestore' : 'memory',
+        note: useFirestore ? 
+          "Querying from Firestore with geospatial filtering" : 
+          "Memory-only mode - geospatial filtering not available"
       }
     })
 
@@ -171,7 +190,7 @@ app.delete('/api/events', (req, res) => {
 })
 
 // Test endpoint to add mock events (for testing without OpenAI)
-app.post('/api/test-add-event', (req, res) => {
+app.post('/api/test-add-event', async (req, res) => {
   const mockEvent = {
     "@context": "https://schema.org",
     "@type": "Event",
@@ -214,7 +233,14 @@ app.post('/api/test-add-event', (req, res) => {
     })
   }
 
-  const storedEvent = storeEvent(validation.data)
+  // Compute hash and add to event
+  const eventHash = computeEventHash(validation.data)
+  const eventWithHash = {
+    ...validation.data,
+    hash: eventHash
+  }
+
+  const storedEvent = await storeEvent(eventWithHash)
   
   res.json({
     success: true,

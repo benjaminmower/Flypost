@@ -228,6 +228,39 @@
         "minLength": 1
       },
       "uniqueItems": true
+    },
+    "hash": {
+      "type": "object",
+      "description": "Cryptographic hash of the event data for integrity verification and future DLT anchoring.",
+      "required": [
+        "algorithm",
+        "encoding",
+        "value",
+        "canonicalVersion"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "SHA-256",
+          "description": "The hashing algorithm used."
+        },
+        "encoding": {
+          "type": "string",
+          "const": "hex",
+          "description": "The encoding format of the hash value."
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "The hexadecimal hash value (64 characters for SHA-256)."
+        },
+        "canonicalVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Version number of the canonical representation used for hashing."
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false
