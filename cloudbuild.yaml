@@ -2,13 +2,46 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    id: echo-hello
-    entrypoint: bash
+  # 1) Build backend image
+  - name: gcr.io/cloud-builders/docker
+    id: build-backend
+    dir: backend
     args:
-      - -c
-      - |
-        echo "Hello from Cloud Build"
-        echo "PROJECT_ID is: $PROJECT_ID"
-        echo "REPO_NAME is: $REPO_NAME"
-        echo "SHORT_SHA is: $SHORT_SHA"
+      [
+        "build",
+        "-t",
+        "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/flypostv4:$SHORT_SHA",
+        "-f",
+        "Dockerfile",
+        ".",
+      ]
+
+  # 2) Push backend image
+  - name: gcr.io/cloud-builders/docker
+    id: push-backend
+    args:
+      [
+        "push",
+        "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/flypostv4:$SHORT_SHA",
+      ]
+
+  # 3) Deploy backend to Cloud Run
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-backend
+    entrypoint: gcloud
+    args:
+      [
+        "run",
+        "deploy",
+        "flypostv4",
+        "--image",
+        "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/flypostv4:$SHORT_SHA",
+        "--region",
+        "us-west1",
+        "--platform",
+        "managed",
+        "--allow-unauthenticated",
+      ]
+
+images:
+  - "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/flypostv4:$SHORT_SHA"
