@@ -13,6 +13,12 @@ import { storeEvent, getEvents, getEventsNear, getStorageStats, clearEvents } fr
 // Load environment variables
 dotenv.config()
 
+{
+  "dependencies": {
+    "@google-cloud/firestore": "^7.13.0",
+  }
+}
+
 const app = express()
 const port = process.env.PORT || 3001
 
