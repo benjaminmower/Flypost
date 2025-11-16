@@ -25,30 +25,7 @@ steps:
         "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/flypostv4:$SHORT_SHA",
       ]
 
-  # 3) Build proxy image
-  - name: gcr.io/cloud-builders/docker
-    id: build-proxy
-    dir: proxy
-    args:
-      [
-        "build",
-        "-t",
-        "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA",
-        "-f",
-        "Dockerfile",
-        ".",
-      ]
-
-  # 4) Push proxy image
-  - name: gcr.io/cloud-builders/docker
-    id: push-proxy
-    args:
-      [
-        "push",
-        "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA",
-      ]
-
-  # 5) Deploy backend to Cloud Run
+  # 3) Deploy backend to Cloud Run
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-backend
     entrypoint: gcloud
@@ -66,33 +43,5 @@ steps:
         "--allow-unauthenticated",
       ]
 
-  # 6) Deploy proxy to Cloud Run, with BACKEND_URL set from backend service URL
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    id: deploy-proxy
-    entrypoint: bash
-    args:
-      - "-c"
-      - |
-        set -euo pipefail
-
-        REGION="us-west1"
-
-        BACKEND_URL=$(gcloud run services describe "flypostv4" \
-          --region="${REGION}" \
-          --format='value(status.url)')
-
-        if [[ -z "${BACKEND_URL}" ]]; then
-          echo "Failed to resolve backend URL for flypostv4" >&2
-          exit 1
-        fi
-
-        gcloud run deploy "proxyv4" \
-          --image "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA" \
-          --region "${REGION}" \
-          --platform managed \
-          --allow-unauthenticated \
-          --set-env-vars "BACKEND_URL=${BACKEND_URL},FRONTEND_ORIGIN=https://flypost.netlify.app"
-
 images:
   - "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/flypostv4:$SHORT_SHA"
-  - "us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA"
