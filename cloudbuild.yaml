@@ -2,7 +2,7 @@
 # - Builds backend and proxy images from this repo
 # - Deploys to Cloud Run services flypostv4 (backend) and proxyv4 (proxy)
 #
-# Typical trigger: push to main
+# Trigger: push to main
 
 substitutions:
   _REGION: us-west1
