@@ -45,7 +45,13 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
     "email": "john@example.com",
     "telephone": "+1-555-0123"
   },
-  "keywords": ["furniture", "electronics", "household"]
+  "keywords": ["furniture", "electronics", "household"],
+  "hash": {
+    "algorithm": "SHA-256",
+    "encoding": "hex",
+    "value": "a3f8d9e7c6b5a4d3c2b1a0e9f8d7c6b5a4d3c2b1a0e9f8d7c6b5a4d3c2b1a0e9",
+    "canonicalVersion": 1
+  }
 }
 ```
 
@@ -77,6 +83,12 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
 - `location.geo`: Latitude/longitude coordinates
 - `organizer.telephone`: Contact phone number
 - `keywords`: Array of tags/keywords
+- `hash`: Cryptographic hash object for data integrity and DLT anchoring
+  - `hash.algorithm`: "SHA-256"
+  - `hash.encoding`: "hex"
+  - `hash.value`: 64-character hexadecimal hash
+  - `hash.canonicalVersion`: Integer version of canonical representation (currently 1)
+  - Note: Hash is computed by the backend after validation, not by the LLM parser
 
 ## Categories
 
