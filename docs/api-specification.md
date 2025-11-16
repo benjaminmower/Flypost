@@ -37,13 +37,15 @@ Natural language text describing an event:
 1. **LLM Parse**: OpenAI GPT-4 extracts structured data
 2. **Schema Validation**: AJV validates against JSON Schema
 3. **Enrichment**: Add submission timestamp, generate eventId
-4. **Storage**: Store validated event object
+4. **Hash Computation**: SHA-256 hash of canonical event representation
+5. **Storage**: Store validated event object with hash to Firestore and memory
 
 ### Transformation Rules
 - Dates/times → ISO 8601 format
 - Addresses → Schema.org PostalAddress structure
 - Categories → Controlled vocabulary (8 predefined types)
 - Coordinates → Optional GeoCoordinates if inferable
+- Hash → SHA-256 hex digest of canonical JSON (algorithm: SHA-256, encoding: hex, canonicalVersion: 1)
 
 ---
 
