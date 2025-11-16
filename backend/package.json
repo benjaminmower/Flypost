@@ -10,16 +10,22 @@
     "test": "echo 'No tests yet'"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "cors": "^2.8.5", 
-    "dotenv": "^16.6.1",
-    "openai": "^4.104.0",
+    "@google-cloud/firestore": "^8.0.0",
     "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "openai": "^4.104.0"
     "ajv-formats": "^3.0.1"
     "@google-cloud/firestore": "^7.13.0"
   },
-  "devDependencies": {},
-  "keywords": ["flypost", "events", "llm", "minimal"],
+  "keywords": [
+    "flypost",
+    "events",
+    "llm",
+    "minimal"
+  ],
   "author": "goflypost",
   "license": "Apache-2.0"
 }
