@@ -1,4 +1,4 @@
-# Proxy-only Cloud Build v8
+# Proxy-only Cloud Build v9
 # Builds and deploys the proxy service (proxyv4) to Cloud Run.
 # Resolves backend service URL (flypostv4) each build.
 
@@ -14,7 +14,7 @@ steps:
       [
         "build",
         "-t",
-        "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA",
+        "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$BUILD_ID",
         "-f",
         "Dockerfile",
         "."
@@ -26,7 +26,7 @@ steps:
     args:
       [
         "push",
-        "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA"
+        "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$BUILD_ID"
       ]
 
   # 3) Deploy proxy
@@ -50,7 +50,7 @@ steps:
 
         echo "Deploying proxyv4..."
         gcloud run deploy proxyv4 \
-          --image "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA" \
+          --image "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$BUILD_ID" \
           --region "$region" \
           --platform managed \
           --allow-unauthenticated \
@@ -61,4 +61,4 @@ substitutions:
   _PROXY_USE_ID_TOKEN: "true"
 
 images:
-  - "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA"
+  - "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$BUILD_ID"
