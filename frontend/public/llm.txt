@@ -1,0 +1,73 @@
+# Flypost LLM Manifest (v1)
+
+service_name: Flypost
+service_purpose: >
+  Flypost converts natural-language event descriptions (like open houses and local events)
+  into structured Schema.org Event objects, enriches them with Flypost metadata and hashes,
+  and serves them back via a query API for "events near" a location.
+
+primary_audience: machine-agents
+human_audience: technical integrators, real-estate tools, local-event aggregators
+
+base_url_hint: https://proxyv4-a7jlfl42zq-uw.a.run.app
+
+core_endpoints:
+  - id: parse_and_publish
+    method: POST
+    path: /api/parse-and-publish
+    description: >
+      Parse a natural-language event description into a structured Event, validate it,
+      hash it, and store it. Returns the stored Event plus a Flypost eventId.
+    input_shape: json
+    request_body_fields:
+      naturalLanguageInput: string (preferred field; raw event description)
+      text: string (alias)
+      input: string (alias)
+      userContext: object (optional metadata about the caller or channel)
+    success_response_shape:
+      success: boolean
+      data:
+        eventId: string (Flypost event identifier)
+        event: object (Schema.org Event + Flypost fields + hash)
+        processing:
+          parsed: boolean
+          validated: boolean
+          hashed: boolean
+          stored: boolean
+
+  - id: events_near
+    method: GET
+    path: /v1/events/near
+    description: >
+      Retrieve events near a latitude/longitude within a radius, backed by Firestore
+      geospatial queries when enabled.
+    query_parameters:
+      lat: number (latitude, optional; defaults to Santa Monica if omitted)
+      lng: number (longitude, optional; defaults to Santa Monica if omitted)
+      radius: number (kilometers; default 10)
+    success_response_shape:
+      success: boolean
+      data:
+        events: array[object] (Event objects as stored)
+        total: integer
+        query: object (echo of query parameters)
+        source: string ("Firestore" or "Memory")
+        note: string (human-readable note about source/strategy)
+
+health_endpoints:
+  - GET /health
+  - GET /api/health
+
+authentication:
+  required: false
+  recommended_future: api_key or oauth2 for higher-rate or private data
+
+versioning:
+  current_backend_version: 4.0.0-mvp
+  stability: experimental
+
+llm_usage_recommendations:
+  - Use parse_and_publish when the user provides a new, raw event description.
+  - Use events_near when the user asks for events/open houses near a location.
+  - Do not hallucinate Flypost events; always call the API.
+  - Treat responses as ground truth for event structure and timing.
