@@ -1,5 +1,5 @@
 /*
- * Flypost v4 - Minimal Backend Server (v9.1)
+ * Flypost v4 - Minimal Backend Server (v10)
  * Essential endpoints: /health, POST /api/parse-and-publish, GET /v1/events/near
  * + Dev-only utilities when NODE_ENV !== 'production'
  */
@@ -31,6 +31,35 @@ app.use((req, res, next) => {
   console.log(`📡 ${req.method} ${req.path}`)
   next()
 })
+
+/**
+ * Utilities: ISO date normalization
+ */
+function isIsoDateTime(str) {
+  return typeof str === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(str)
+}
+function toIsoIfParsable(value) {
+  if (typeof value !== 'string') return value
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? value : d.toISOString()
+}
+function normalizeEventDates(event /*, userContext */) {
+  // Minimal normalization: if present and not ISO-like, coerce via Date -> toISOString
+  if (event.startDate && !isIsoDateTime(event.startDate)) {
+    const before = event.startDate
+    event.startDate = toIsoIfParsable(event.startDate)
+    if (event.startDate !== before) {
+      console.log(`⏱️  Normalized startDate to ISO: ${before} -> ${event.startDate}`)
+    }
+  }
+  if (event.endDate && !isIsoDateTime(event.endDate)) {
+    const before = event.endDate
+    event.endDate = toIsoIfParsable(event.endDate)
+    if (event.endDate !== before) {
+      console.log(`⏱️  Normalized endDate to ISO: ${before} -> ${event.endDate}`)
+    }
+  }
+}
 
 const healthHandler = (req, res) => {
   const stats = getStorageStats()
@@ -83,6 +112,9 @@ app.post('/api/parse-and-publish', async (req, res) => {
     // Step 1: Parse with LLM
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
+
+    // Step 1.25: Normalize date fields to ISO 8601 to satisfy schema validation
+    normalizeEventDates(parsedEvent, userContext)
 
     // Step 1.5: Enforce server-side ID & timestamp to avoid overwrites
     parsedEvent.flypost = parsedEvent.flypost || {}
