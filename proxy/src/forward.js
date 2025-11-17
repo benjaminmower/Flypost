@@ -1,120 +1,103 @@
 // Robust forwarder for proxy -> backend
 // Preserves original path+query and forwards requests with an ID token for the backend audience.
+//v12
+// Forwarder with manual ID token, status preservation, robust logging, CORS
+
 const { GoogleAuth } = require('google-auth-library')
-const url = require('url')
+const axios = require('axios')
 
 const BACKEND_BASE = (process.env.BACKEND_URL || '').replace(/\/$/, '')
 if (!BACKEND_BASE) {
-  console.warn(
-    'WARNING: BACKEND_URL is not set. Proxy forwarder will not work until BACKEND_URL is set.'
-  )
+  console.warn('WARNING: BACKEND_URL is not set. Forwarder will return 500 until set.')
 }
 
-module.exports = function createForwardMiddleware() {
-  const auth = new GoogleAuth()
+const USE_ID_TOKEN = process.env.PROXY_USE_ID_TOKEN !== 'false'
+const allowedOrigins = [
+  process.env.FRONTEND_ORIGIN || 'https://flypost.netlify.app',
+  'http://localhost:5173'
+]
 
-  return async function forwardMiddleware(req, res) {
+function setCors(res, origin) {
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+  }
+}
+
+module.exports = function createForward() {
+  const auth = USE_ID_TOKEN ? new GoogleAuth() : null
+
+  return async function forward(req, res) {
+    const origin = req.headers.origin
+
     if (!BACKEND_BASE) {
-      return res
-        .status(500)
-        .json({ error: 'proxy backend not configured' })
+      setCors(res, origin)
+      return res.status(500).json({ success: false, error: 'proxy backend not configured' })
     }
 
-    const targetUrl = BACKEND_BASE + req.originalUrl // preserve path + query
-    console.log('proxy forwarding to', targetUrl, 'method=', req.method)
+    const targetUrl = BACKEND_BASE + req.originalUrl
+    console.log('proxy forwarding:', { method: req.method, targetUrl, useIdToken: USE_ID_TOKEN })
 
     try {
-      const client = await auth.getIdTokenClient(BACKEND_BASE)
-
       const headers = { ...req.headers }
+      const hopByHop = [
+        'connection','keep-alive','proxy-authenticate','proxy-authorization',
+        'te','trailer','transfer-encoding','upgrade','accept-encoding'
+      ]
+      hopByHop.forEach(h => delete headers[h])
+      delete headers.authorization
+      delete headers.Authorization
       headers.host = new URL(BACKEND_BASE).host
 
-      const HOP_BY_HOP = [
-        'connection',
-        'keep-alive',
-        'proxy-authenticate',
-        'proxy-authorization',
-        'te',
-        'trailer',
-        'transfer-encoding',
-        'upgrade',
-        'accept-encoding',
-      ]
-      HOP_BY_HOP.forEach((h) => delete headers[h])
-      delete headers['authorization']
-      delete headers['Authorization']
-
-      let body = undefined
+      let data
       if (req.method !== 'GET' && req.method !== 'HEAD') {
-        if (
-          req.body &&
-          ((typeof req.body === 'string' && req.body.length > 0) ||
-            (typeof req.body === 'object' &&
-              Object.keys(req.body).length > 0))
-        ) {
-          body =
-            typeof req.body === 'string'
-              ? req.body
-              : JSON.stringify(req.body)
-          headers['content-type'] =
-            headers['content-type'] || 'application/json'
-          headers['content-length'] = Buffer.byteLength(body)
+        if (req.body && (typeof req.body === 'string' ? req.body.length : Object.keys(req.body).length)) {
+          data = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
+          headers['content-type'] = headers['content-type'] || 'application/json'
+          headers['content-length'] = Buffer.byteLength(data)
         }
       }
 
-      const backendRes = await client.request({
+      if (USE_ID_TOKEN) {
+        const client = await auth.getIdTokenClient(BACKEND_BASE)
+        const tokenHeaders = await client.getRequestHeaders()
+        headers.Authorization = tokenHeaders.Authorization
+      }
+
+      const start = Date.now()
+      const backendRes = await axios({
         url: targetUrl,
         method: req.method,
         headers,
-        data: body,
+        data,
         responseType: 'arraybuffer',
+        validateStatus: () => true
       })
+      const durationMs = Date.now() - start
 
-      const buf = Buffer.from(backendRes.data || '')
-      const contentType =
-        (backendRes.headers &&
-          backendRes.headers['content-type']) ||
-        ''
-      let snippet = ''
-      if (
-        contentType.includes('text/') ||
-        contentType.includes('application/json')
-      ) {
-        snippet = buf
-          .slice(0, 1024)
-          .toString('utf8')
-          .replace(/\n/g, '\\n')
-      } else {
-        snippet = '<binary data>'
-      }
-      console.log(
-        `proxy received from backend status=${backendRes.status} content-type=${contentType} len=${buf.length} snippet="${snippet}"`
-      )
+      const rawBody = Buffer.from(backendRes.data || '')
+      console.log(`proxy backend response: status=${backendRes.status} bytes=${rawBody.length} durMs=${durationMs}`)
 
       Object.entries(backendRes.headers || {}).forEach(([k, v]) => {
         if (!k) return
-        const key = k.toLowerCase()
-        if (HOP_BY_HOP.includes(key)) return
-        try {
-          res.setHeader(k, v)
-        } catch (e) {
-          // ignore header set errors
-        }
+        const lower = k.toLowerCase()
+        if (hopByHop.includes(lower)) return
+        try { res.setHeader(k, v) } catch (_) {}
       })
 
-      res.status(backendRes.status)
-      return res.send(buf)
+      setCors(res, origin)
+
+      res.status(backendRes.status).send(rawBody)
     } catch (err) {
-      console.error(
-        'proxy -> backend forward error:',
-        err && err.stack ? err.stack : err
-      )
-      return res
-        .status(502)
-        .json({
-          error: 'upstream proxy error',
-          details: err?.message || String(err),
-        })
+      console.error('proxy forward exception:', err && err.stack ? err.stack : err)
+      setCors(res, origin)
+      return res.status(502).json({
+        success: false,
+        error: 'proxy forward error',
+        detail: err && err.message ? err.message : String(err),
+        target: targetUrl
+      })
     }
   }
 }
