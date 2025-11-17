@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
-# quick-tests.sh — Flypost v4 proxy/backend quick validation
-set -euo pipefail
+# quick-tests.sh — Flypost v4 proxy/backend quick validation (hardened)
+set -Eeuo pipefail
 
-# Config (update if needed)
-PROJECT="goflypost"
-REGION="us-west1"
-BACKEND="https://flypostv4-a7jlfl42zq-uw.a.run.app"
-PROXY="https://proxyv4-498798854474.us-west1.run.app"
-ORIGIN="https://flypost.netlify.app"
+# Trap for clearer failures
+trap 'echo "ERROR: command failed at ${BASH_SOURCE}:${LINENO} (exit $?)" >&2' ERR
+
+# Dependency checks
+for cmd in curl jq gcloud; do
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    echo "ERROR: missing dependency: ${cmd}" >&2
+    exit 1
+  fi
+done
+
+# Config (env overrides supported)
+PROJECT="${PROJECT:-goflypost}"
+REGION="${REGION:-us-west1}"
+BACKEND="${BACKEND:-https://flypostv4-a7jlfl42zq-uw.a.run.app}"
+PROXY="${PROXY:-https://proxyv4-498798854474.us-west1.run.app}"
+ORIGIN="${ORIGIN:-https://flypost.netlify.app}"
 
 echo "Using:"
 echo "  PROJECT=${PROJECT}"
@@ -52,7 +63,7 @@ echo "4) Proxy GET /v1/events/near should be 200 and include CORS"
 respHeaders=$(mktemp)
 curl -s -D "${respHeaders}" -o /dev/null -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/near"
 status=$(grep -m1 -E '^HTTP/' "${respHeaders}" | awk '{print $2}')
-cors=$(grep -i '^access-control-allow-origin:' "${respHeaders}" | awk '{print $2}' | tr -d '\r')
+cors=$(awk -F': ' 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin/{print $2}' "${respHeaders}" | tr -d '\r' | tail -n1)
 echo "   Status: ${status}"
 echo "   Access-Control-Allow-Origin: ${cors:-<missing>}"
 if [[ "${status}" == "200" && "${cors}" == "${ORIGIN}" ]]; then
@@ -67,8 +78,8 @@ echo "5) Proxy POST /api/parse-and-publish should succeed and return an eventId"
 payload='{"naturalLanguageInput":"Garage sale Saturday 9am-1pm at 45 Oak Ln Springfield IL. Contact Amy amy@example.com"}'
 resp=$(curl -s -H "Origin: ${ORIGIN}" -H "Content-Type: application/json" -d "${payload}" "${PROXY}/api/parse-and-publish")
 echo "   Raw response (truncated): $(echo "${resp}" | cut -c1-200)..."
-ok=$(echo "${resp}" | jq -r '.success // false')
-event1=$(echo "${resp}" | jq -r '.data.eventId // empty')
+ok=$(echo "${resp}" | jq -r '.success // false' || echo "false")
+event1=$(echo "${resp}" | jq -r '.data.eventId // empty' || echo "")
 if [[ "${ok}" == "true" && -n "${event1}" ]]; then
   echo "   OK eventId=${event1}"
 else
@@ -78,8 +89,10 @@ echo
 
 echo "6) Verify event appears in proxy GET /v1/events/near"
 eventsJson=$(curl -s -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/near")
-count=$(echo "${eventsJson}" | jq -r '.data.total // .data.events | length')
-found=$(echo "${eventsJson}" | jq -r --arg id "${event1}" '.data.events[]?.flypost.eventId | select(.==$id)' || true)
+# Safe count: prefer .data.total if present, else length of .data.events if array, else 0
+count=$(echo "${eventsJson}" | jq -r 'if (.data|type)=="object" then (.data.total // ((.data.events // []) | length)) else 0 end' || echo "0")
+# Safe match: search eventId inside events array if present
+found=$(echo "${eventsJson}" | jq -r --arg id "${event1}" '((.data.events // []) | map(.flypost.eventId)) as $ids | (index($ids; $id) // empty) | if .=="" then "" else $id end' || echo "")
 echo "   Events count (reported): ${count}"
 if [[ "${found}" == "${event1}" ]]; then
   echo "   OK found newly created eventId"
@@ -91,8 +104,8 @@ echo
 echo "7) Parse again to confirm unique eventId per submission"
 payload2='{"naturalLanguageInput":"Community concert Friday 7pm at 123 Main St Springfield IL. Contact Bob bob@example.com"}'
 resp2=$(curl -s -H "Origin: ${ORIGIN}" -H "Content-Type: application/json" -d "${payload2}" "${PROXY}/api/parse-and-publish")
-ok2=$(echo "${resp2}" | jq -r '.success // false')
-event2=$(echo "${resp2}" | jq -r '.data.eventId // empty')
+ok2=$(echo "${resp2}" | jq -r '.success // false' || echo "false")
+event2=$(echo "${resp2}" | jq -r '.data.eventId // empty' || echo "")
 echo "   New eventId: ${event2}"
 if [[ "${ok2}" == "true" && -n "${event2}" && "${event2}" != "${event1}" ]]; then
   echo "   OK eventId is unique"
@@ -104,7 +117,7 @@ echo
 echo "8) Proxy CORS on error path (negative test) — call non-existent path"
 err=$(curl -s -D - -o /dev/null -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/nearzzz" || true)
 status=$(echo "${err}" | head -n1 | awk '{print $2}')
-acao=$(echo "${err}" | awk -F': ' 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin/{print $2}' | tr -d '\r')
+acao=$(echo "${err}" | awk -F': ' 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin/{print $2}' | tr -d '\r' | tail -n1)
 echo "   Status: ${status} (expected non-200)"
 echo "   Access-Control-Allow-Origin: ${acao:-<missing>}"
 if [[ -n "${acao}" ]]; then
