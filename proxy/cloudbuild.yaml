@@ -1,6 +1,6 @@
-# Proxy-only Cloud Build v6
+# Proxy-only Cloud Build v7
 # Builds and deploys the proxy service (proxyv4) to Cloud Run.
-# Dynamically resolves backend service URL each build.
+# Resolves backend service URL (flypostv4) each build.
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -38,11 +38,10 @@ steps:
       - |
         set -euo pipefail
 
-        REGION="${_REGION}"
-        BACKEND_SERVICE="${_BACKEND_SERVICE}"
+        REGION="us-west1"
 
-        echo "Resolving backend service URL ($BACKEND_SERVICE in $REGION)..."
-        BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" --region "$REGION" --format='value(status.url)')"
+        echo "Resolving backend service URL (flypostv4 in $REGION)..."
+        BACKEND_URL="$(gcloud run services describe 'flypostv4' --region "$REGION" --format='value(status.url)')"
         if [[ -z "$BACKEND_URL" ]]; then
           echo "ERROR: Could not resolve backend URL" >&2
           exit 1
@@ -60,8 +59,6 @@ steps:
 substitutions:
   _FRONTEND_ORIGIN: "https://flypost.netlify.app"
   _PROXY_USE_ID_TOKEN: "true"
-  _BACKEND_SERVICE: "flypostv4"
-  _REGION: "us-west1"
 
 images:
   - "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA"
