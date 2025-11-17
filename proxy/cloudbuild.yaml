@@ -1,3 +1,5 @@
+//v4
+
 options:
   logging: CLOUD_LOGGING_ONLY
 
@@ -31,7 +33,8 @@ steps:
       - |
         set -euo pipefail
         REGION="us-west1"
-        BACKEND_SERVICE="${_BACKEND_SERVICE}"
+        # Hardcode backend Cloud Run service name (no substitution needed)
+        BACKEND_SERVICE="flypostv4"
 
         echo "Resolving backend service URL (${BACKEND_SERVICE})..."
         BACKEND_URL="$(gcloud run services describe "${BACKEND_SERVICE}" --region "${REGION}" --format='value(status.url)')"
@@ -41,6 +44,7 @@ steps:
         fi
         echo "Resolved BACKEND_URL=${BACKEND_URL}"
 
+        echo "Deploying proxy service (proxyv4)..."
         gcloud run deploy proxyv4 \
           --image "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA" \
           --region "${REGION}" \
@@ -49,7 +53,6 @@ steps:
           --set-env-vars BACKEND_URL=${BACKEND_URL},FRONTEND_ORIGIN=${_FRONTEND_ORIGIN},PROXY_USE_ID_TOKEN=${_PROXY_USE_ID_TOKEN}
 
 substitutions:
-  _BACKEND_SERVICE: "flypostv4"
   _FRONTEND_ORIGIN: "https://flypost.netlify.app"
   _PROXY_USE_ID_TOKEN: "true"
 
