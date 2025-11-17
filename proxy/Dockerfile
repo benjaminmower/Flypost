@@ -1,21 +1,29 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY proxy/package.json proxy/package-lock.json ./
+
+# Context is already /proxy from Cloud Build, so these are at the root:
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY proxy ./proxy
-RUN rm -rf ./proxy/node_modules || true
+
+# Bring in the full app source from the proxy/ context
+COPY . .
+# Just in case node_modules snuck into the context (e.g., from local dev)
+RUN rm -rf ./node_modules || true
 
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Use dependencies from the deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/proxy/cloudrun-proxy.js ./cloudrun-proxy.js
-COPY --from=builder /app/proxy/package.json ./package.json
-COPY --from=builder /app/proxy/src ./src
+
+# Copy app artifacts from builder stage
+COPY --from=builder /app/cloudrun-proxy.js ./cloudrun-proxy.js
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/src ./src
 
 ENV PORT=8080
 EXPOSE 8080
