@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
-# quick-tests.sh — Flypost v4 proxy/backend quick validation (hardened)
+# quick-tests.sh — Flypost v4 proxy/backend quick validation (instrumented)
 set -Eeuo pipefail
 
+# Debug mode: set DEBUG=1 to enable trace
+if [[ "${DEBUG:-0}" == "1" ]]; then
+  set -x
+fi
+
 trap 'echo "ERROR: command failed at ${BASH_SOURCE}:${LINENO} (exit $?)" >&2' ERR
+
+# Soft timeout defaults
+CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
+CURL_MAX_TIME="${CURL_MAX_TIME:-15}"
 
 # Dependency checks
 for cmd in curl jq gcloud; do
@@ -27,110 +36,119 @@ echo "  PROXY=${PROXY}"
 echo "  ORIGIN=${ORIGIN}"
 echo
 
-echo "1) Backend privacy: unauthenticated should be 401/403"
-code=$(curl -s -o /dev/null -w "%{http_code}" "${BACKEND}/v1/events/near")
-echo "   Status: ${code}"
+step() {
+  echo
+  echo "=== Step $1: $2 ==="
+}
+
+curl_json() {
+  curl -sS \
+    --connect-timeout "${CURL_CONNECT_TIMEOUT}" \
+    --max-time "${CURL_MAX_TIME}" \
+    "$@"
+}
+
+# Step 1: Backend privacy
+step 1 "Backend privacy (unauthenticated)"
+code=$(curl_json -o /dev/null -w "%{http_code}" "${BACKEND}/v1/events/near")
+echo "Status: ${code}"
 if [[ "${code}" == "401" || "${code}" == "403" ]]; then
-  echo "   OK (backend is private)"
+  echo "OK (backend is private)"
 else
-  echo "   WARNING: expected 401/403, got ${code}"
+  echo "WARNING: expected 401/403, got ${code}"
 fi
-echo
 
-echo "2) Backend with identity token should be 200"
-TOKEN="$(gcloud auth print-identity-token)"
-code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${TOKEN}" "${BACKEND}/v1/events/near")
-echo "   Status: ${code}"
-if [[ "${code}" == "200" ]]; then
-  echo "   OK"
-else
-  echo "   ERROR: expected 200, got ${code}"; exit 1
+# Step 2: Backend authenticated
+step 2 "Backend identity token"
+echo "Obtaining identity token..."
+TOKEN="$(gcloud auth print-identity-token 2>/dev/null || true)"
+if [[ -z "${TOKEN}" ]]; then
+  echo "ERROR: could not obtain identity token. Run: gcloud auth login"
+  exit 1
 fi
-echo
-
-echo "3) Proxy health should be 200"
-code=$(curl -s -o /dev/null -w "%{http_code}" "${PROXY}/health")
-echo "   Status: ${code}"
-if [[ "${code}" == "200" ]]; then
-  echo "   OK"
-else
-  echo "   ERROR: expected 200, got ${code}"; exit 1
+code=$(curl_json -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${TOKEN}" "${BACKEND}/v1/events/near")
+echo "Status: ${code}"
+if [[ "${code}" != "200" ]]; then
+  echo "ERROR: expected 200, got ${code}"
+  exit 1
 fi
-echo
+echo "OK"
 
-echo "4) Proxy GET /v1/events/near should be 200 and include CORS"
+# Step 3: Proxy health
+step 3 "Proxy health"
+code=$(curl_json -o /dev/null -w "%{http_code}" "${PROXY}/health")
+echo "Status: ${code}"
+[[ "${code}" == "200" ]] && echo "OK" || { echo "ERROR: expected 200"; exit 1; }
+
+# Step 4: Proxy near with CORS
+step 4 "Proxy /v1/events/near + CORS"
 respHeaders=$(mktemp)
-curl -s -D "${respHeaders}" -o /dev/null -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/near"
+curl_json -D "${respHeaders}" -o /dev/null -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/near"
 status=$(grep -m1 -E '^HTTP/' "${respHeaders}" | awk '{print $2}')
 acao=$(awk -F': ' 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin/{print $2}' "${respHeaders}" | tr -d '\r' | tail -n1)
-echo "   Status: ${status}"
-echo "   Access-Control-Allow-Origin: ${acao:-<missing>}"
+echo "Status: ${status}"
+echo "Access-Control-Allow-Origin: ${acao:-<missing>}"
 if [[ "${status}" == "200" && "${acao}" == "${ORIGIN}" ]]; then
-  echo "   OK"
+  echo "OK"
 else
-  echo "   WARNING: expected 200 + ACAO=${ORIGIN}"
-  echo "   (debug) Response headers:"
-  sed 's/^/      /' "${respHeaders}" | sed -n '1,25p'
+  echo "WARNING: expected ACAO=${ORIGIN}"
+  sed 's/^/  HDR: /' "${respHeaders}" | sed -n '1,40p'
 fi
 rm -f "${respHeaders}"
-echo
 
-echo "5) Proxy POST /api/parse-and-publish should succeed and return an eventId"
+# Step 5: Parse & publish event
+step 5 "Proxy parse & publish (garage sale)"
 payload='{"naturalLanguageInput":"Garage sale Saturday 9am-1pm at 45 Oak Ln Springfield IL. Contact Amy amy@example.com"}'
-resp=$(curl -s -H "Origin: ${ORIGIN}" -H "Content-Type: application/json" -d "${payload}" "${PROXY}/api/parse-and-publish")
-echo "   Raw response (truncated): $(echo "${resp}" | cut -c1-200)..."
-ok=$(echo "${resp}" | jq -r '.success // false' || echo "false")
-event1=$(echo "${resp}" | jq -r '.data.eventId // empty' || echo "")
-if [[ "${ok}" == "true" && -n "${event1}" ]]; then
-  echo "   OK eventId=${event1}"
-else
-  echo "   ERROR: parse publish failed"; echo "${resp}" | jq .; exit 1
+resp=$(curl_json -H "Origin: ${ORIGIN}" -H "Content-Type: application/json" -d "${payload}" "${PROXY}/api/parse-and-publish" || true)
+echo "Raw response (truncated): $(echo "${resp}" | cut -c1-200)..."
+ok=$(echo "${resp}" | jq -r '.success // false' 2>/dev/null || echo false)
+event1=$(echo "${resp}" | jq -r '.data.eventId // empty' 2>/dev/null || echo "")
+if [[ "${ok}" != "true" || -z "${event1}" ]]; then
+  echo "ERROR: parse publish failed"; echo "${resp}" | jq . || echo "${resp}"
+  exit 1
 fi
-echo
+echo "OK eventId=${event1}"
 
-echo "6) Verify event appears in proxy GET /v1/events/near"
-eventsJson=$(curl -s -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/near")
-count=$(echo "${eventsJson}" | jq -r 'if (.data|type)=="object" then (.data.total // ((.data.events // []) | length)) else 0 end' || echo "0")
-found=$(echo "${eventsJson}" | jq -r --arg id "${event1}" '(((.data.events // []) | map(.flypost.eventId)) | any(. == $id))' || echo "false")
-echo "   Events count (reported): ${count}"
+# Step 6: Verify event appears
+step 6 "Verify event appears in /near"
+eventsJson=$(curl_json -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/near")
+count=$(echo "${eventsJson}" | jq -r 'if (.data|type)=="object" then (.data.total // ((.data.events // []) | length)) else 0 end' 2>/dev/null || echo 0)
+found=$(echo "${eventsJson}" | jq -r --arg id "${event1}" '(((.data.events // []) | map(.flypost.eventId)) | any(. == $id))' 2>/dev/null || echo false)
+echo "Events count (reported): ${count}"
 if [[ "${found}" == "true" ]]; then
-  echo "   OK found newly created eventId"
+  echo "OK found newly created eventId"
 else
-  echo "   WARNING: new eventId not found in near response"
+  echo "WARNING: new eventId not found (may lack geo; fallback logic should show events without radius filtering)"
 fi
-echo
 
-echo "7) Parse again to confirm unique eventId per submission"
-# Use fully qualified date-time to satisfy schema validation
-payload2='{"naturalLanguageInput":"Community concert on Dec 15, 2025 at 7:00 PM at 123 Main St Springfield IL. Contact Bob bob@example.com"}'
-resp2=$(curl -s -H "Origin: ${ORIGIN}" -H "Content-Type: application/json" -d "${payload2}" "${PROXY}/api/parse-and-publish")
-ok2=$(echo "${resp2}" | jq -r '.success // false' || echo "false")
-event2=$(echo "${resp2}" | jq -r '.data.eventId // empty' || echo "")
-echo "   New eventId: ${event2}"
+# Step 7: Second parse (explicit date-time to avoid validation failure)
+step 7 "Second parse unique ID"
+payload2='{"naturalLanguageInput":"Community concert on December 15, 2025 at 7:00 PM at 123 Main St Springfield IL. Contact Bob bob@example.com"}'
+resp2=$(curl_json -H "Origin: ${ORIGIN}" -H "Content-Type: application/json" -d "${payload2}" "${PROXY}/api/parse-and-publish" || true)
+ok2=$(echo "${resp2}" | jq -r '.success // false' 2>/dev/null || echo false)
+event2=$(echo "${resp2}" | jq -r '.data.eventId // empty' 2>/dev/null || echo "")
+echo "New eventId: ${event2:-<missing>}"
 if [[ "${ok2}" == "true" && -n "${event2}" && "${event2}" != "${event1}" ]]; then
-  echo "   OK eventId is unique"
+  echo "OK eventId is unique"
 else
-  echo "   ERROR: eventId missing or not unique"; echo "${resp2}" | jq .; exit 1
+  echo "ERROR: second parse failed or not unique"; echo "${resp2}" | jq . || echo "${resp2}"
+  exit 1
 fi
-echo
 
-echo "8) Proxy CORS on error path (negative test) — call non-existent path"
-err=$(curl -s -D - -o /dev/null -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/nearzzz" || true)
-status=$(echo "${err}" | head -n1 | awk '{print $2}')
-acao=$(echo "${err}" | awk -F': ' 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin/{print $2}' | tr -d '\r' | tail -n1)
-echo "   Status: ${status} (expected non-200)"
-echo "   Access-Control-Allow-Origin: ${acao:-<missing>}"
-if [[ -n "${acao}" ]]; then
-  echo "   OK error path includes CORS"
-else
-  echo "   WARNING: missing CORS on error path"
-fi
-echo
+# Step 8: Error path CORS
+step 8 "Proxy error path CORS"
+err=$(curl_json -D - -o /dev/null -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/nearzzz" || true)
+statusErr=$(echo "${err}" | head -n1 | awk '{print $2}')
+acaoErr=$(echo "${err}" | awk -F': ' 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin/{print $2}' | tr -d '\r' | tail -n1)
+echo "Status: ${statusErr:-<unknown>}"
+echo "Access-Control-Allow-Origin: ${acaoErr:-<missing>}"
+[[ -n "${acaoErr}" ]] && echo "OK error path includes CORS" || echo "WARNING: missing CORS on error path"
 
-echo "9) Optional: summarize recent proxy request statuses for /v1/events/near"
+# Step 9: Recent proxy logs
+step 9 "Recent proxy /near statuses"
 gcloud logging read \
   "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"proxyv4\" resource.labels.location=\"${REGION}\" httpRequest.requestUrl=~\"/v1/events/near\"" \
-  --project="${PROJECT}" --limit=10 --format='table(timestamp,httpRequest.status,httpRequest.requestUrl)' || true
+  --project="${PROJECT}" --limit=10 --format='table(timestamp,httpRequest.status,httpRequest.requestUrl)' || echo "Log query failed"
 
 echo
 echo "All quick tests complete."
