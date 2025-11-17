@@ -1,5 +1,5 @@
 /*
- * Flypost v4 - Event Storage (In-Memory + Firestore)
+ * Flypost v4 - Event Storage (In-Memory + Firestore) v3
  * Hybrid storage: maintains in-memory store for tests while also persisting to Firestore
  */
 
@@ -98,7 +98,11 @@ export async function getEventsNear(latitude, longitude, radius = 10, useFiresto
         radiusKm: radius
       })
       console.log(`📍 Firestore near query (${latitude}, ${longitude}) returned ${events.length} events`)
-      return events
+      // Fallback to memory if Firestore returns 0 (e.g., writes failing or no geo on events)
+      if (events.length > 0) {
+        return events
+      }
+      console.log('📍 Firestore near query returned 0; falling back to memory store')
     } catch (error) {
       console.error('⚠️  Firestore near query failed, falling back to memory:', error.message)
       // Fall through to memory retrieval
@@ -108,7 +112,7 @@ export async function getEventsNear(latitude, longitude, radius = 10, useFiresto
   // Default: naive implementation - return all events from memory
   const events = await getEvents()
   
-  console.log(`📍 Near query (${latitude}, ${longitude}) returned ${events.length} events (naive implementation)`)
+  console.log(`📍 Near query (${latitude}, ${longitude}) returned ${events.length} events (memory fallback)`)
   return events
 }
 
