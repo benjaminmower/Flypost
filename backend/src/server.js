@@ -1,6 +1,7 @@
 /*
- * Flypost v4 - Minimal Backend Server
+ * Flypost v4 - Minimal Backend Server (v9.1)
  * Essential endpoints: /health, POST /api/parse-and-publish, GET /v1/events/near
+ * + Dev-only utilities when NODE_ENV !== 'production'
  */
 
 import express from 'express'
@@ -8,7 +9,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { parseEventWithLLM } from './llmParser.js'
 import { validateEventData, getSchema } from './validation.js'
-import { storeEvent, getEvents, getEventsNear, getStorageStats, clearEvents } from './storage.js'
+import { storeEvent, getEventsNear, getStorageStats, clearEvents } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
 
@@ -36,7 +37,7 @@ const healthHandler = (req, res) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '4.0.0-mvp',
+    version: '4.0.0-mvp', // backend version; keep simple for now
     storage: {
       type: isFirestoreEnabled() ? 'hybrid (memory + Firestore)' : 'in-memory',
       events: stats.totalEvents,
@@ -49,7 +50,7 @@ const healthHandler = (req, res) => {
 // Health check endpoint (temporary dual routing for compatibility)
 app.get(['/health', '/api/health'], healthHandler)
 
-// Parse and publish endpoint - core functionality (now with alias support)
+// Parse and publish endpoint - core functionality (with alias support)
 app.post('/api/parse-and-publish', async (req, res) => {
   try {
     const body = req.body || {}
@@ -82,6 +83,11 @@ app.post('/api/parse-and-publish', async (req, res) => {
     // Step 1: Parse with LLM
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
+
+    // Step 1.5: Enforce server-side ID & timestamp to avoid overwrites
+    parsedEvent.flypost = parsedEvent.flypost || {}
+    parsedEvent.flypost.eventId = `evt_${Math.random().toString(36).slice(2, 11)}_${Date.now()}`
+    parsedEvent.flypost.submissionTimestamp = new Date().toISOString()
 
     // Step 2: Validate against schema (LLM output should not have hash)
     const validation = validateEventData(parsedEvent)
@@ -125,137 +131,145 @@ app.post('/api/parse-and-publish', async (req, res) => {
     console.error('❌ Parse and publish error:', error)
     res.status(500).json({
       success: false,
-      error: error.message || 'Internal server error during processing',
-      type: error.constructor.name
+      error: 'Parse and publish failed',
+      details: error.message
     })
   }
 })
 
-// Get events near location - supports Firestore geospatial queries
-const getEventsNearHandler = async (req, res) => {
+// Events near endpoint (opinionated "near" with Santa Monica default)
+app.get('/v1/events/near', async (req, res) => {
   try {
-    const { lat, lng, radius } = req.query
-    
-    // Determine whether to use Firestore based on availability
+    // Default: Santa Monica if no explicit coords passed
+    const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
+    const longitude = parseFloat(req.query.lng || req.query.longitude || '-118.4912')
+    const radius = parseFloat(req.query.radius || '10')
+
     const useFirestore = isFirestoreEnabled()
+    console.log(`📋 Events endpoint: GET ${req.protocol}://${req.get('host')}${req.originalUrl}`)
 
-    // Query events with optional location filter
-    const events = lat && lng ?
-      await getEventsNear(parseFloat(lat), parseFloat(lng), radius ? parseFloat(radius) : 10, useFirestore) :
-      await getEvents({}, useFirestore)
+    const events = await getEventsNear(latitude, longitude, radius, useFirestore)
+    res.json({
+      success: true,
+      data: {
+        events,
+        total: events.length,
+        query: req.query || {},
+        source: useFirestore ? 'Firestore' : 'Memory',
+        note: useFirestore
+          ? 'Querying from Firestore with geospatial filtering'
+          : 'Naive in-memory retrieval'
+      }
+    })
+  } catch (error) {
+    console.error('❌ Error retrieving events:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve events',
+      details: error.message
+    })
+  }
+})
 
-    console.log(`📋 Returning ${events.length} events`)
+/**
+ * Dev-only utilities (schema/stats/clear/mock event)
+ * Enabled when NODE_ENV !== 'production'
+ */
+if (process.env.NODE_ENV !== 'production') {
+  console.log('🧪 Dev utilities enabled (NODE_ENV !== "production")')
+
+  // Introspect current schema
+  app.get('/api/schema', (req, res) => {
+    res.json(getSchema())
+  })
+
+  // Storage stats
+  app.get('/api/stats', (req, res) => {
+    res.json(getStorageStats())
+  })
+
+  // Debug endpoint to clear all events
+  app.delete('/api/events', (req, res) => {
+    const cleared = clearEvents()
+    res.json({
+      success: true,
+      message: `Cleared ${cleared} events`
+    })
+  })
+
+  // Test endpoint to add mock events (for testing without OpenAI)
+  app.post('/api/test-add-event', async (req, res) => {
+    const mockEvent = {
+      '@context': 'https://schema.org',
+      '@type': 'Event',
+      flypost: {
+        eventId: `evt_test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        category: req.body.category || 'garage-sales',
+        realTimeData: true,
+        crawlable: true,
+        queryable: true,
+        submissionTimestamp: new Date().toISOString()
+      },
+      name: req.body.name || 'Test Event',
+      description: req.body.description || 'Mock event for testing',
+      startDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
+      location: {
+        '@type': 'Place',
+        name: req.body.location || '123 Main Street',
+        address: {
+          '@type': 'PostalAddress',
+          streetAddress: req.body.location || '123 Main Street',
+          addressLocality: 'Santa Monica',
+          addressRegion: 'CA',
+          postalCode: '90405',
+          addressCountry: 'US'
+        }
+      },
+      organizer: {
+        '@type': 'Person',
+        name: req.body.organizer || 'Test Organizer',
+        email: req.body.email || 'test@example.com'
+      }
+    }
+
+    const validation = validateEventData(mockEvent)
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Mock event validation failed',
+        details: validation.errors
+      })
+    }
+
+    const eventHash = computeEventHash(validation.data)
+    const eventWithHash = {
+      ...validation.data,
+      hash: eventHash
+    }
+
+    const storedEvent = await storeEvent(eventWithHash)
 
     res.json({
       success: true,
       data: {
-        events: events,
-        total: events.length,
-        query: { lat, lng, radius },
-        source: useFirestore ? 'Firestore' : 'memory',
-        note: useFirestore ? 
-          "Querying from Firestore with geospatial filtering" : 
-          "Memory-only mode - geospatial filtering not available"
+        eventId: storedEvent.flypost.eventId,
+        event: storedEvent
       }
     })
-
-  } catch (error) {
-    console.error('❌ Events retrieval error:', error)
-
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Internal server error during retrieval'
-    })
-  }
+  })
 }
 
-app.get(['/v1/events/near', '/api/v1/events/near'], getEventsNearHandler)
-
-// Utility endpoints for development
-app.get('/api/schema', (req, res) => {
-  res.json(getSchema())
-})
-
-app.get('/api/stats', (req, res) => {
-  res.json(getStorageStats())
-})
-
-// Debug endpoint to clear all events
-app.delete('/api/events', (req, res) => {
-  const cleared = clearEvents()
-  res.json({
-    success: true,
-    message: `Cleared ${cleared} events`
-  })
-})
-
-// Test endpoint to add mock events (for testing without OpenAI)
-app.post('/api/test-add-event', async (req, res) => {
-  const mockEvent = {
-    "@context": "https://schema.org",
-    "@type": "Event",
-    "flypost": {
-      "eventId": `evt_test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      "category": "garage-sales",
-      "realTimeData": true,
-      "crawlable": true,
-      "queryable": true,
-      "submissionTimestamp": new Date().toISOString()
-    },
-    "name": req.body.name || "Test Event",
-    "description": req.body.description || "Mock event for testing",
-    "startDate": new Date(Date.now() + 24*60*60*1000).toISOString(), // Tomorrow
-    "location": {
-      "@type": "Place",
-      "name": req.body.location || "123 Main Street",
-      "address": {
-        "@type": "PostalAddress",
-        "streetAddress": req.body.location || "123 Main Street",
-        "addressLocality": "Springfield",
-        "addressRegion": "IL",
-        "postalCode": "62701",
-        "addressCountry": "US"
-      }
-    },
-    "organizer": {
-      "@type": "Person",
-      "name": req.body.organizer || "Test Organizer",
-      "email": req.body.email || "test@example.com"
-    }
-  }
-
-  const validation = validateEventData(mockEvent)
-  if (!validation.success) {
-    return res.status(400).json({
-      success: false,
-      error: 'Mock event validation failed',
-      details: validation.errors
-    })
-  }
-
-  // Compute hash and add to event
-  const eventHash = computeEventHash(validation.data)
-  const eventWithHash = {
-    ...validation.data,
-    hash: eventHash
-  }
-
-  const storedEvent = await storeEvent(eventWithHash)
-  
-  res.json({
-    success: true,
-    data: {
-      eventId: storedEvent.flypost.eventId,
-      event: storedEvent
-    }
-  })
-})
-
 app.listen(port, () => {
-  console.log('\n🚀 Flypost v4 Backend Server Started')
+  console.log('\n🚀 Flypost v4 Backend Server Started (v9.1)')
   console.log(`📡 Listening on port ${port}`)
-  console.log(`🌐 Health check: http://localhost:${port}/health`)
-  console.log(`🤖 Parse endpoint: POST http://localhost:${port}/api/parse-and-publish`)
-  console.log(`📋 Events endpoint: GET http://localhost:${port}/v1/events/near\n`)
-  console.log('💡 Ready for parse → publish → query loop testing!')
+  console.log(`🌐 Health check:       http://localhost:${port}/health`)
+  console.log(`🤖 Parse endpoint:     POST   http://localhost:${port}/api/parse-and-publish`)
+  console.log(`📋 Events endpoint:    GET    http://localhost:${port}/v1/events/near`)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`🧪 Dev: schema:        GET    http://localhost:${port}/api/schema`)
+    console.log(`🧪 Dev: stats:         GET    http://localhost:${port}/api/stats`)
+    console.log(`🧪 Dev: clear events:  DELETE http://localhost:${port}/api/events`)
+    console.log(`🧪 Dev: test add:      POST   http://localhost:${port}/api/test-add-event`)
+  }
+  console.log('')
 })
