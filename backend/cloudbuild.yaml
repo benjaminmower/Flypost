@@ -15,7 +15,6 @@ steps:
         --image gcr.io/$PROJECT_ID/goflypost-backend:$SHORT_SHA \
         --region=${_REGION:-us-west1} \
         --platform=managed \
-        --allow-unauthenticated \
         --set-env-vars NODE_ENV=production,PORT=8080,FRONTEND_URL=${_FRONTEND_URL} \
         --update-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest
 substitutions:
