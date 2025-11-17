@@ -1,11 +1,10 @@
-# v3 – Proxy-only Cloud Build (Cloud Run deploy)
-# Builds and deploys proxyv4; dynamically fetches backend (flypostv4) URL.
+# Proxy-only Cloud Build v7
+# Builds and deploys proxyv4; dynamically discovers backend URL.
 
 options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  # 1) Build proxy image
   - name: gcr.io/cloud-builders/docker
     id: build-proxy
     dir: proxy
@@ -19,7 +18,6 @@ steps:
         "."
       ]
 
-  # 2) Push proxy image
   - name: gcr.io/cloud-builders/docker
     id: push-proxy
     args:
@@ -28,7 +26,6 @@ steps:
         "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA"
       ]
 
-  # 3) Deploy proxy (resolve backend URL)
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-proxy
     entrypoint: bash
@@ -47,7 +44,7 @@ steps:
         fi
         echo "Resolved BACKEND_URL=${BACKEND_URL}"
 
-        echo "Deploying proxy service proxyv4..."
+        echo "Deploying proxyv4..."
         gcloud run deploy proxyv4 \
           --image "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA" \
           --region "${REGION}" \
