@@ -2,7 +2,6 @@
 # quick-tests.sh — Flypost v4 proxy/backend quick validation (hardened)
 set -Eeuo pipefail
 
-# Trap for clearer failures
 trap 'echo "ERROR: command failed at ${BASH_SOURCE}:${LINENO} (exit $?)" >&2' ERR
 
 # Dependency checks
@@ -63,13 +62,15 @@ echo "4) Proxy GET /v1/events/near should be 200 and include CORS"
 respHeaders=$(mktemp)
 curl -s -D "${respHeaders}" -o /dev/null -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/near"
 status=$(grep -m1 -E '^HTTP/' "${respHeaders}" | awk '{print $2}')
-cors=$(awk -F': ' 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin/{print $2}' "${respHeaders}" | tr -d '\r' | tail -n1)
+acao=$(awk -F': ' 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin/{print $2}' "${respHeaders}" | tr -d '\r' | tail -n1)
 echo "   Status: ${status}"
-echo "   Access-Control-Allow-Origin: ${cors:-<missing>}"
-if [[ "${status}" == "200" && "${cors}" == "${ORIGIN}" ]]; then
+echo "   Access-Control-Allow-Origin: ${acao:-<missing>}"
+if [[ "${status}" == "200" && "${acao}" == "${ORIGIN}" ]]; then
   echo "   OK"
 else
   echo "   WARNING: expected 200 + ACAO=${ORIGIN}"
+  echo "   (debug) Response headers:"
+  sed 's/^/      /' "${respHeaders}" | sed -n '1,25p'
 fi
 rm -f "${respHeaders}"
 echo
@@ -89,12 +90,10 @@ echo
 
 echo "6) Verify event appears in proxy GET /v1/events/near"
 eventsJson=$(curl -s -H "Origin: ${ORIGIN}" "${PROXY}/v1/events/near")
-# Safe count: prefer .data.total if present, else length of .data.events if array, else 0
 count=$(echo "${eventsJson}" | jq -r 'if (.data|type)=="object" then (.data.total // ((.data.events // []) | length)) else 0 end' || echo "0")
-# Safe match: search eventId inside events array if present
-found=$(echo "${eventsJson}" | jq -r --arg id "${event1}" '((.data.events // []) | map(.flypost.eventId)) as $ids | (index($ids; $id) // empty) | if .=="" then "" else $id end' || echo "")
+found=$(echo "${eventsJson}" | jq -r --arg id "${event1}" '(((.data.events // []) | map(.flypost.eventId)) | any(. == $id))' || echo "false")
 echo "   Events count (reported): ${count}"
-if [[ "${found}" == "${event1}" ]]; then
+if [[ "${found}" == "true" ]]; then
   echo "   OK found newly created eventId"
 else
   echo "   WARNING: new eventId not found in near response"
@@ -102,7 +101,8 @@ fi
 echo
 
 echo "7) Parse again to confirm unique eventId per submission"
-payload2='{"naturalLanguageInput":"Community concert Friday 7pm at 123 Main St Springfield IL. Contact Bob bob@example.com"}'
+# Use fully qualified date-time to satisfy schema validation
+payload2='{"naturalLanguageInput":"Community concert on Dec 15, 2025 at 7:00 PM at 123 Main St Springfield IL. Contact Bob bob@example.com"}'
 resp2=$(curl -s -H "Origin: ${ORIGIN}" -H "Content-Type: application/json" -d "${payload2}" "${PROXY}/api/parse-and-publish")
 ok2=$(echo "${resp2}" | jq -r '.success // false' || echo "false")
 event2=$(echo "${resp2}" | jq -r '.data.eventId // empty' || echo "")
