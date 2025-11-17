@@ -1,0 +1,34 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-proxy
+    dir: proxy
+    args: ["build","-t","us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA","-f","Dockerfile","."]
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-proxy
+    args: ["push","us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA"]
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-proxy
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        BACKEND_URL=$(gcloud run services describe flypostv4 --region=us-west1 --format='value(status.url)')
+        echo "Deploying proxy with BACKEND_URL=${BACKEND_URL}"
+        gcloud run deploy proxyv4 \
+          --image us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA \
+          --region us-west1 \
+          --platform managed \
+          --allow-unauthenticated \
+          --set-env-vars BACKEND_URL=${BACKEND_URL},FRONTEND_ORIGIN=${_FRONTEND_ORIGIN},PROXY_USE_ID_TOKEN=${_PROXY_USE_ID_TOKEN}
+
+substitutions:
+  _FRONTEND_ORIGIN: "https://flypost.netlify.app"
+  _PROXY_USE_ID_TOKEN: "true"
+
+images:
+  - "us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/v4/proxyv4:$SHORT_SHA"
