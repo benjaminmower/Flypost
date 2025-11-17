@@ -115,28 +115,36 @@ export async function queryEventsByLocationAndTime(filters = {}) {
       events.push(eventData)
     })
 
-    // If location filters are provided, apply in-memory geospatial filtering
-    // Note: Firestore doesn't support native geospatial queries, so we filter post-query
-    // For production scale, consider using Firestore GeoPoint queries or a geohashing library
-    if (filters.latitude !== undefined && filters.longitude !== undefined && filters.radiusKm) {
-      events = events.filter(event => {
-        if (!event.location?.geo?.latitude || !event.location?.geo?.longitude) {
-          return false // Exclude events without coordinates
-        }
-        
-        const distance = calculateDistance(
-          filters.latitude,
-          filters.longitude,
-          event.location.geo.latitude,
-          event.location.geo.longitude
-        )
-        
-        return distance <= filters.radiusKm
-      })
-    }
+    // If location filters are provided, apply in-memory geospatial filtering.
+    // Only filter if at least one event has coordinates; otherwise return all events.
+    const hasGeoFilters = (
+      filters.latitude !== undefined &&
+      filters.longitude !== undefined &&
+      !!filters.radiusKm
+    )
 
-    console.log(`🔥 Firestore query returned ${events.length} events`)
-    return events
+    if (hasGeoFilters) {
+      const withGeo = events.filter(e => e?.location?.geo?.latitude && e?.location?.geo?.longitude)
+      if (withGeo.length > 0) {
+        const filtered = withGeo.filter(event => {
+          const distance = calculateDistance(
+            filters.latitude,
+            filters.longitude,
+            event.location.geo.latitude,
+            event.location.geo.longitude
+          )
+          return distance <= filters.radiusKm
+        })
+        console.log(`🔥 Firestore query (geo-filtered) returned ${filtered.length} of ${withGeo.length} geo-tagged events (from ${events.length} total)`)
+        return filtered
+      } else {
+        console.log('🔥 Firestore query: 0 events have geo; skipping distance filter and returning all events')
+        return events
+      }
+    } else {
+      console.log(`🔥 Firestore query (no geo filter) returned ${events.length} events`)
+      return events
+    }
   } catch (error) {
     console.error('❌ Firestore query error:', error)
     throw new Error(`Failed to query events from Firestore: ${error.message}`)
