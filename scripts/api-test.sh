@@ -8,7 +8,7 @@ set -euo pipefail
 
 # You can either export FLYPOST_API_BASE before running,
 # or pass it as the first argument to this script.
-FLYPOST_API_BASE="${FLYPOST_API_BASE:-${1:-}}"
+FLYPOST_API_BASE="https://proxyv4-a7jlfl42zq-uw.a.run.app"
 
 if [[ -z "${FLYPOST_API_BASE}" ]]; then
   echo "❌ FLYPOST_API_BASE is not set."
