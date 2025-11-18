@@ -1,0 +1,30 @@
+{
+  "name": "flypost-v4-tools",
+  "version": "1.0.0",
+  "description": "Flypost v4 tools for LLM agents",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "example": "tsx examples/flypost-agent.ts",
+    "build": "tsc --noEmit",
+    "lint": "echo 'No linting configured yet'"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  },
+  "dependencies": {
+    "openai": "^4.104.0"
+  },
+  "keywords": [
+    "flypost",
+    "events",
+    "llm",
+    "tools"
+  ],
+  "author": "goflypost",
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,52 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "flypost_parse_and_publish",
+      "description": "Parse a natural-language event description into a structured Flypost event and store it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "naturalLanguageInput": {
+            "type": "string",
+            "description": "Raw event description, e.g. 'Open house Sunday 1-4pm at 2212 Ocean Park Blvd, Santa Monica...'"
+          },
+          "userContext": {
+            "type": "object",
+            "description": "Optional metadata about the caller or channel.",
+            "additionalProperties": true
+          }
+        },
+        "required": ["naturalLanguageInput"],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "flypost_events_near",
+      "description": "Retrieve events near a latitude/longitude within a search radius.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "description": "Latitude in decimal degrees. Defaults to Santa Monica if omitted."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude in decimal degrees. Defaults to Santa Monica if omitted."
+          },
+          "radius": {
+            "type": "number",
+            "description": "Search radius in kilometers.",
+            "default": 10
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  }
+]
