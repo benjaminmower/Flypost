@@ -172,7 +172,7 @@ async function main() {
   try {
     // Example 1: Parse and publish an open house event
     console.log('\n📝 Example 1: Parse and Publish Event')
-    console.log('=' .repeat(60))
+    console.log('='.repeat(60))
     await runConversation(
       'Create an event for an open house this Sunday from 1-4pm at 2212 Ocean Park Blvd, Santa Monica, CA. It\'s a 3 bed, 2 bath home listed at $1.5M.'
     )
