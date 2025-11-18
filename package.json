@@ -1,0 +1,32 @@
+{
+  "name": "flypost-v4-tools",
+  "version": "1.0.0",
+  "description": "LLM tool definitions and TypeScript client for Flypost API",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "example": "tsx examples/flypost-agent.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/dotenv": "^6.1.1",
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "openai": "^4.104.0"
+  },
+  "keywords": [
+    "flypost",
+    "llm",
+    "tools",
+    "openai"
+  ],
+  "author": "goflypost",
+  "license": "Apache-2.0"
+}
