@@ -1,0 +1,414 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Flypost Event API",
+    "version": "4.0.0-mvp",
+    "description": "Flypost parses natural-language event descriptions into structured Schema.org Event objects and provides a location-based query API."
+  },
+  "servers": [
+    {
+      "url": "https://proxyv4-a7jlfl42zq-uw.a.run.app",
+      "description": "Flypost proxy (Cloud Run) - production"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Service health status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Health check (legacy path)",
+        "operationId": "getApiHealth",
+        "responses": {
+          "200": {
+            "description": "Service health status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/parse-and-publish": {
+      "post": {
+        "summary": "Parse a natural-language event and publish it",
+        "operationId": "parseAndPublishEvent",
+        "description": "Parses a natural-language event description into a structured Event object, validates it, computes a hash, stores it, and returns the stored event plus a Flypost eventId.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseAndPublishRequest"
+              },
+              "examples": {
+                "openHouse": {
+                  "summary": "Open house example",
+                  "value": {
+                    "naturalLanguageInput": "Open house this Sunday from 1–4pm at 2212 Ocean Park Blvd, Santa Monica. 3 bed, 2 bath, listed at $1.5M.",
+                    "userContext": {
+                      "channel": "cli",
+                      "source": "curl-e2e-test"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event parsed, validated, hashed, and stored successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseAndPublishResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or validation failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server-side error during parsing or publishing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/events/near": {
+      "get": {
+        "summary": "Get events near a location",
+        "operationId": "getEventsNear",
+        "description": "Retrieves events near a latitude/longitude within a radius. Uses Firestore geospatial queries when enabled; otherwise falls back to in-memory retrieval.",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Latitude in decimal degrees. If omitted, defaults to Santa Monica, CA.",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lng",
+            "in": "query",
+            "description": "Longitude in decimal degrees. If omitted, defaults to Santa Monica, CA.",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "radius",
+            "in": "query",
+            "description": "Search radius in kilometers. Defaults to 10.",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsNearResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server-side error during event retrieval.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "healthy"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "string",
+            "example": "4.0.0-mvp"
+          },
+          "storage": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "example": "hybrid (memory + Firestore)"
+              },
+              "events": {
+                "type": "integer",
+                "example": 42
+              },
+              "firestore": {
+                "type": "boolean"
+              }
+            }
+          },
+          "uptime": {
+            "type": "number",
+            "description": "Uptime in seconds.",
+            "example": 12345.67
+          }
+        },
+        "required": ["status", "timestamp", "version"]
+      },
+      "ParseAndPublishRequest": {
+        "type": "object",
+        "description": "Request body for parsing and publishing an event. Use naturalLanguageInput when possible.",
+        "properties": {
+          "naturalLanguageInput": {
+            "type": "string",
+            "description": "Primary field for the raw event description."
+          },
+          "text": {
+            "type": "string",
+            "description": "Alias for naturalLanguageInput."
+          },
+          "input": {
+            "type": "string",
+            "description": "Alias for naturalLanguageInput."
+          },
+          "userContext": {
+            "type": "object",
+            "description": "Optional metadata providing context about the caller, channel, or user.",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ParseAndPublishResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "eventId": {
+                "type": "string",
+                "description": "Flypost-generated event identifier.",
+                "example": "evt_abc123xyz_1700000000000"
+              },
+              "event": {
+                "$ref": "#/components/schemas/FlypostEvent"
+              },
+              "processing": {
+                "type": "object",
+                "properties": {
+                  "parsed": { "type": "boolean" },
+                  "validated": { "type": "boolean" },
+                  "hashed": { "type": "boolean" },
+                  "stored": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "EventsNearResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "events": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FlypostEvent"
+                }
+              },
+              "total": {
+                "type": "integer",
+                "example": 5
+              },
+              "query": {
+                "type": "object",
+                "description": "Echo of query parameters.",
+                "additionalProperties": true
+              },
+              "source": {
+                "type": "string",
+                "description": "Backend source for the events.",
+                "example": "Firestore",
+                "enum": ["Firestore", "Memory"]
+              },
+              "note": {
+                "type": "string",
+                "description": "Human-readable note about the retrieval strategy."
+              }
+            }
+          }
+        }
+      },
+      "FlypostEvent": {
+        "type": "object",
+        "description": "Schema.org Event with Flypost metadata and hash.",
+        "properties": {
+          "@context": {
+            "type": "string",
+            "example": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "example": "Event"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "location": {
+            "type": "object",
+            "description": "Schema.org Place object.",
+            "additionalProperties": true
+          },
+          "organizer": {
+            "type": "object",
+            "description": "Schema.org Person or Organization.",
+            "additionalProperties": true
+          },
+          "flypost": {
+            "type": "object",
+            "description": "Flypost-specific metadata.",
+            "properties": {
+              "eventId": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string",
+                "description": "Internal Flypost category label.",
+                "nullable": true
+              },
+              "realTimeData": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "crawlable": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "queryable": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "submissionTimestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": true
+          },
+          "hash": {
+            "type": "object",
+            "description": "Hash object identifying this event representation.",
+            "properties": {
+              "algorithm": {
+                "type": "string",
+                "example": "SHA-256"
+              },
+              "value": {
+                "type": "string",
+                "description": "Hex-encoded hash of the canonical event payload."
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      }
+    }
+  }
+}
