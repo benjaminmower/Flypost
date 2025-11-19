@@ -20,8 +20,23 @@ const app = express()
 const port = process.env.PORT || 3001
 
 // Middleware
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'https://flypost.netlify.app',
+  'https://app.goflypost.com',
+  'http://localhost:5173'
+]
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://flypost.netlify.app',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true)
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
   credentials: true
 }))
 app.use(express.json({ limit: '1mb' }))
