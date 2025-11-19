@@ -6,10 +6,17 @@ const createForward = require('./src/forward')
 
 const app = express()
 
-const allowedOrigins = [
-  process.env.FRONTEND_ORIGIN || 'https://flypost.netlify.app',
-  'http://localhost:5173'
-]
+const allowedOrigins = Array.from(
+  new Set([
+    ...((process.env.FRONTEND_ORIGIN || '')
+      .split(',')
+      .map(origin => origin.trim())
+      .filter(Boolean)),
+    'https://flypost.netlify.app',
+    'https://app.goflypost.com',
+    'http://localhost:5173'
+  ])
+)
 
 app.use(cors({
   origin: (origin, cb) => {
