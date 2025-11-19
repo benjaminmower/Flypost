@@ -8,6 +8,7 @@ const app = express()
 
 const allowedOrigins = [
   process.env.FRONTEND_ORIGIN || 'https://flypost.netlify.app',
+  'https://app.goflypost.com',
   'http://localhost:5173'
 ]
 

@@ -57,7 +57,7 @@ steps:
           --set-env-vars "BACKEND_URL=$backend_url,FRONTEND_ORIGIN=${_FRONTEND_ORIGIN},PROXY_USE_ID_TOKEN=${_PROXY_USE_ID_TOKEN}"
 
 substitutions:
-  _FRONTEND_ORIGIN: "https://flypost.netlify.app"
+  _FRONTEND_ORIGIN: "https://app.goflypost.com"
   _PROXY_USE_ID_TOKEN: "true"
 
 images:

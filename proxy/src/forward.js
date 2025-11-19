@@ -15,6 +15,7 @@ if (!BACKEND_BASE) {
 const USE_ID_TOKEN = process.env.PROXY_USE_ID_TOKEN !== 'false'
 const allowedOrigins = [
   process.env.FRONTEND_ORIGIN || 'https://flypost.netlify.app',
+  'https://app.goflypost.com',
   'http://localhost:5173'
 ]
 
