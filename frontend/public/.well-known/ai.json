@@ -9,7 +9,7 @@
   },
   "api": {
     "type": "openapi",
-    "url": "https://flypost.netlify.app/openapi.json",
+    "url": "https://app.goflypost.com/openapi.json",
     "is_user_authenticated": false
   },
   "capabilities": {
