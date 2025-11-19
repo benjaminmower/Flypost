@@ -20,8 +20,17 @@ const app = express()
 const port = process.env.PORT || 3001
 
 // Middleware
+const frontendOrigins = [
+  ...((process.env.FRONTEND_URL || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)),
+  'https://flypost.netlify.app',
+  'https://app.goflypost.com'
+]
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://flypost.netlify.app',
+  origin: frontendOrigins,
   credentials: true
 }))
 app.use(express.json({ limit: '1mb' }))
