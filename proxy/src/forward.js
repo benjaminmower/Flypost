@@ -1,4 +1,4 @@
-// v13 – Flypost robust forwarder
+// v14 – Flypost robust forwarder
 // Adds request-id propagation, richer logging, latency metrics,
 // cleaner CORS, and safer debug information.
 // Preserves: ID token, status passthrough, hop-by-hop stripping, arraybuffer handling.
@@ -13,6 +13,7 @@ if (!BACKEND_BASE) {
 }
 
 const USE_ID_TOKEN = process.env.PROXY_USE_ID_TOKEN !== 'false'
+const WRITE_TOKEN = process.env.FLYPOST_WRITE_TOKEN || process.env.WRITE_TOKEN || ''
 const allowedOrigins = Array.from(
   new Set([
     ...((process.env.FRONTEND_ORIGIN || '')
@@ -57,6 +58,9 @@ module.exports = function createForward() {
   return async function forward(req, res) {
     const origin = req.headers.origin
     const requestId = ensureRequestId(req)
+    const isApiPost = req.method === 'POST' && req.path.startsWith('/api/')
+    const isParseAndPublish =
+      req.method === 'POST' && req.path === '/api/parse-and-publish'
 
     if (!BACKEND_BASE) {
       setCors(res, origin)
@@ -79,6 +83,28 @@ module.exports = function createForward() {
 
     try {
       //-------------------------------------
+      // Basic write authentication
+      //-------------------------------------
+      if (isApiPost && WRITE_TOKEN) {
+        const bearer = req.headers.authorization || req.headers.Authorization
+        const headerToken = req.headers['x-flypost-write-token']
+        const provided = (headerToken || '').toString().trim()
+        const bearerToken = bearer
+          ? bearer.replace(/^Bearer\s+/i, '').trim()
+          : ''
+        const suppliedToken = provided || bearerToken
+
+        if (!suppliedToken || suppliedToken !== WRITE_TOKEN) {
+          setCors(res, origin)
+          return res.status(401).json({
+            success: false,
+            error: 'unauthorized write',
+            requestId
+          })
+        }
+      }
+
+      //-------------------------------------
       // Clone/sanitize headers
       //-------------------------------------
       const headers = { ...req.headers }
@@ -93,9 +119,43 @@ module.exports = function createForward() {
       headers.host = new URL(BACKEND_BASE).host
 
       //-------------------------------------
+      // Source channel hint for backend provenance
+      //-------------------------------------
+      const sourceChannel =
+        req.headers['x-flypost-source-channel'] ||
+        (req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+          ? req.body.userContext?.channel || req.body.userContext?.source
+          : null)
+      if (sourceChannel) {
+        headers['x-flypost-source-channel'] = sourceChannel
+      }
+
+      //-------------------------------------
       // Body handling
       //-------------------------------------
       let data
+      if (isParseAndPublish && req.body && typeof req.body === 'object') {
+        const baseContext =
+          typeof req.body.userContext === 'object' &&
+          !Array.isArray(req.body.userContext)
+            ? req.body.userContext
+            : {}
+        req.body = {
+          ...(typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {}),
+          userContext: {
+            ...baseContext,
+            provenance: {
+              ...(baseContext?.provenance || {}),
+              via: 'flypost-proxy',
+              origin: origin || 'unknown',
+              requestId,
+              userAgent: req.headers['user-agent'] || 'unknown',
+              receivedAt: new Date().toISOString()
+            }
+          }
+        }
+      }
+
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         if (
           req.body &&
