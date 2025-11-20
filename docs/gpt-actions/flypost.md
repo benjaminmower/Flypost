@@ -302,6 +302,58 @@ In the Actions configuration:
 - **Value:** the write token you received (same as proxy `FLYPOST_WRITE_TOKEN`).
 - No OAuth configuration, client ID, or callback URL is required.
 
+### Optional: Firebase Email Link (Passwordless) sign-in for writes
+If you prefer passwordless logins, you can let clients authenticate with Firebase **Email Link (Passwordless Sign-in)** and send their Firebase ID token to the proxy:
+
+1. **Enable Email Link** in Firebase Console → Authentication → Sign-in method → Email/Password → **Email link (passwordless sign-in)**.
+2. **Client snippet (web, modular SDK):**
+   ```js
+   import {
+     getAuth,
+     sendSignInLinkToEmail,
+     isSignInWithEmailLink,
+     signInWithEmailLink
+   } from 'firebase/auth'
+
+   const auth = getAuth()
+   const actionCodeSettings = {
+     url: 'https://app.goflypost.com/finishSignIn',
+     handleCodeInApp: true
+   }
+
+   // Step 1: send link
+   await sendSignInLinkToEmail(auth, email, actionCodeSettings)
+   window.localStorage.setItem('flypostEmailForSignIn', email)
+
+   // Step 2: complete sign-in when the link is opened
+   if (isSignInWithEmailLink(auth, window.location.href)) {
+     let storedEmail = window.localStorage.getItem('flypostEmailForSignIn')
+     if (!storedEmail) {
+       storedEmail = window.prompt('Please provide your email for confirmation')
+       if (!storedEmail) return
+     }
+     const result = await signInWithEmailLink(auth, storedEmail, window.location.href)
+     const idToken = await result.user.getIdToken()
+
+     await fetch('https://<your-proxy-host>/api/parse-and-publish', {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+         Authorization: `Bearer ${idToken}`
+       },
+       // Replace with your parse-and-publish payload:
+       body: JSON.stringify({
+         naturalLanguageInput: '...',
+         userContext: { /* ... */ }
+       })
+     })
+   }
+   ```
+3. **Proxy configuration:** set `FIREBASE_PROJECT_ID` in the proxy environment. The proxy will accept either:
+   - `Authorization: Bearer <Firebase ID token>` from your Email Link sign-ins, **or**
+   - `X-Flypost-Write-Token: <shared secret>` for server-to-server calls.
+4. **Provenance:** Firebase-authenticated calls automatically include provenance hints (`firebaseUid`, `firebaseEmail`, `firebaseSignInProvider`) in `userContext.provenance`.
+
 ### Provenance tagging for writes
 When calling `flypost_parse_and_publish`, include provenance in the request body to indicate the calling surface, and set a channel hint via the `X-Flypost-Source-Channel` header if you have one. Example payload snippet:
 
