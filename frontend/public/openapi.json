@@ -64,10 +64,15 @@
                 "openHouse": {
                   "summary": "Open house example",
                   "value": {
-                    "naturalLanguageInput": "Open house this Sunday from 1–4pm at 2212 Ocean Park Blvd, Santa Monica. 3 bed, 2 bath, listed at $1.5M.",
+                    "naturalLanguageInput": "Open house this Sunday from 1\u20134pm at 2212 Ocean Park Blvd, Santa Monica. 3 bed, 2 bath, listed at $1.5M.",
                     "userContext": {
-                      "channel": "cli",
-                      "source": "curl-e2e-test"
+                      "source": "openai-gpt-action",
+                      "channel": "gpt-actions",
+                      "provenance": {
+                        "agent": "flypost-gpt-action",
+                        "platform": "openai",
+                        "intent": "parse-and-publish"
+                      }
                     }
                   }
                 }
@@ -106,7 +111,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "WriteTokenAuth": []
+          }
+        ]
       }
     },
     "/v1/events/near": {
@@ -211,7 +221,11 @@
             "example": 12345.67
           }
         },
-        "required": ["status", "timestamp", "version"]
+        "required": [
+          "status",
+          "timestamp",
+          "version"
+        ]
       },
       "ParseAndPublishRequest": {
         "type": "object",
@@ -231,7 +245,7 @@
           },
           "userContext": {
             "type": "object",
-            "description": "Optional metadata providing context about the caller, channel, or user.",
+            "description": "Optional metadata about the caller, channel, or context. Include provenance for writes (e.g., {\"source\": \"openai-gpt-action\", \"provenance\": {\"agent\": \"flypost-gpt-action\", \"platform\": \"openai\"}}). You may also set X-Flypost-Source-Channel for clearer provenance.",
             "additionalProperties": true
           }
         },
@@ -258,10 +272,18 @@
               "processing": {
                 "type": "object",
                 "properties": {
-                  "parsed": { "type": "boolean" },
-                  "validated": { "type": "boolean" },
-                  "hashed": { "type": "boolean" },
-                  "stored": { "type": "boolean" }
+                  "parsed": {
+                    "type": "boolean"
+                  },
+                  "validated": {
+                    "type": "boolean"
+                  },
+                  "hashed": {
+                    "type": "boolean"
+                  },
+                  "stored": {
+                    "type": "boolean"
+                  }
                 }
               }
             }
@@ -297,7 +319,10 @@
                 "type": "string",
                 "description": "Backend source for the events.",
                 "example": "Firestore",
-                "enum": ["Firestore", "Memory"]
+                "enum": [
+                  "Firestore",
+                  "Memory"
+                ]
               },
               "note": {
                 "type": "string",
@@ -408,6 +433,14 @@
             "nullable": true
           }
         }
+      }
+    },
+    "securitySchemes": {
+      "WriteTokenAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Flypost-Write-Token",
+        "description": "Static write token required for POST requests under /api/* (currently parse-and-publish only)."
       }
     }
   }
