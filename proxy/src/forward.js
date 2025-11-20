@@ -122,15 +122,13 @@ module.exports = function createForward() {
         const provided = (headerToken || '').toString().trim()
         const bearerToken = extractBearer(bearer)
 
+        const firebaseAuthResult = await verifyFirebaseIdToken(bearer)
+        if (firebaseAuthResult.ok) {
+          firebaseUser = firebaseAuthResult.decoded
+        }
+
         const hasWriteToken =
           WRITE_TOKEN && (provided === WRITE_TOKEN || bearerToken === WRITE_TOKEN)
-
-        if (!hasWriteToken) {
-          const firebaseAuthResult = await verifyFirebaseIdToken(bearer)
-          if (firebaseAuthResult.ok) {
-            firebaseUser = firebaseAuthResult.decoded
-          }
-        }
 
         if (!firebaseUser && !hasWriteToken) {
           setCors(res, origin)
