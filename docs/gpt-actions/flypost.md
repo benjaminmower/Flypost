@@ -290,13 +290,37 @@ paths:
 ```
 
 ## Authentication Instructions
-### Current Auth Setup
-- **Auth type:** None
-- **Reason:** Flypost’s read (`/v1/events/near`) and write (`/api/parse-and-publish`) endpoints are exposed via a proxy that currently does not require OAuth or API keys for this MVP.
+### Current Auth Setup (write-protected)
+- **Auth type:** API Key (static token)
+- **Scope:** Required for **all POST** requests under `/api/*` (currently `POST /api/parse-and-publish`). The read endpoint `GET /v1/events/near` remains public.
+- **Header:** `X-Flypost-Write-Token`
+- **Value:** Provisioned in the Flypost Cloud Run proxy environment as `FLYPOST_WRITE_TOKEN` (fallback: `WRITE_TOKEN`).
 
 In the Actions configuration:
-- Set **Authentication** to: **None**
-- No OAuth configuration, client ID, or callback URL is required at this stage.
+- Set **Authentication** to **API Key** → **Header**.
+- **Key name:** `X-Flypost-Write-Token`
+- **Value:** the write token you received (same as proxy `FLYPOST_WRITE_TOKEN`).
+- No OAuth configuration, client ID, or callback URL is required.
+
+### Provenance tagging for writes
+When calling `flypost_parse_and_publish`, include provenance in the request body to indicate the calling surface, and set a channel hint via the `X-Flypost-Source-Channel` header if you have one. Example payload snippet:
+
+```json
+{
+  "naturalLanguageInput": "Open house this Sunday 1–4pm at 2212 Ocean Park Blvd, Santa Monica. $1.5M.",
+  "userContext": {
+    "source": "openai-gpt-action",
+    "channel": "gpt-actions",
+    "provenance": {
+      "agent": "flypost-gpt-action",
+      "platform": "openai",
+      "intent": "parse-and-publish"
+    }
+  }
+}
+```
+
+The proxy will append its own provenance (request ID, origin, user agent) and pass through `X-Flypost-Source-Channel` when provided before forwarding to the backend.
 
 ### Future Auth (for partner brokerages / venues)
 If/when you add partner-only write endpoints (e.g., brokerages pushing private calendars):
@@ -309,8 +333,6 @@ That will require:
 - Token URL
 - Scopes
 - Callback URL (e.g., https://chat.openai.com/aip/oauth/callback)
-
-For now, this Action uses no authentication.
 
 ## FAQ and Troubleshooting
 1. **I’m getting 404 or ENOTFOUND errors calling the API.**
