@@ -136,7 +136,6 @@ module.exports = function createForward() {
       let data
       if (isParseAndPublish && req.body && typeof req.body === 'object') {
         const baseContext =
-          req.body &&
           typeof req.body.userContext === 'object' &&
           !Array.isArray(req.body.userContext)
             ? req.body.userContext
