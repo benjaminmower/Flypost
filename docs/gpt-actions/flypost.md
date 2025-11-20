@@ -327,7 +327,11 @@ If you prefer passwordless logins, you can let clients authenticate with Firebas
 
    // Step 2: complete sign-in when the link is opened
    if (isSignInWithEmailLink(auth, window.location.href)) {
-     const storedEmail = window.localStorage.getItem('flypostEmailForSignIn')
+     let storedEmail = window.localStorage.getItem('flypostEmailForSignIn')
+     if (!storedEmail) {
+       storedEmail = window.prompt('Please provide your email for confirmation')
+       if (!storedEmail) return
+     }
      const result = await signInWithEmailLink(auth, storedEmail, window.location.href)
      const idToken = await result.user.getIdToken()
 
