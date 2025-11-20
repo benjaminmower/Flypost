@@ -290,13 +290,81 @@ paths:
 ```
 
 ## Authentication Instructions
-### Current Auth Setup
-- **Auth type:** None
-- **Reason:** Flypost’s read (`/v1/events/near`) and write (`/api/parse-and-publish`) endpoints are exposed via a proxy that currently does not require OAuth or API keys for this MVP.
+### Current Auth Setup (write-protected)
+- **Auth type:** API Key (static token)
+- **Scope:** Required for **all POST** requests under `/api/*` (currently `POST /api/parse-and-publish`). The read endpoint `GET /v1/events/near` remains public.
+- **Header:** `X-Flypost-Write-Token`
+- **Value:** Provisioned in the Flypost Cloud Run proxy environment as `FLYPOST_WRITE_TOKEN` (fallback: `WRITE_TOKEN`).
 
 In the Actions configuration:
-- Set **Authentication** to: **None**
-- No OAuth configuration, client ID, or callback URL is required at this stage.
+- Set **Authentication** to **API Key** → **Header**.
+- **Key name:** `X-Flypost-Write-Token`
+- **Value:** the write token you received (same as proxy `FLYPOST_WRITE_TOKEN`).
+- No OAuth configuration, client ID, or callback URL is required.
+
+### Optional: Firebase Email Link (Passwordless) sign-in for writes
+If you prefer passwordless logins, you can let clients authenticate with Firebase **Email Link (Passwordless Sign-in)** and send their Firebase ID token to the proxy:
+
+1. **Enable Email Link** in Firebase Console → Authentication → Sign-in method → Email/Password → **Email link (passwordless sign-in)**.
+2. **Client snippet (web, modular SDK):**
+   ```js
+   import {
+     getAuth,
+     sendSignInLinkToEmail,
+     isSignInWithEmailLink,
+     signInWithEmailLink
+   } from 'firebase/auth'
+
+   const auth = getAuth()
+   const actionCodeSettings = {
+     url: 'https://app.goflypost.com/finishSignIn',
+     handleCodeInApp: true
+   }
+
+   // Step 1: send link
+   await sendSignInLinkToEmail(auth, email, actionCodeSettings)
+   window.localStorage.setItem('flypostEmailForSignIn', email)
+
+   // Step 2: complete sign-in when the link is opened
+   if (isSignInWithEmailLink(auth, window.location.href)) {
+     const storedEmail = window.localStorage.getItem('flypostEmailForSignIn')
+     const result = await signInWithEmailLink(auth, storedEmail, window.location.href)
+     const idToken = await result.user.getIdToken()
+
+     await fetch('https://<your-proxy-host>/api/parse-and-publish', {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+         Authorization: `Bearer ${idToken}`
+       },
+       body: JSON.stringify(payload)
+     })
+   }
+   ```
+3. **Proxy configuration:** set `FIREBASE_PROJECT_ID` in the proxy environment. The proxy will accept either:
+   - `Authorization: Bearer <Firebase ID token>` from your Email Link sign-ins, **or**
+   - `X-Flypost-Write-Token: <shared secret>` for server-to-server calls.
+4. **Provenance:** Firebase-authenticated calls automatically include provenance hints (`firebaseUid`, `firebaseEmail`, `firebaseSignInProvider`) in `userContext.provenance`.
+
+### Provenance tagging for writes
+When calling `flypost_parse_and_publish`, include provenance in the request body to indicate the calling surface, and set a channel hint via the `X-Flypost-Source-Channel` header if you have one. Example payload snippet:
+
+```json
+{
+  "naturalLanguageInput": "Open house this Sunday 1–4pm at 2212 Ocean Park Blvd, Santa Monica. $1.5M.",
+  "userContext": {
+    "source": "openai-gpt-action",
+    "channel": "gpt-actions",
+    "provenance": {
+      "agent": "flypost-gpt-action",
+      "platform": "openai",
+      "intent": "parse-and-publish"
+    }
+  }
+}
+```
+
+The proxy will append its own provenance (request ID, origin, user agent) and pass through `X-Flypost-Source-Channel` when provided before forwarding to the backend.
 
 ### Future Auth (for partner brokerages / venues)
 If/when you add partner-only write endpoints (e.g., brokerages pushing private calendars):
@@ -309,8 +377,6 @@ That will require:
 - Token URL
 - Scopes
 - Callback URL (e.g., https://chat.openai.com/aip/oauth/callback)
-
-For now, this Action uses no authentication.
 
 ## FAQ and Troubleshooting
 1. **I’m getting 404 or ENOTFOUND errors calling the API.**
