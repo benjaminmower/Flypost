@@ -124,7 +124,7 @@ module.exports = function createForward() {
       const sourceChannel =
         req.headers['x-flypost-source-channel'] ||
         (req.body && typeof req.body === 'object' && !Array.isArray(req.body)
-          ? req.body?.userContext?.channel || req.body?.userContext?.source
+          ? req.body.userContext?.channel || req.body.userContext?.source
           : null)
       if (sourceChannel) {
         headers['x-flypost-source-channel'] = sourceChannel
