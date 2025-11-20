@@ -45,12 +45,21 @@ function requireWriteToken(req, res, next) {
     const expectedToken = process.env.FLYPOST_WRITE_TOKEN
     
     // If FLYPOST_WRITE_TOKEN is configured, enforce it
-    if (expectedToken && token !== expectedToken) {
-      console.log(`🔒 Write-token check failed for ${req.method} ${req.originalUrl}`)
-      return res.status(401).json({
-        success: false,
-        error: 'Unauthorized: Invalid or missing write token'
-      })
+    if (expectedToken) {
+      if (!token) {
+        console.log(`🔒 Write-token missing for ${req.method} ${req.originalUrl}`)
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Missing write token'
+        })
+      }
+      if (token !== expectedToken) {
+        console.log(`🔒 Write-token invalid for ${req.method} ${req.originalUrl}`)
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Invalid write token'
+        })
+      }
     }
     
     if (expectedToken && token === expectedToken) {
