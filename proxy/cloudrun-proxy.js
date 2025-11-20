@@ -35,6 +35,43 @@ app.use((req, _res, next) => {
   next()
 })
 
+// Write-token authentication middleware
+// Checks POST requests to /api/* paths before routing
+function requireWriteToken(req, res, next) {
+  const isApiPost = req.method === 'POST' && (req.originalUrl || '').startsWith('/api/')
+  
+  if (isApiPost) {
+    const token = req.get('x-flypost-write-token')
+    const expectedToken = process.env.FLYPOST_WRITE_TOKEN
+    
+    // If FLYPOST_WRITE_TOKEN is configured, enforce it
+    if (expectedToken) {
+      if (!token) {
+        console.log(`🔒 Write-token missing for ${req.method} ${req.originalUrl}`)
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Missing write token'
+        })
+      }
+      if (token !== expectedToken) {
+        console.log(`🔒 Write-token invalid for ${req.method} ${req.originalUrl}`)
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Invalid write token'
+        })
+      }
+    }
+    
+    if (expectedToken && token === expectedToken) {
+      console.log(`✅ Write-token validated for ${req.method} ${req.originalUrl}`)
+    }
+  }
+  
+  next()
+}
+
+app.use(requireWriteToken)
+
 const forward = createForward()
 
 app.get('/', (req, res) => {
