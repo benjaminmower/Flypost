@@ -337,7 +337,11 @@ If you prefer passwordless logins, you can let clients authenticate with Firebas
          'Content-Type': 'application/json',
          Authorization: `Bearer ${idToken}`
        },
-       body: JSON.stringify(payload)
+       // Replace with your parse-and-publish payload:
+       body: JSON.stringify({
+         naturalLanguageInput: '...',
+         userContext: { /* ... */ }
+       })
      })
    }
    ```
