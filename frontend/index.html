@@ -206,6 +206,30 @@
             <h1>FLYPOST</h1>
             <p>the worlds first AI native event feed</p>
         </div>
+
+        <!-- Passwordless Sign-In Panel -->
+        <div id="auth-panel" style="margin-bottom:20px; padding:15px; border:1px solid #e1e5e9; border-radius:6px; background:#fff;">
+            <h3 style="margin-top:0; margin-bottom:10px;">Sign in to Flypost (Passwordless)</h3>
+            <p style="margin:0 0 10px; font-size:13px; color:#555;">
+                Enter your email to get a magic link. You must be signed in to post events.
+            </p>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <input 
+                    type="email" 
+                    id="auth-email" 
+                    placeholder="you@example.com"
+                    style="flex:1; padding:10px; border:1px solid #ccc; border-radius:4px;"
+                    autocomplete="email"
+                />
+                <button id="send-link-btn" type="button" class="copy-button" style="background:#007bff;">
+                    ✉️ Send Magic Link
+                </button>
+                <button id="signout-btn" type="button" class="copy-button" style="background:#6c757d; display:none;">
+                    🚪 Sign Out
+                </button>
+            </div>
+            <div id="auth-status" style="margin-top:10px; font-size:13px; color:#555;"></div>
+        </div>
         
         <form id="event-form">
             <div class="form-group">
@@ -214,8 +238,7 @@
                     id="event-text" 
                     class="input-textarea"
                     placeholder="Enter event description in natural language, e.g.: 'Garage sale Saturday 8am-2pm at 123 Main St, Springfield IL. Selling furniture and electronics. Contact John at john@example.com'"
-                    required>
-                </textarea>
+                    required></textarea>
             </div>
             
             <button type="submit" id="parse-btn" class="parse-button">
