@@ -1,4 +1,4 @@
-+# GPT Actions library – Flypost
+# GPT Actions library – Flypost
 +
 +## Application Information
 +### Application Key Links
