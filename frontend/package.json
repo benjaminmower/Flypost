@@ -1,7 +1,7 @@
 {
   "name": "flypost-v4-frontend", 
   "version": "1.0.0",
-  "description": "Flypost v4 minimal frontend - simple event parsing interface",
+  "description": "Flypost - the world's first AI native event feed",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,7 @@
   "devDependencies": {
     "vite": "^5.4.2"
   },
-  "keywords": ["flypost", "events", "frontend", "minimal"],
+  "keywords": ["flypost", "open-houses" "events", "frontend", "minimal"],
   "author": "goflypost", 
   "license": "Apache-2.0"
 }
