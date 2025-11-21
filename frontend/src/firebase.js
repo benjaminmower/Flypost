@@ -1,4 +1,4 @@
-// v2 — firebase.js (pure JS) for Flypost v4
+// firebase.js — Flypost v4 (Vite + Firebase JS SDK) v3
 
 import { initializeApp, getApps } from 'firebase/app'
 import {
@@ -9,22 +9,30 @@ import {
   onAuthStateChanged
 } from 'firebase/auth'
 
-// Firebase config populated from globals (set these in index.html)
+// Firebase config using Vite’s environment variables
 const firebaseConfig = {
-  apiKey: window.FIREBASE_API_KEY,
-  authDomain: window.FIREBASE_AUTH_DOMAIN,
-  projectId: window.FIREBASE_PROJECT_ID,
-  appId: window.FIREBASE_APP_ID,
-  measurementId: window.FIREBASE_MEASUREMENT_ID
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 }
 
-// Initialize or reuse app
+// Debug log (visible in console only, does NOT leak keys)
+console.log('[Flypost] FirebaseConfig loaded:', {
+  apiKeyPresent: !!firebaseConfig.apiKey,
+  authDomain: firebaseConfig.authDomain,
+  projectId: firebaseConfig.projectId,
+  appIdPresent: !!firebaseConfig.appId
+})
+
+if (!firebaseConfig.apiKey) {
+  console.error('[Flypost] ERROR: Missing Firebase API key. Check Netlify env vars.')
+}
+
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 
-/**
- * Start email-link sign-in by sending link to the given email.
- */
 export async function startEmailLinkSignIn(email) {
   const actionCodeSettings = {
     url: `${window.location.origin}/finishSignIn`,
@@ -32,14 +40,9 @@ export async function startEmailLinkSignIn(email) {
   }
 
   await sendSignInLinkToEmail(auth, email, actionCodeSettings)
-
-  // Persist email locally so we can complete sign-in on return
   window.localStorage.setItem('flypostEmailForSignIn', email)
 }
 
-/**
- * Complete sign-in if the current URL is an email sign-in link.
- */
 export async function completeEmailLinkSignIn() {
   if (!isSignInWithEmailLink(auth, window.location.href)) return null
 
@@ -54,9 +57,6 @@ export async function completeEmailLinkSignIn() {
   return result.user
 }
 
-/**
- * Subscribe to auth state changes.
- */
 export function subscribeToAuth(cb) {
   return onAuthStateChanged(auth, cb)
 }
