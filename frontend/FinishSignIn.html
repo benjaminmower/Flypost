@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Finish Sign-In • Flypost</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { 
+      font-family: system-ui, sans-serif; 
+      padding:40px; 
+      background:#f5f7fa; 
+    }
+    .box { 
+      max-width:460px; 
+      margin:0 auto; 
+      background:#fff; 
+      padding:30px; 
+      border:1px solid #e1e5e9; 
+      border-radius:8px; 
+    }
+    h1 { 
+      margin-top:0; 
+      font-size:22px; 
+    }
+    #auth-status { 
+      margin-top:15px; 
+      font-size:14px; 
+      color:#333; 
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Finishing Sign-In…</h1>
+    <p>If this page doesn’t redirect, close the tab and click the link again.</p>
+    <div id="auth-status">Initializing…</div>
+  </div>
+
+  <!-- 🔥 REQUIRED: Firebase config in HTML because this file is not processed by Vite -->
+  <script>
+    window.FIREBASE_API_KEY = "AIzaSyBoI0splYY7C_nLpgPutJq84xBHdIZbGO4";
+    window.FIREBASE_AUTH_DOMAIN = "goflypost.firebaseapp.com";
+    window.FIREBASE_PROJECT_ID = "goflypost";
+    window.FIREBASE_APP_ID = "1:498798854474:web:8f432ac860172a84be41b3";
+    window.FIREBASE_MEASUREMENT_ID = "G-82PEE0LRT8";
+
+    // Also give API_BASE here (main.js expects it)
+    window.API_BASE = "https://proxyv4-a7jlfl42zq-uw.a.run.app";
+  </script>
+
+  <!-- Load the main application logic (it already handles finishSignIn route) -->
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
