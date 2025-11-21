@@ -1,0 +1,19 @@
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "frontend/dist"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+# Redirect finishSignIn route to SPA (since main.js handles it)
+[[redirects]]
+  from = "/finishSignIn"
+  to = "/index.html"
+  status = 200
+
+# SPA fallback for any other route (optional but useful)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
