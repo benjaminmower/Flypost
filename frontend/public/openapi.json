@@ -7,8 +7,8 @@
   },
   "servers": [
     {
-      "url": "https://proxyv4-a7jlfl42zq-uw.a.run.app",
-      "description": "Flypost proxy (Cloud Run) - production"
+      "url": "api.goflypost.com",
+      "description": "Flypost API (Cloud Run behind api.goflypost.com) - production"
     }
   ],
   "paths": {
