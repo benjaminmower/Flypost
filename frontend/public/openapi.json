@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "api.goflypost.com",
+      "url": "https://api.goflypost.com",
       "description": "Flypost API (Cloud Run behind api.goflypost.com) - production"
     }
   ],
