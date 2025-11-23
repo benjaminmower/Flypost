@@ -1,5 +1,5 @@
-/*
- * Flypost v4 - Minimal Backend Server (v10 + tenancy, brokerageId at root)
+/* v11
+ * Flypost v4 - Minimal Backend Server (tenancy, brokerageId added after validation)
  * Endpoints: /health, POST /api/parse-and-publish, GET /v1/events/near
  * - Multi-tenant via brokerageId
  * - brokerageId comes from x-flypost-brokerage-id header (proxy) or body/query fallback
@@ -86,7 +86,7 @@ function getBrokerageIdFromRequest(req, source) {
 }
 
 // Health
-const healthHandler = (req, res) => {
+const healthHandler = (_req, res) => {
   const stats = getStorageStats()
   res.json({
     status: 'healthy',
@@ -142,26 +142,28 @@ app.post('/api/parse-and-publish', async (req, res) => {
       })
     }
 
-    console.log(`🤖 Processing: "${naturalLanguageInput.substring(0, 100)}..."`)
+    console.log(
+      `🤖 Processing (brokerageId=${brokerageId}): "${naturalLanguageInput.substring(
+        0,
+        100
+      )}..."`
+    )
 
     // 1) Parse with LLM
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
 
-    // tenancy: enforce brokerageId at the root (NOT inside flypost)
-    parsedEvent.brokerageId = brokerageId
-
     // 1.25) Normalize dates
     normalizeEventDates(parsedEvent, userContext)
 
-    // 1.5) Enforce server-side eventId + timestamp
+    // 1.5) Enforce server-side eventId + timestamp (inside flypost)
     parsedEvent.flypost = parsedEvent.flypost || {}
     parsedEvent.flypost.eventId = `evt_${Math.random()
       .toString(36)
       .slice(2, 11)}_${Date.now()}`
     parsedEvent.flypost.submissionTimestamp = new Date().toISOString()
 
-    // 2) Validate
+    // 2) Validate the *schema-only* event (no brokerageId yet)
     const validation = validateEventData(parsedEvent)
     if (!validation.success) {
       console.error('❌ Validation failed:', validation.errors)
@@ -172,18 +174,27 @@ app.post('/api/parse-and-publish', async (req, res) => {
       })
     }
 
-    // 3) Hash (after validation & enrichment)
-    const eventHash = computeEventHash(validation.data)
-    const eventWithHash = {
-      ...validation.data,
+    const validatedEvent = validation.data
+
+    // 3) Compute hash over the validated event (no brokerageId)
+    const eventHash = computeEventHash(validatedEvent)
+
+    // 4) Attach brokerageId + hash AFTER validation
+    const eventToStore = {
+      ...validatedEvent,
+      brokerageId, // tenancy metadata (not governed by schema)
       hash: eventHash
     }
+
     console.log(
-      `🔐 Computed event hash: ${eventHash.value.substring(0, 16)}... (brokerageId=${brokerageId})`
+      `🔐 Computed event hash: ${eventHash.value.substring(
+        0,
+        16
+      )}... (brokerageId=${brokerageId})`
     )
 
-    // 4) Store
-    const storedEvent = await storeEvent(eventWithHash)
+    // 5) Store
+    const storedEvent = await storeEvent(eventToStore)
     console.log(
       `📦 Stored event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId})`
     )
@@ -233,7 +244,9 @@ app.get('/v1/events/near', async (req, res) => {
     }
 
     console.log(
-      `📋 Events endpoint: GET ${req.protocol}://${req.get('host')}${req.originalUrl} (brokerageId=${brokerageId})`
+      `📋 Events endpoint: GET ${req.protocol}://${req.get('host')}${
+        req.originalUrl
+      } (brokerageId=${brokerageId})`
     )
 
     const events = await getEventsNear(latitude, longitude, radius, useFirestore)
@@ -242,7 +255,7 @@ app.get('/v1/events/near', async (req, res) => {
     const filteredEvents = (events || []).filter(
       ev =>
         ev?.brokerageId === brokerageId ||
-        ev?.flypost?.brokerageId === brokerageId // backward compat if you ever had old events
+        ev?.flypost?.brokerageId === brokerageId // backward compat if any old data ever used that
     )
 
     res.json({
@@ -274,15 +287,15 @@ app.get('/v1/events/near', async (req, res) => {
 if (process.env.NODE_ENV !== 'production') {
   console.log('🧪 Dev utilities enabled (NODE_ENV !== "production")')
 
-  app.get('/api/schema', (req, res) => {
+  app.get('/api/schema', (_req, res) => {
     res.json(getSchema())
   })
 
-  app.get('/api/stats', (req, res) => {
+  app.get('/api/stats', (_req, res) => {
     res.json(getStorageStats())
   })
 
-  app.delete('/api/events', (req, res) => {
+  app.delete('/api/events', (_req, res) => {
     const cleared = clearEvents()
     res.json({
       success: true,
@@ -291,10 +304,12 @@ if (process.env.NODE_ENV !== 'production') {
   })
 
   app.post('/api/test-add-event', async (req, res) => {
-    const mockEvent = {
+    const brokerageId = req.body.brokerageId || 'test-brokerage'
+
+    // Build a schema-conforming base event (no brokerageId yet)
+    const baseEvent = {
       '@context': 'https://schema.org',
       '@type': 'Event',
-      brokerageId: req.body.brokerageId || 'test-brokerage',
       flypost: {
         eventId: `evt_test_${Date.now()}_${Math.random()
           .toString(36)
@@ -327,7 +342,7 @@ if (process.env.NODE_ENV !== 'production') {
       }
     }
 
-    const validation = validateEventData(mockEvent)
+    const validation = validateEventData(baseEvent)
     if (!validation.success) {
       return res.status(400).json({
         success: false,
@@ -336,13 +351,16 @@ if (process.env.NODE_ENV !== 'production') {
       })
     }
 
-    const eventHash = computeEventHash(validation.data)
-    const eventWithHash = {
-      ...validation.data,
+    const validatedEvent = validation.data
+    const eventHash = computeEventHash(validatedEvent)
+
+    const eventToStore = {
+      ...validatedEvent,
+      brokerageId,
       hash: eventHash
     }
 
-    const storedEvent = await storeEvent(eventWithHash)
+    const storedEvent = await storeEvent(eventToStore)
 
     res.json({
       success: true,
@@ -355,7 +373,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.listen(port, () => {
-  console.log('\n🚀 Flypost v4 Backend Server Started (tenancy-enabled, brokerageId@root)')
+  console.log('\n🚀 Flypost v4 Backend Server Started (tenancy-enabled, brokerageId post-validate)')
   console.log(`📡 Listening on port ${port}`)
   console.log(`🌐 Health check:       http://localhost:${port}/health`)
   console.log(
