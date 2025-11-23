@@ -1,7 +1,4 @@
-// cloud-run-proxy.js
-// Flypost Proxy (v12 clean) – backend-only tenancy
-// No brokerage headers, no tenancy logic here.
-// Responsibilities: CORS, write-token auth, request logging, and forwarding.
+// v13 – Cloud Run proxy with multi-token write auth
 
 const express = require('express')
 const cors = require('cors')
@@ -9,12 +6,11 @@ const createForward = require('./src/forward')
 
 const app = express()
 
-// Allowed CORS origins
 const allowedOrigins = Array.from(
   new Set([
     ...((process.env.FRONTEND_ORIGIN || '')
       .split(',')
-      .map(o => o.trim())
+      .map(origin => origin.trim())
       .filter(Boolean)),
     'https://flypost.netlify.app',
     'https://app.goflypost.com',
@@ -36,45 +32,50 @@ app.use(
 
 app.use(express.json({ limit: '1mb' }))
 
-// Log every incoming request
 app.use((req, _res, next) => {
   console.log('proxy incoming:', req.method, req.originalUrl)
   next()
 })
 
-// Write-token auth (POST /api/* only)
+// -------------------------------------
+// Write-token authentication middleware
+// Checks POST requests to /api/* paths before routing
+// Supports multiple static tokens (global + per-brokerage)
+// -------------------------------------
+
+// Collect all allowed tokens here
+const WRITE_TOKENS = [
+  process.env.FLYPOST_WRITE_TOKEN,   // global token (e.g., "goflypost")
+  process.env.VISTA_WRITE_TOKEN,     // Vista-specific token (e.g., "vist@sir")
+  process.env.BHHS_WRITE_TOKEN,      // future brokerage
+  // add more here: process.env.COMPASS_WRITE_TOKEN, etc.
+].filter(Boolean)
+
 function requireWriteToken(req, res, next) {
   const isApiPost =
     req.method === 'POST' && (req.originalUrl || '').startsWith('/api/')
 
-  if (isApiPost) {
-    const provided = req.get('x-flypost-write-token')
-    const expected = process.env.FLYPOST_WRITE_TOKEN
+  if (isApiPost && WRITE_TOKENS.length > 0) {
+    const token = req.get('x-flypost-write-token') || ''
 
-    if (expected) {
-      if (!provided) {
-        console.log(
-          `🔒 Write-token missing for ${req.method} ${req.originalUrl}`
-        )
-        return res.status(401).json({
-          success: false,
-          error: 'Unauthorized: Missing write token'
-        })
-      }
-      if (provided !== expected) {
-        console.log(
-          `🔒 Write-token invalid for ${req.method} ${req.originalUrl}`
-        )
-        return res.status(401).json({
-          success: false,
-          error: 'Unauthorized: Invalid write token'
-        })
-      }
-
-      console.log(
-        `✅ Write-token validated for ${req.method} ${req.originalUrl}`
-      )
+    if (!token) {
+      console.log(`🔒 Write-token missing for ${req.method} ${req.originalUrl}`)
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized: Missing write token'
+      })
     }
+
+    const matched = WRITE_TOKENS.includes(token)
+    if (!matched) {
+      console.log(`🔒 Write-token invalid for ${req.method} ${req.originalUrl}`)
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized: Invalid write token'
+      })
+    }
+
+    console.log(`✅ Write-token validated for ${req.method} ${req.originalUrl}`)
   }
 
   next()
@@ -82,11 +83,12 @@ function requireWriteToken(req, res, next) {
 
 app.use(requireWriteToken)
 
-// Forwarder
 const forward = createForward()
 
-// Routes forwarded to backend
-app.get('/', (req, res) => res.json({ status: 'proxy running' }))
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'proxy running' })
+})
+
 app.get('/health', forward)
 app.get('/v1/events/near', forward)
 app.post('/api/parse-and-publish', forward)
