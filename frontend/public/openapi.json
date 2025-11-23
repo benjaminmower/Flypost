@@ -53,6 +53,11 @@
         "summary": "Parse a natural-language event and publish it",
         "operationId": "parseAndPublishEvent",
         "description": "Parses a natural-language event description into a structured Event object, validates it, computes a hash, stores it, and returns the stored event plus a Flypost eventId.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BrokerageIdHeader"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -64,7 +69,7 @@
                 "openHouse": {
                   "summary": "Open house example",
                   "value": {
-                    "naturalLanguageInput": "Open house this Sunday from 1\u20134pm at 2212 Ocean Park Blvd, Santa Monica. 3 bed, 2 bath, listed at $1.5M.",
+                    "naturalLanguageInput": "Open house this Sunday from 1–4pm at 2212 Ocean Park Blvd, Santa Monica. 3 bed, 2 bath, listed at $1.5M.",
                     "userContext": {
                       "source": "openai-gpt-action",
                       "channel": "gpt-actions",
@@ -111,20 +116,18 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "WriteTokenAuth": []
-          }
-        ]
+        }
       }
     },
     "/v1/events/near": {
       "get": {
         "summary": "Get events near a location",
         "operationId": "getEventsNear",
-        "description": "Retrieves events near a latitude/longitude within a radius. Uses Firestore geospatial queries when enabled; otherwise falls back to in-memory retrieval.",
+        "description": "Retrieves events near a latitude/longitude within a radius. Uses Firestore geospatial queries when enabled; otherwise falls back to in-memory retrieval. Results are filtered to the requesting brokerage via the x-flypost-brokerage-id header.",
         "parameters": [
+          {
+            "$ref": "#/components/parameters/BrokerageIdHeader"
+          },
           {
             "name": "lat",
             "in": "query",
@@ -133,315 +136,3 @@
             "schema": {
               "type": "number",
               "format": "double"
-            }
-          },
-          {
-            "name": "lng",
-            "in": "query",
-            "description": "Longitude in decimal degrees. If omitted, defaults to Santa Monica, CA.",
-            "required": false,
-            "schema": {
-              "type": "number",
-              "format": "double"
-            }
-          },
-          {
-            "name": "radius",
-            "in": "query",
-            "description": "Search radius in kilometers. Defaults to 10.",
-            "required": false,
-            "schema": {
-              "type": "number",
-              "format": "double",
-              "default": 10
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Events retrieved successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EventsNearResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Server-side error during event retrieval.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "HealthResponse": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "example": "healthy"
-          },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "version": {
-            "type": "string",
-            "example": "4.0.0-mvp"
-          },
-          "storage": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "example": "hybrid (memory + Firestore)"
-              },
-              "events": {
-                "type": "integer",
-                "example": 42
-              },
-              "firestore": {
-                "type": "boolean"
-              }
-            }
-          },
-          "uptime": {
-            "type": "number",
-            "description": "Uptime in seconds.",
-            "example": 12345.67
-          }
-        },
-        "required": [
-          "status",
-          "timestamp",
-          "version"
-        ]
-      },
-      "ParseAndPublishRequest": {
-        "type": "object",
-        "description": "Request body for parsing and publishing an event. Use naturalLanguageInput when possible.",
-        "properties": {
-          "naturalLanguageInput": {
-            "type": "string",
-            "description": "Primary field for the raw event description."
-          },
-          "text": {
-            "type": "string",
-            "description": "Alias for naturalLanguageInput."
-          },
-          "input": {
-            "type": "string",
-            "description": "Alias for naturalLanguageInput."
-          },
-          "userContext": {
-            "type": "object",
-            "description": "Optional metadata about the caller, channel, or context. Include provenance for writes (e.g., {\"source\": \"openai-gpt-action\", \"provenance\": {\"agent\": \"flypost-gpt-action\", \"platform\": \"openai\"}}). You may also set X-Flypost-Source-Channel for clearer provenance.",
-            "additionalProperties": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "ParseAndPublishResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean",
-            "example": true
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "eventId": {
-                "type": "string",
-                "description": "Flypost-generated event identifier.",
-                "example": "evt_abc123xyz_1700000000000"
-              },
-              "event": {
-                "$ref": "#/components/schemas/FlypostEvent"
-              },
-              "processing": {
-                "type": "object",
-                "properties": {
-                  "parsed": {
-                    "type": "boolean"
-                  },
-                  "validated": {
-                    "type": "boolean"
-                  },
-                  "hashed": {
-                    "type": "boolean"
-                  },
-                  "stored": {
-                    "type": "boolean"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "EventsNearResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean",
-            "example": true
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "events": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/FlypostEvent"
-                }
-              },
-              "total": {
-                "type": "integer",
-                "example": 5
-              },
-              "query": {
-                "type": "object",
-                "description": "Echo of query parameters.",
-                "additionalProperties": true
-              },
-              "source": {
-                "type": "string",
-                "description": "Backend source for the events.",
-                "example": "Firestore",
-                "enum": [
-                  "Firestore",
-                  "Memory"
-                ]
-              },
-              "note": {
-                "type": "string",
-                "description": "Human-readable note about the retrieval strategy."
-              }
-            }
-          }
-        }
-      },
-      "FlypostEvent": {
-        "type": "object",
-        "description": "Schema.org Event with Flypost metadata and hash.",
-        "properties": {
-          "@context": {
-            "type": "string",
-            "example": "https://schema.org"
-          },
-          "@type": {
-            "type": "string",
-            "example": "Event"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "startDate": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endDate": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "location": {
-            "type": "object",
-            "description": "Schema.org Place object.",
-            "additionalProperties": true
-          },
-          "organizer": {
-            "type": "object",
-            "description": "Schema.org Person or Organization.",
-            "additionalProperties": true
-          },
-          "flypost": {
-            "type": "object",
-            "description": "Flypost-specific metadata.",
-            "properties": {
-              "eventId": {
-                "type": "string"
-              },
-              "category": {
-                "type": "string",
-                "description": "Internal Flypost category label.",
-                "nullable": true
-              },
-              "realTimeData": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "crawlable": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "queryable": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "submissionTimestamp": {
-                "type": "string",
-                "format": "date-time"
-              }
-            },
-            "additionalProperties": true
-          },
-          "hash": {
-            "type": "object",
-            "description": "Hash object identifying this event representation.",
-            "properties": {
-              "algorithm": {
-                "type": "string",
-                "example": "SHA-256"
-              },
-              "value": {
-                "type": "string",
-                "description": "Hex-encoded hash of the canonical event payload."
-              }
-            },
-            "additionalProperties": true
-          }
-        },
-        "additionalProperties": true
-      },
-      "ErrorResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean",
-            "example": false
-          },
-          "error": {
-            "type": "string"
-          },
-          "details": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      }
-    },
-    "securitySchemes": {
-      "WriteTokenAuth": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "X-Flypost-Write-Token",
-        "description": "Static write token required for POST requests under /api/* (currently parse-and-publish only)."
-      }
-    }
-  }
-}
