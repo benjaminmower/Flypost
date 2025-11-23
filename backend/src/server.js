@@ -1,6 +1,8 @@
 /*
- * Flypost v4 Backend – Multi-Tenant via brokerageId in body/query
- * This is the canonical tenancy enforcement layer.
+ * Flypost v4 - Minimal Backend Server (v10 + tenancy)
+ * Endpoints: /health, POST /api/parse-and-publish, GET /v1/events/near
+ * - Multi-tenant via brokerageId
+ * - brokerageId comes from x-flypost-brokerage-id header (proxy) or body/query fallback
  */
 
 import express from 'express'
@@ -17,48 +19,74 @@ dotenv.config()
 const app = express()
 const port = process.env.PORT || 3001
 
+// CORS
 const frontendOrigins = [
   ...((process.env.FRONTEND_URL || '')
     .split(',')
-    .map(o => o.trim())
+    .map(origin => origin.trim())
     .filter(Boolean)),
   'https://flypost.netlify.app',
   'https://app.goflypost.com'
 ]
 
-app.use(cors({ origin: frontendOrigins, credentials: true }))
+app.use(
+  cors({
+    origin: frontendOrigins,
+    credentials: true
+  })
+)
 app.use(express.json({ limit: '1mb' }))
 
+// Request logging
 app.use((req, res, next) => {
   console.log(`📡 ${req.method} ${req.path}`)
   next()
 })
 
-// Utilities
-function isIso(s) {
-  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(s)
+/**
+ * Utilities: ISO date normalization
+ */
+function isIsoDateTime(str) {
+  return typeof str === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(str)
 }
-function toIso(v) {
-  const d = new Date(v)
-  return Number.isNaN(d.getTime()) ? v : d.toISOString()
+function toIsoIfParsable(value) {
+  if (typeof value !== 'string') return value
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? value : d.toISOString()
 }
-function normalizeDates(evt) {
-  if (evt.startDate && !isIso(evt.startDate)) evt.startDate = toIso(evt.startDate)
-  if (evt.endDate && !isIso(evt.endDate)) evt.endDate = toIso(evt.endDate)
+function normalizeEventDates(event /*, userContext */) {
+  if (event.startDate && !isIsoDateTime(event.startDate)) {
+    const before = event.startDate
+    event.startDate = toIsoIfParsable(event.startDate)
+    if (event.startDate !== before) {
+      console.log(`⏱️  Normalized startDate to ISO: ${before} -> ${event.startDate}`)
+    }
+  }
+  if (event.endDate && !isIsoDateTime(event.endDate)) {
+    const before = event.endDate
+    event.endDate = toIsoIfParsable(event.endDate)
+    if (event.endDate !== before) {
+      console.log(`⏱️  Normalized endDate to ISO: ${before} -> ${event.endDate}`)
+    }
+  }
 }
 
-/**
- * Extract brokerageId from body or query.
- * Backend is the source of truth.
- */
-function getBrokerageId(req) {
-  const bodyVal = req.body?.brokerageId
-  const queryVal = req.query?.brokerageId
-  return (bodyVal || queryVal || '').toString().trim()
+// Helper: derive brokerageId from header/body/query
+function getBrokerageIdFromRequest(req, source) {
+  const headerId = req.get('x-flypost-brokerage-id')
+  if (headerId) return headerId
+
+  if (source === 'body') {
+    return (req.body && req.body.brokerageId) || null
+  }
+  if (source === 'query') {
+    return (req.query && req.query.brokerageId) || null
+  }
+  return null
 }
 
 // Health
-app.get(['/health', '/api/health'], (req, res) => {
+const healthHandler = (req, res) => {
   const stats = getStorageStats()
   res.json({
     status: 'healthy',
@@ -66,45 +94,76 @@ app.get(['/health', '/api/health'], (req, res) => {
     version: '4.0.0-mvp',
     storage: {
       type: isFirestoreEnabled() ? 'hybrid (memory + Firestore)' : 'in-memory',
-      events: stats.totalEvents
+      events: stats.totalEvents,
+      firestore: isFirestoreEnabled()
     },
     uptime: stats.uptime
   })
-})
+}
 
-// Parse + Publish
+app.get(['/health', '/api/health'], healthHandler)
+
+// Parse & publish
 app.post('/api/parse-and-publish', async (req, res) => {
   try {
-    const brokerageId = getBrokerageId(req)
+    const body = req.body || {}
+
+    // tenancy: header wins, then body.brokerageId
+    const brokerageId =
+      getBrokerageIdFromRequest(req, 'body') || body.brokerageId || null
+
     if (!brokerageId) {
       return res.status(400).json({
         success: false,
-        error: 'Missing brokerageId in request body'
+        error:
+          'Missing brokerageId. This should normally be injected by the proxy from the write token.'
       })
     }
 
-    const body = req.body || {}
-    let input = body.naturalLanguageInput ?? body.text ?? body.input
+    let naturalLanguageInput =
+      body.naturalLanguageInput ?? body.text ?? body.input
+    const userContext = body.userContext
 
-    if (typeof input !== 'string' || !input.trim()) {
+    if (typeof naturalLanguageInput !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'Missing naturalLanguageInput'
+        error:
+          'Missing event description. Provide "naturalLanguageInput" (preferred) or one of ["text","input"] as a non-empty string.',
+        providedKeys: Object.keys(body)
       })
     }
-    input = input.trim()
-    console.log(`🤖 Parsing for brokerage "${brokerageId}" input="${input.slice(0, 100)}..."`)
 
-    const parsed = await parseEventWithLLM(input, body.userContext)
-    normalizeDates(parsed)
+    naturalLanguageInput = naturalLanguageInput.trim()
+    if (!naturalLanguageInput.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'Event description cannot be empty after trimming'
+      })
+    }
 
-    parsed.flypost = parsed.flypost || {}
-    parsed.flypost.eventId = `evt_${Math.random().toString(36).slice(2, 11)}_${Date.now()}`
-    parsed.flypost.submissionTimestamp = new Date().toISOString()
-    parsed.flypost.brokerageId = brokerageId
+    console.log(`🤖 Processing: "${naturalLanguageInput.substring(0, 100)}..."`)
 
-    const validation = validateEventData(parsed)
+    // 1) Parse with LLM
+    const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
+    console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
+
+    // tenancy: enforce brokerageId on event
+    parsedEvent.flypost = parsedEvent.flypost || {}
+    parsedEvent.flypost.brokerageId = brokerageId
+
+    // 1.25) Normalize dates
+    normalizeEventDates(parsedEvent, userContext)
+
+    // 1.5) Enforce server-side eventId + timestamp
+    parsedEvent.flypost.eventId = `evt_${Math.random()
+      .toString(36)
+      .slice(2, 11)}_${Date.now()}`
+    parsedEvent.flypost.submissionTimestamp = new Date().toISOString()
+
+    // 2) Validate
+    const validation = validateEventData(parsedEvent)
     if (!validation.success) {
+      console.error('❌ Validation failed:', validation.errors)
       return res.status(400).json({
         success: false,
         error: 'Event validation failed',
@@ -112,70 +171,205 @@ app.post('/api/parse-and-publish', async (req, res) => {
       })
     }
 
-    const hash = computeEventHash(validation.data)
-    const stored = await storeEvent({ ...validation.data, hash })
+    // 3) Hash (after validation & enrichment)
+    const eventHash = computeEventHash(validation.data)
+    const eventWithHash = {
+      ...validation.data,
+      hash: eventHash
+    }
+    console.log(
+      `🔐 Computed event hash: ${eventHash.value.substring(0, 16)}... (brokerageId=${brokerageId})`
+    )
+
+    // 4) Store
+    const storedEvent = await storeEvent(eventWithHash)
+    console.log(
+      `📦 Stored event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.flypost.brokerageId})`
+    )
 
     res.json({
       success: true,
       data: {
-        eventId: stored.flypost.eventId,
-        event: stored
+        eventId: storedEvent.flypost.eventId,
+        event: storedEvent,
+        processing: {
+          parsed: true,
+          validated: true,
+          hashed: true,
+          stored: true
+        }
       }
     })
-  } catch (err) {
-    console.error('❌ Parse error:', err)
-    res.status(500).json({ success: false, error: err.message })
+  } catch (error) {
+    console.error('❌ Parse and publish error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Parse and publish failed',
+      details: error.message
+    })
   }
 })
 
-// Events Near
+// Events near (with brokerage filter)
 app.get('/v1/events/near', async (req, res) => {
   try {
-    const brokerageId = getBrokerageId(req)
+    const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
+    const longitude = parseFloat(req.query.lng || req.query.longitude || '-118.4912')
+    const radius = parseFloat(req.query.radius || '10')
+
+    const useFirestore = isFirestoreEnabled()
+
+    // tenancy: header wins, then query.brokerageId
+    const brokerageId =
+      getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId || null
+
     if (!brokerageId) {
       return res.status(400).json({
         success: false,
-        error: 'Missing brokerageId query parameter'
+        error:
+          'Missing brokerageId. This should normally be injected by the proxy from the write token, or provided as a query parameter.'
       })
     }
 
-    const lat = parseFloat(req.query.lat || req.query.latitude || '34.0195')
-    const lng = parseFloat(req.query.lng || req.query.longitude || '-118.4912')
-    const radius = parseFloat(req.query.radius || '10')
+    console.log(
+      `📋 Events endpoint: GET ${req.protocol}://${req.get('host')}${req.originalUrl} (brokerageId=${brokerageId})`
+    )
 
-    const useFs = isFirestoreEnabled()
+    const events = await getEventsNear(latitude, longitude, radius, useFirestore)
 
-    const all = await getEventsNear(lat, lng, radius, useFs)
-    const filtered = all.filter(e => e.flypost?.brokerageId === brokerageId)
+    // Server-side brokerage isolation (works regardless of storage backend)
+    const filteredEvents = (events || []).filter(
+      ev => ev?.flypost?.brokerageId === brokerageId
+    )
 
     res.json({
       success: true,
       data: {
-        events: filtered,
-        total: filtered.length,
-        query: req.query,
-        source: useFs ? 'Firestore' : 'Memory'
+        events: filteredEvents,
+        total: filteredEvents.length,
+        query: req.query || {},
+        brokerageId,
+        source: useFirestore ? 'Firestore' : 'Memory',
+        note: useFirestore
+          ? 'Querying from Firestore with geospatial filtering (then brokerage filter in server)'
+          : 'Naive in-memory retrieval with brokerage filter'
       }
     })
-  } catch (err) {
-    console.error('❌ near error:', err)
-    res.status(500).json({ success: false, error: err.message })
+  } catch (error) {
+    console.error('❌ Error retrieving events:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve events',
+      details: error.message
+    })
   }
 })
 
-// Dev tools
+/**
+ * Dev-only utilities
+ */
 if (process.env.NODE_ENV !== 'production') {
-  console.log('🧪 Dev utilities enabled')
+  console.log('🧪 Dev utilities enabled (NODE_ENV !== "production")')
 
-  app.get('/api/schema', (req, res) => res.json(getSchema()))
-  app.get('/api/stats', (req, res) => res.json(getStorageStats()))
+  app.get('/api/schema', (req, res) => {
+    res.json(getSchema())
+  })
+
+  app.get('/api/stats', (req, res) => {
+    res.json(getStorageStats())
+  })
 
   app.delete('/api/events', (req, res) => {
     const cleared = clearEvents()
-    res.json({ success: true, cleared })
+    res.json({
+      success: true,
+      message: `Cleared ${cleared} events`
+    })
+  })
+
+  app.post('/api/test-add-event', async (req, res) => {
+    const mockEvent = {
+      '@context': 'https://schema.org',
+      '@type': 'Event',
+      flypost: {
+        eventId: `evt_test_${Date.now()}_${Math.random()
+          .toString(36)
+          .substr(2, 9)}`,
+        category: req.body.category || 'garage-sales',
+        realTimeData: true,
+        crawlable: true,
+        queryable: true,
+        submissionTimestamp: new Date().toISOString(),
+        brokerageId: req.body.brokerageId || 'test-brokerage'
+      },
+      name: req.body.name || 'Test Event',
+      description: req.body.description || 'Mock event for testing',
+      startDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      location: {
+        '@type': 'Place',
+        name: req.body.location || '123 Main Street',
+        address: {
+          '@type': 'PostalAddress',
+          streetAddress: req.body.location || '123 Main Street',
+          addressLocality: 'Santa Monica',
+          addressRegion: 'CA',
+          postalCode: '90405',
+          addressCountry: 'US'
+        }
+      },
+      organizer: {
+        '@type': 'Person',
+        name: req.body.organizer || 'Test Organizer',
+        email: req.body.email || 'test@example.com'
+      }
+    }
+
+    const validation = validateEventData(mockEvent)
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Mock event validation failed',
+        details: validation.errors
+      })
+    }
+
+    const eventHash = computeEventHash(validation.data)
+    const eventWithHash = {
+      ...validation.data,
+      hash: eventHash
+    }
+
+    const storedEvent = await storeEvent(eventWithHash)
+
+    res.json({
+      success: true,
+      data: {
+        eventId: storedEvent.flypost.eventId,
+        event: storedEvent
+      }
+    })
   })
 }
 
 app.listen(port, () => {
-  console.log(`🚀 Backend running on ${port}`)
+  console.log('\n🚀 Flypost v4 Backend Server Started (tenancy-enabled)')
+  console.log(`📡 Listening on port ${port}`)
+  console.log(`🌐 Health check:       http://localhost:${port}/health`)
+  console.log(
+    `🤖 Parse endpoint:     POST   http://localhost:${port}/api/parse-and-publish`
+  )
+  console.log(
+    `📋 Events endpoint:    GET    http://localhost:${port}/v1/events/near?brokerageId=...`
+  )
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`🧪 Dev: schema:        GET    http://localhost:${port}/api/schema`)
+    console.log(`🧪 Dev: stats:         GET    http://localhost:${port}/api/stats`)
+    console.log(
+      `🧪 Dev: clear events:  DELETE http://localhost:${port}/api/events`
+    )
+    console.log(
+      `🧪 Dev: test add:      POST   http://localhost:${port}/api/test-add-event`
+    )
+  }
+  console.log('')
 })
