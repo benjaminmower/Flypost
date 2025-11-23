@@ -1,5 +1,5 @@
 /*
- * Flypost v4 - Minimal Backend Server (v10 + tenancy)
+ * Flypost v4 - Minimal Backend Server (v10 + tenancy, brokerageId at root)
  * Endpoints: /health, POST /api/parse-and-publish, GET /v1/events/near
  * - Multi-tenant via brokerageId
  * - brokerageId comes from x-flypost-brokerage-id header (proxy) or body/query fallback
@@ -120,6 +120,7 @@ app.post('/api/parse-and-publish', async (req, res) => {
       })
     }
 
+    // Accept aliases for ergonomics
     let naturalLanguageInput =
       body.naturalLanguageInput ?? body.text ?? body.input
     const userContext = body.userContext
@@ -147,14 +148,14 @@ app.post('/api/parse-and-publish', async (req, res) => {
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
 
-    // tenancy: enforce brokerageId on event
-    parsedEvent.flypost = parsedEvent.flypost || {}
-    parsedEvent.flypost.brokerageId = brokerageId
+    // tenancy: enforce brokerageId at the root (NOT inside flypost)
+    parsedEvent.brokerageId = brokerageId
 
     // 1.25) Normalize dates
     normalizeEventDates(parsedEvent, userContext)
 
     // 1.5) Enforce server-side eventId + timestamp
+    parsedEvent.flypost = parsedEvent.flypost || {}
     parsedEvent.flypost.eventId = `evt_${Math.random()
       .toString(36)
       .slice(2, 11)}_${Date.now()}`
@@ -184,7 +185,7 @@ app.post('/api/parse-and-publish', async (req, res) => {
     // 4) Store
     const storedEvent = await storeEvent(eventWithHash)
     console.log(
-      `📦 Stored event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.flypost.brokerageId})`
+      `📦 Stored event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId})`
     )
 
     res.json({
@@ -237,9 +238,11 @@ app.get('/v1/events/near', async (req, res) => {
 
     const events = await getEventsNear(latitude, longitude, radius, useFirestore)
 
-    // Server-side brokerage isolation (works regardless of storage backend)
+    // Server-side brokerage isolation
     const filteredEvents = (events || []).filter(
-      ev => ev?.flypost?.brokerageId === brokerageId
+      ev =>
+        ev?.brokerageId === brokerageId ||
+        ev?.flypost?.brokerageId === brokerageId // backward compat if you ever had old events
     )
 
     res.json({
@@ -291,6 +294,7 @@ if (process.env.NODE_ENV !== 'production') {
     const mockEvent = {
       '@context': 'https://schema.org',
       '@type': 'Event',
+      brokerageId: req.body.brokerageId || 'test-brokerage',
       flypost: {
         eventId: `evt_test_${Date.now()}_${Math.random()
           .toString(36)
@@ -299,8 +303,7 @@ if (process.env.NODE_ENV !== 'production') {
         realTimeData: true,
         crawlable: true,
         queryable: true,
-        submissionTimestamp: new Date().toISOString(),
-        brokerageId: req.body.brokerageId || 'test-brokerage'
+        submissionTimestamp: new Date().toISOString()
       },
       name: req.body.name || 'Test Event',
       description: req.body.description || 'Mock event for testing',
@@ -352,7 +355,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.listen(port, () => {
-  console.log('\n🚀 Flypost v4 Backend Server Started (tenancy-enabled)')
+  console.log('\n🚀 Flypost v4 Backend Server Started (tenancy-enabled, brokerageId@root)')
   console.log(`📡 Listening on port ${port}`)
   console.log(`🌐 Health check:       http://localhost:${port}/health`)
   console.log(
