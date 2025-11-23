@@ -1,6 +1,8 @@
-// v14 - Clean Forwarder (no tenancy logic)
-// Robust proxy forwarder: request-id, logging, ID token if configured,
-// Firebase auth passthrough, and response passthrough.
+// v16 – Flypost forwarder with multi-token auth + tenancy mapping
+// - Supports multiple static write tokens (global + per brokerage)
+// - Derives brokerageId from the validated token
+// - Injects x-flypost-brokerage-id header to backend
+// - Keeps: ID token auth, logging, provenance enrichment
 
 const { GoogleAuth, OAuth2Client } = require('google-auth-library')
 const axios = require('axios')
@@ -8,11 +10,30 @@ const crypto = require('crypto')
 
 const BACKEND_BASE = (process.env.BACKEND_URL || '').replace(/\/$/, '')
 if (!BACKEND_BASE) {
-  console.warn('WARNING: BACKEND_URL is not set. Forwarder will return 500.')
+  console.warn('WARNING: BACKEND_URL is not set. Forwarder will return 500 until set.')
 }
 
 const USE_ID_TOKEN = process.env.PROXY_USE_ID_TOKEN !== 'false'
-const WRITE_TOKEN = process.env.FLYPOST_WRITE_TOKEN || process.env.WRITE_TOKEN || ''
+
+// ---- Static write tokens (add more brokerages here) ----
+const VISTA_TOKEN = process.env.VISTA_WRITE_TOKEN || ''
+const BHHS_TOKEN = process.env.BHHS_WRITE_TOKEN || ''
+const GLOBAL_TOKEN = process.env.FLYPOST_WRITE_TOKEN || ''
+
+// List of *values* that are accepted as write tokens
+const WRITE_TOKENS = [GLOBAL_TOKEN, VISTA_TOKEN, BHHS_TOKEN].filter(Boolean)
+
+// Map token value -> canonical brokerageId
+const TOKEN_TENANCY = {}
+if (VISTA_TOKEN) TOKEN_TENANCY[VISTA_TOKEN] = 'vista-sir'
+if (BHHS_TOKEN) TOKEN_TENANCY[BHHS_TOKEN] = 'bhhs'
+// You can add more here, e.g.
+// const COMPASS_TOKEN = process.env.COMPASS_WRITE_TOKEN || ''
+// if (COMPASS_TOKEN) {
+//   WRITE_TOKENS.push(COMPASS_TOKEN)
+//   TOKEN_TENANCY[COMPASS_TOKEN] = 'compass'
+// }
+
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || ''
 const HAS_FIREBASE_AUTH = Boolean(FIREBASE_PROJECT_ID)
 
@@ -20,7 +41,7 @@ const allowedOrigins = Array.from(
   new Set([
     ...((process.env.FRONTEND_ORIGIN || '')
       .split(',')
-      .map(o => o.trim())
+      .map(origin => origin.trim())
       .filter(Boolean)),
     'https://flypost.netlify.app',
     'https://app.goflypost.com',
@@ -28,6 +49,9 @@ const allowedOrigins = Array.from(
   ])
 )
 
+//-------------------------------------
+// CORS
+//-------------------------------------
 function setCors(res, origin) {
   if (origin && allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin)
@@ -36,6 +60,9 @@ function setCors(res, origin) {
   }
 }
 
+//-------------------------------------
+// Request ID generator
+//-------------------------------------
 function ensureRequestId(req) {
   let rid = req.headers['x-request-id']
   if (!rid) {
@@ -45,20 +72,23 @@ function ensureRequestId(req) {
   return rid
 }
 
+//-------------------------------------
+// Forwarder factory
+//-------------------------------------
 module.exports = function createForward() {
   const auth = USE_ID_TOKEN ? new GoogleAuth() : null
   const firebaseVerifier = HAS_FIREBASE_AUTH ? new OAuth2Client(FIREBASE_PROJECT_ID) : null
 
-  function extractBearer(h) {
-    if (!h) return ''
-    return h.replace(/^Bearer\s+/i, '').trim()
+  function extractBearer(authHeader) {
+    if (!authHeader) return ''
+    return authHeader.replace(/^Bearer\s+/i, '').trim()
   }
 
-  async function verifyFirebaseIdToken(headerAuth) {
-    if (!HAS_FIREBASE_AUTH) return { ok: false, reason: 'firebase-disabled' }
+  async function verifyFirebaseIdToken(authHeader) {
+    if (!HAS_FIREBASE_AUTH || !firebaseVerifier) return { ok: false, reason: 'firebase-disabled' }
 
-    const token = extractBearer(headerAuth)
-    if (!token) return { ok: false, reason: 'missing' }
+    const token = extractBearer(authHeader)
+    if (!token) return { ok: false, reason: 'missing-token' }
 
     const issuer = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`
     try {
@@ -71,41 +101,63 @@ module.exports = function createForward() {
       })
       return { ok: true, decoded: ticket.getPayload() }
     } catch (err) {
-      return { ok: false, reason: 'invalid', error: err }
+      return { ok: false, reason: 'verify-failed', error: err }
     }
   }
 
   return async function forward(req, res) {
     const origin = req.headers.origin
     const requestId = ensureRequestId(req)
+    const isApiPost = req.method === 'POST' && req.path.startsWith('/api/')
+    const isParseAndPublish =
+      req.method === 'POST' && req.path === '/api/parse-and-publish'
 
     if (!BACKEND_BASE) {
       setCors(res, origin)
-      return res.status(500).json({ success: false, error: 'proxy backend not configured', requestId })
+      return res.status(500).json({
+        success: false,
+        error: 'proxy backend not configured',
+        requestId
+      })
     }
 
     const targetUrl = BACKEND_BASE + req.originalUrl
+
     console.log(
-      `[proxy → backend] ${req.method} ${req.originalUrl} (id=${requestId}, origin=${origin || 'n/a'})`
+      `[proxy → backend] ${req.method} ${req.originalUrl} ` +
+        `(origin=${origin || 'n/a'}, id=${requestId}, useIdToken=${USE_ID_TOKEN}, firebaseAuth=${HAS_FIREBASE_AUTH})`
     )
 
     try {
-      // Write + Firebase auth
+      //-------------------------------------
+      // Write authentication + tenancy derivation
+      //-------------------------------------
       let firebaseUser = null
-      const isApiPost = req.method === 'POST' && req.path.startsWith('/api/')
+      let resolvedBrokerageId = null
 
-      if (isApiPost && (WRITE_TOKEN || HAS_FIREBASE_AUTH)) {
-        const headerToken = req.headers['x-flypost-write-token']
+      if (isApiPost && WRITE_TOKENS.length) {
         const bearer = req.headers.authorization || req.headers.Authorization
+        const headerToken = (req.headers['x-flypost-write-token'] || '').toString().trim()
         const bearerToken = extractBearer(bearer)
 
         const firebaseAuthResult = await verifyFirebaseIdToken(bearer)
-        if (firebaseAuthResult.ok) firebaseUser = firebaseAuthResult.decoded
+        if (firebaseAuthResult.ok) {
+          firebaseUser = firebaseAuthResult.decoded
+        }
 
-        const hasWriteToken =
-          WRITE_TOKEN && (headerToken === WRITE_TOKEN || bearerToken === WRITE_TOKEN)
+        let matchedStaticToken = null
+        for (const token of WRITE_TOKENS) {
+          if (!token) continue
+          if (headerToken === token || bearerToken === token) {
+            matchedStaticToken = token
+            resolvedBrokerageId = TOKEN_TENANCY[token] || null
+            break
+          }
+        }
 
-        if (!firebaseUser && !hasWriteToken) {
+        const hasValidStaticToken = Boolean(matchedStaticToken)
+
+        if (!firebaseUser && !hasValidStaticToken) {
           setCors(res, origin)
           return res.status(401).json({
             success: false,
@@ -115,9 +167,11 @@ module.exports = function createForward() {
         }
       }
 
-      // Clone headers
+      //-------------------------------------
+      // Clone/sanitize headers
+      //-------------------------------------
       const headers = { ...req.headers }
-      const hop = [
+      const hopByHop = [
         'connection',
         'keep-alive',
         'proxy-authenticate',
@@ -128,34 +182,115 @@ module.exports = function createForward() {
         'upgrade',
         'accept-encoding'
       ]
-      hop.forEach(h => delete headers[h])
+      hopByHop.forEach(h => delete headers[h])
       delete headers.authorization
       delete headers.Authorization
 
       headers.host = new URL(BACKEND_BASE).host
 
+      // Inject canonical brokerageId if we resolved one from token
+      if (resolvedBrokerageId) {
+        headers['x-flypost-brokerage-id'] = resolvedBrokerageId
+      }
+
+      //-------------------------------------
+      // Source channel hint for backend provenance
+      //-------------------------------------
+      const sourceChannel =
+        req.headers['x-flypost-source-channel'] ||
+        (req.body &&
+        typeof req.body === 'object' &&
+        !Array.isArray(req.body)
+          ? req.body?.userContext?.channel || req.body?.userContext?.source
+          : null)
+
+      if (sourceChannel) {
+        headers['x-flypost-source-channel'] = sourceChannel
+      }
+
       if (firebaseUser) {
         headers['x-flypost-auth-provider'] = 'firebase'
         headers['x-flypost-auth-uid'] = firebaseUser.uid
-        if (firebaseUser.email) headers['x-flypost-auth-email'] = firebaseUser.email
+        if (firebaseUser.email) {
+          headers['x-flypost-auth-email'] = firebaseUser.email
+        }
       }
 
-      // Body
+      //-------------------------------------
+      // Body handling (provenance enrichment)
+      //-------------------------------------
       let data
-      if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
-        data = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
-        headers['content-type'] = 'application/json'
-        headers['content-length'] = Buffer.byteLength(data)
+      if (isParseAndPublish && req.body && typeof req.body === 'object') {
+        const baseContext =
+          req.body &&
+          typeof req.body.userContext === 'object' &&
+          !Array.isArray(req.body.userContext)
+            ? req.body.userContext
+            : {}
+
+        const firebaseProvenance = firebaseUser
+          ? {
+              authProvider: 'firebase',
+              firebaseUid: firebaseUser.uid,
+              firebaseEmail: firebaseUser.email,
+              firebaseSignInProvider:
+                firebaseUser.firebase?.sign_in_provider || 'emailLink',
+              firebaseIssuedAt: firebaseUser.iat
+                ? new Date(firebaseUser.iat * 1000).toISOString()
+                : undefined
+            }
+          : {}
+
+        req.body = {
+          ...(typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {}),
+          userContext: {
+            ...baseContext,
+            provenance: {
+              ...(baseContext?.provenance || {}),
+              ...(firebaseProvenance || {}),
+              via: 'flypost-proxy',
+              origin: origin || 'unknown',
+              requestId,
+              userAgent: req.headers['user-agent'] || 'unknown',
+              receivedAt: new Date().toISOString()
+            }
+          }
+        }
+
+        // If we know brokerageId from the token, make sure body.brokerageId matches
+        if (resolvedBrokerageId) {
+          req.body.brokerageId = resolvedBrokerageId
+        }
       }
 
-      // ID token
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        if (
+          req.body &&
+          (typeof req.body === 'string'
+            ? req.body.length
+            : Object.keys(req.body).length)
+        ) {
+          data =
+            typeof req.body === 'string'
+              ? req.body
+              : JSON.stringify(req.body)
+          headers['content-type'] = headers['content-type'] || 'application/json'
+          headers['content-length'] = Buffer.byteLength(data)
+        }
+      }
+
+      //-------------------------------------
+      // ID Token to backend
+      //-------------------------------------
       if (USE_ID_TOKEN) {
         const client = await auth.getIdTokenClient(BACKEND_BASE)
         const tokenHeaders = await client.getRequestHeaders()
         headers.Authorization = tokenHeaders.Authorization
       }
 
-      // Backend request
+      //-------------------------------------
+      // Backend call
+      //-------------------------------------
       const start = Date.now()
       const backendRes = await axios({
         url: targetUrl,
@@ -165,29 +300,46 @@ module.exports = function createForward() {
         responseType: 'arraybuffer',
         validateStatus: () => true
       })
-      const ms = Date.now() - start
+      const durationMs = Date.now() - start
+
+      const rawBody = Buffer.from(backendRes.data || '')
+
+      const status = backendRes.status
+      const color =
+        status >= 500
+          ? '\x1b[31m'
+          : status >= 400
+          ? '\x1b[33m'
+          : '\x1b[32m'
 
       console.log(
-        `[backend → proxy] ${backendRes.status} ${req.method} ${req.originalUrl} (${ms}ms, id=${requestId})`
+        `[backend → proxy] ${color}${status}\x1b[0m ` +
+          `${req.method} ${req.originalUrl} ` +
+          `(bytes=${rawBody.length}, ${durationMs}ms, id=${requestId})`
       )
 
-      // Forward backend headers
       Object.entries(backendRes.headers || {}).forEach(([k, v]) => {
-        if (!k || hop.includes(k.toLowerCase())) return
+        if (!k) return
+        if (hopByHop.includes(k.toLowerCase())) return
         try {
           res.setHeader(k, v)
-        } catch {}
+        } catch (_) {}
       })
 
       setCors(res, origin)
-      res.status(backendRes.status).send(Buffer.from(backendRes.data || ''))
+      res.status(status).send(rawBody)
     } catch (err) {
-      console.error(`proxy ERROR id=${requestId} → ${targetUrl}`, err)
+      console.error(
+        `[proxy ERROR] id=${requestId} path=${req.originalUrl} → ${targetUrl}\n`,
+        err && err.stack ? err.stack : err
+      )
+
       setCors(res, origin)
-      res.status(502).json({
+
+      return res.status(502).json({
         success: false,
         error: 'proxy forward error',
-        detail: err?.message,
+        detail: err && err.message ? err.message : String(err),
         target: targetUrl,
         requestId
       })
