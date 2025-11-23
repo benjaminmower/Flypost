@@ -1,5 +1,5 @@
 /*
- * Flypost v4 - Minimal Backend Server (v10)
+ * Flypost v4 - Minimal Backend Server (v111 with brokerage isolation)
  * Essential endpoints: /health, POST /api/parse-and-publish, GET /v1/events/near
  * + Dev-only utilities when NODE_ENV !== 'production'
  */
@@ -92,6 +92,19 @@ app.get(['/health', '/api/health'], healthHandler)
 app.post('/api/parse-and-publish', async (req, res) => {
   try {
     const body = req.body || {}
+
+    // --- Brokerage tenancy enforcement (write) ---
+    const brokerageId =
+      body.brokerageId ||
+      req.headers['x-flypost-brokerage-id']
+
+    if (!brokerageId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing brokerageId (required for multi-tenant isolation)'
+      })
+    }
+
     // Accept aliases for ergonomics
     let naturalLanguageInput =
       body.naturalLanguageInput ??
@@ -116,7 +129,7 @@ app.post('/api/parse-and-publish', async (req, res) => {
       })
     }
 
-    console.log(`🤖 Processing: "${naturalLanguageInput.substring(0, 100)}..."`)
+    console.log(`🤖 Processing: "${naturalLanguageInput.substring(0, 100)}..." (brokerageId=${brokerageId})`)
 
     // Step 1: Parse with LLM
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
@@ -144,15 +157,21 @@ app.post('/api/parse-and-publish', async (req, res) => {
     // Step 3: Compute hash of validated event
     // Hash is computed AFTER validation and Flypost enrichment, BEFORE adding hash field itself
     const eventHash = computeEventHash(validation.data)
+
+    // Attach brokerageId for multi-tenant isolation
     const eventWithHash = {
       ...validation.data,
-      hash: eventHash
+      hash: eventHash,
+      flypost: {
+        ...validation.data.flypost,
+        brokerageId
+      }
     }
-    console.log(`🔐 Computed event hash: ${eventHash.value.substring(0, 16)}...`)
+    console.log(`🔐 Computed event hash: ${eventHash.value.substring(0, 16)}... (brokerageId=${brokerageId})`)
 
     // Step 4: Store event (with hash) to memory and Firestore
     const storedEvent = await storeEvent(eventWithHash)
-    console.log(`📦 Stored event: ${storedEvent.flypost.eventId}`)
+    console.log(`📦 Stored event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.flypost.brokerageId})`)
 
     res.json({
       success: true,
@@ -181,25 +200,46 @@ app.post('/api/parse-and-publish', async (req, res) => {
 // Events near endpoint (opinionated "near" with Santa Monica default)
 app.get('/v1/events/near', async (req, res) => {
   try {
+    // --- Brokerage tenancy enforcement (read) ---
+    const brokerageId =
+      req.query.brokerageId ||
+      req.headers['x-flypost-brokerage-id']
+
+    if (!brokerageId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing brokerageId (required for multi-tenant isolation)'
+      })
+    }
+
     // Default: Santa Monica if no explicit coords passed
     const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
     const longitude = parseFloat(req.query.lng || req.query.longitude || '-118.4912')
     const radius = parseFloat(req.query.radius || '10')
 
     const useFirestore = isFirestoreEnabled()
-    console.log(`📋 Events endpoint: GET ${req.protocol}://${req.get('host')}${req.originalUrl}`)
+    console.log(
+      `📋 Events endpoint: GET ${req.protocol}://${req.get('host')}${req.originalUrl} (brokerageId=${brokerageId})`
+    )
 
     const events = await getEventsNear(latitude, longitude, radius, useFirestore)
+
+    // Multi-tenant isolation at server layer: only return events for this brokerage
+    const filteredEvents = events.filter(evt =>
+      evt.flypost?.brokerageId === brokerageId
+    )
+
     res.json({
       success: true,
       data: {
-        events,
-        total: events.length,
+        events: filteredEvents,
+        total: filteredEvents.length,
         query: req.query || {},
+        brokerageId,
         source: useFirestore ? 'Firestore' : 'Memory',
         note: useFirestore
-          ? 'Querying from Firestore with geospatial filtering'
-          : 'Naive in-memory retrieval'
+          ? 'Querying from Firestore with geospatial filtering; events filtered by brokerageId on server.'
+          : 'Naive in-memory retrieval; events filtered by brokerageId on server.'
       }
     })
   } catch (error) {
@@ -250,6 +290,8 @@ if (process.env.NODE_ENV !== 'production') {
         crawlable: true,
         queryable: true,
         submissionTimestamp: new Date().toISOString()
+        // Note: dev endpoint does not force brokerageId; these events will
+        // not appear in brokerage-filtered /v1/events/near unless you add it.
       },
       name: req.body.name || 'Test Event',
       description: req.body.description || 'Mock event for testing',
@@ -301,7 +343,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.listen(port, () => {
-  console.log('\n🚀 Flypost v4 Backend Server Started (v9.1)')
+  console.log('\n🚀 Flypost v4 Backend Server Started (v10 + brokerage isolation)')
   console.log(`📡 Listening on port ${port}`)
   console.log(`🌐 Health check:       http://localhost:${port}/health`)
   console.log(`🤖 Parse endpoint:     POST   http://localhost:${port}/api/parse-and-publish`)
