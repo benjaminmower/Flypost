@@ -3,12 +3,12 @@
   "info": {
     "title": "Flypost Event API",
     "version": "4.0.0-mvp",
-    "description": "Flypost parses natural-language event descriptions into structured Schema.org Event objects and provides a location-based query API."
+    "description": "Flypost parses natural-language event descriptions into structured Schema.org Event objects and provides location-based queries, with multi-tenant routing via brokerageId."
   },
   "servers": [
     {
       "url": "https://api.goflypost.com",
-      "description": "Flypost API (Cloud Run behind api.goflypost.com) - production"
+      "description": "Flypost Backend API (Cloud Run)"
     }
   ],
   "paths": {
@@ -30,64 +30,24 @@
         }
       }
     },
-    "/api/health": {
-      "get": {
-        "summary": "Health check (legacy path)",
-        "operationId": "getApiHealth",
-        "responses": {
-          "200": {
-            "description": "Service health status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/parse-and-publish": {
       "post": {
         "summary": "Parse a natural-language event and publish it",
         "operationId": "parseAndPublishEvent",
-        "description": "Parses a natural-language event description into a structured Event object, validates it, computes a hash, stores it, and returns the stored event plus a Flypost eventId.",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/BrokerageIdHeader"
-          }
-        ],
+        "description": "Parses an event description, validates it, stores it with a Flypost eventId, and computes a hash. Requires brokerageId for multi-tenant isolation.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ParseAndPublishRequest"
-              },
-              "examples": {
-                "openHouse": {
-                  "summary": "Open house example",
-                  "value": {
-                    "naturalLanguageInput": "Open house this Sunday from 1–4pm at 2212 Ocean Park Blvd, Santa Monica. 3 bed, 2 bath, listed at $1.5M.",
-                    "userContext": {
-                      "source": "openai-gpt-action",
-                      "channel": "gpt-actions",
-                      "provenance": {
-                        "agent": "flypost-gpt-action",
-                        "platform": "openai",
-                        "intent": "parse-and-publish"
-                      }
-                    }
-                  }
-                }
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Event parsed, validated, hashed, and stored successfully.",
+            "description": "Event parsed and stored successfully.",
             "content": {
               "application/json": {
                 "schema": {
@@ -107,7 +67,7 @@
             }
           },
           "500": {
-            "description": "Server-side error during parsing or publishing.",
+            "description": "Server-side error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -123,41 +83,35 @@
       "get": {
         "summary": "Get events near a location",
         "operationId": "getEventsNear",
-        "description": "Retrieves events near a latitude/longitude within a radius. Uses Firestore geospatial queries when enabled; otherwise falls back to in-memory retrieval. Results are filtered to the requesting brokerage via the x-flypost-brokerage-id header.",
+        "description": "Retrieves events near latitude/longitude within a radius, filtered by brokerageId.",
         "parameters": [
-          {
-            "$ref": "#/components/parameters/BrokerageIdHeader"
-          },
           {
             "name": "lat",
             "in": "query",
-            "description": "Latitude in decimal degrees. If omitted, defaults to Santa Monica, CA.",
             "required": false,
-            "schema": {
-              "type": "number",
-              "format": "double"
-            }
+            "schema": { "type": "number", "format": "double" },
+            "description": "Latitude (defaults to Santa Monica)."
           },
           {
             "name": "lng",
             "in": "query",
-            "description": "Longitude in decimal degrees. If omitted, defaults to Santa Monica, CA.",
             "required": false,
-            "schema": {
-              "type": "number",
-              "format": "double"
-            }
+            "schema": { "type": "number", "format": "double" },
+            "description": "Longitude (defaults to Santa Monica)."
           },
           {
             "name": "radius",
             "in": "query",
-            "description": "Search radius in kilometers. Defaults to 10.",
             "required": false,
-            "schema": {
-              "type": "number",
-              "format": "double",
-              "default": 10
-            }
+            "schema": { "type": "number", "format": "double", "default": 10 },
+            "description": "Search radius in kilometers."
+          },
+          {
+            "name": "brokerageId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Brokerage identifier for multi-tenant isolation (e.g. 'vista-sir')."
           }
         ],
         "responses": {
@@ -165,19 +119,23 @@
             "description": "Events retrieved successfully.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EventsNearResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/EventsNearResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid parameters.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
           "500": {
-            "description": "Server-side error during event retrieval.",
+            "description": "Server-side error.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -186,68 +144,28 @@
     }
   },
   "components": {
-    "parameters": {
-      "BrokerageIdHeader": {
-        "name": "x-flypost-brokerage-id",
-        "in": "header",
-        "required": true,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Brokerage tenancy identifier (e.g., \"vista-sir\"). For this GPT it will be hardcoded."
-      }
-    },
     "schemas": {
       "HealthResponse": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string",
-            "example": "healthy"
-          },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "version": {
-            "type": "string",
-            "example": "4.0.0-mvp"
-          },
-          "storage": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "example": "hybrid (memory + Firestore)"
-              },
-              "events": {
-                "type": "integer",
-                "example": 42
-              },
-              "firestore": {
-                "type": "boolean"
-              }
-            }
-          },
-          "uptime": {
-            "type": "number",
-            "description": "Uptime in seconds.",
-            "example": 12345.67
-          }
-        },
-        "required": [
-          "status",
-          "timestamp",
-          "version"
-        ]
+          "status": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "version": { "type": "string" },
+          "storage": { "type": "object" },
+          "uptime": { "type": "number" }
+        }
       },
       "ParseAndPublishRequest": {
         "type": "object",
-        "description": "Request body for parsing and publishing an event. Use naturalLanguageInput when possible.",
+        "required": ["brokerageId"],
         "properties": {
+          "brokerageId": {
+            "type": "string",
+            "description": "Brokerage tenant identifier (required)."
+          },
           "naturalLanguageInput": {
             "type": "string",
-            "description": "Primary field for the raw event description."
+            "description": "Primary event description text."
           },
           "text": {
             "type": "string",
@@ -257,53 +175,21 @@
             "type": "string",
             "description": "Alias for naturalLanguageInput."
           },
-          "brokerageId": {
-            "type": "string",
-            "description": "Brokerage tenant identifier. Normally provided via the x-flypost-brokerage-id header and not required in the body."
-          },
           "userContext": {
             "type": "object",
-            "description": "Optional metadata about the caller, channel, or context. Include provenance for writes (e.g., {\"source\": \"openai-gpt-action\", \"provenance\": {\"agent\": \"flypost-gpt-action\", \"platform\": \"openai\"}}). You may also set X-Flypost-Source-Channel for clearer provenance.",
             "additionalProperties": true
           }
-        },
-        "additionalProperties": false
+        }
       },
       "ParseAndPublishResponse": {
         "type": "object",
         "properties": {
-          "success": {
-            "type": "boolean",
-            "example": true
-          },
+          "success": { "type": "boolean" },
           "data": {
             "type": "object",
             "properties": {
-              "eventId": {
-                "type": "string",
-                "description": "Flypost-generated event identifier.",
-                "example": "evt_abc123xyz_1700000000000"
-              },
-              "event": {
-                "$ref": "#/components/schemas/FlypostEvent"
-              },
-              "processing": {
-                "type": "object",
-                "properties": {
-                  "parsed": {
-                    "type": "boolean"
-                  },
-                  "validated": {
-                    "type": "boolean"
-                  },
-                  "hashed": {
-                    "type": "boolean"
-                  },
-                  "stored": {
-                    "type": "boolean"
-                  }
-                }
-              }
+              "eventId": { "type": "string" },
+              "event": { "$ref": "#/components/schemas/FlypostEvent" }
             }
           }
         }
@@ -311,149 +197,32 @@
       "EventsNearResponse": {
         "type": "object",
         "properties": {
-          "success": {
-            "type": "boolean",
-            "example": true
-          },
+          "success": { "type": "boolean" },
           "data": {
             "type": "object",
             "properties": {
               "events": {
                 "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/FlypostEvent"
-                }
+                "items": { "$ref": "#/components/schemas/FlypostEvent" }
               },
-              "total": {
-                "type": "integer",
-                "example": 5
-              },
-              "query": {
-                "type": "object",
-                "description": "Echo of query parameters.",
-                "additionalProperties": true
-              },
-              "source": {
-                "type": "string",
-                "description": "Backend source for the events.",
-                "example": "Firestore",
-                "enum": [
-                  "Firestore",
-                  "Memory"
-                ]
-              },
-              "note": {
-                "type": "string",
-                "description": "Human-readable note about the retrieval strategy."
-              }
+              "total": { "type": "integer" },
+              "query": { "type": "object" },
+              "source": { "type": "string" }
             }
           }
         }
       },
       "FlypostEvent": {
         "type": "object",
-        "description": "Schema.org Event with Flypost metadata and hash.",
-        "properties": {
-          "@context": {
-            "type": "string",
-            "example": "https://schema.org"
-          },
-          "@type": {
-            "type": "string",
-            "example": "Event"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "startDate": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endDate": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "location": {
-            "type": "object",
-            "description": "Schema.org Place object.",
-            "additionalProperties": true
-          },
-          "organizer": {
-            "type": "object",
-            "description": "Schema.org Person or Organization.",
-            "additionalProperties": true
-          },
-          "flypost": {
-            "type": "object",
-            "description": "Flypost-specific metadata.",
-            "properties": {
-              "eventId": {
-                "type": "string"
-              },
-              "category": {
-                "type": "string",
-                "description": "Internal Flypost category label.",
-                "nullable": true
-              },
-              "realTimeData": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "crawlable": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "queryable": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "submissionTimestamp": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "brokerageId": {
-                "type": "string",
-                "description": "Brokerage tenancy identifier associated with this event."
-              }
-            },
-            "additionalProperties": true
-          },
-          "hash": {
-            "type": "object",
-            "description": "Hash object identifying this event representation.",
-            "properties": {
-              "algorithm": {
-                "type": "string",
-                "example": "SHA-256"
-              },
-              "value": {
-                "type": "string",
-                "description": "Hex-encoded hash of the canonical event payload."
-              }
-            },
-            "additionalProperties": true
-          }
-        },
+        "description": "Schema.org Event with Flypost metadata.",
         "additionalProperties": true
       },
       "ErrorResponse": {
         "type": "object",
         "properties": {
-          "success": {
-            "type": "boolean",
-            "example": false
-          },
-          "error": {
-            "type": "string"
-          },
-          "details": {
-            "type": "string",
-            "nullable": true
-          }
+          "success": { "type": "boolean" },
+          "error": { "type": "string" },
+          "details": { "type": "string", "nullable": true }
         }
       }
     }
