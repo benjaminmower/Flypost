@@ -1,7 +1,6 @@
 /*
- * Flypost v4 - Minimal Backend Server (v111 with brokerage isolation)
- * Essential endpoints: /health, POST /api/parse-and-publish, GET /v1/events/near
- * + Dev-only utilities when NODE_ENV !== 'production'
+ * Flypost v4 Backend – Multi-Tenant via brokerageId in body/query
+ * This is the canonical tenancy enforcement layer.
  */
 
 import express from 'express'
@@ -13,140 +12,99 @@ import { storeEvent, getEventsNear, getStorageStats, clearEvents } from './stora
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
 
-// Load environment variables
 dotenv.config()
 
 const app = express()
 const port = process.env.PORT || 3001
 
-// Middleware
 const frontendOrigins = [
   ...((process.env.FRONTEND_URL || '')
     .split(',')
-    .map(origin => origin.trim())
+    .map(o => o.trim())
     .filter(Boolean)),
   'https://flypost.netlify.app',
   'https://app.goflypost.com'
 ]
 
-app.use(cors({
-  origin: frontendOrigins,
-  credentials: true
-}))
+app.use(cors({ origin: frontendOrigins, credentials: true }))
 app.use(express.json({ limit: '1mb' }))
 
-// Request logging middleware
 app.use((req, res, next) => {
   console.log(`📡 ${req.method} ${req.path}`)
   next()
 })
 
-/**
- * Utilities: ISO date normalization
- */
-function isIsoDateTime(str) {
-  return typeof str === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(str)
+// Utilities
+function isIso(s) {
+  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(s)
 }
-function toIsoIfParsable(value) {
-  if (typeof value !== 'string') return value
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? value : d.toISOString()
+function toIso(v) {
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? v : d.toISOString()
 }
-function normalizeEventDates(event /*, userContext */) {
-  // Minimal normalization: if present and not ISO-like, coerce via Date -> toISOString
-  if (event.startDate && !isIsoDateTime(event.startDate)) {
-    const before = event.startDate
-    event.startDate = toIsoIfParsable(event.startDate)
-    if (event.startDate !== before) {
-      console.log(`⏱️  Normalized startDate to ISO: ${before} -> ${event.startDate}`)
-    }
-  }
-  if (event.endDate && !isIsoDateTime(event.endDate)) {
-    const before = event.endDate
-    event.endDate = toIsoIfParsable(event.endDate)
-    if (event.endDate !== before) {
-      console.log(`⏱️  Normalized endDate to ISO: ${before} -> ${event.endDate}`)
-    }
-  }
+function normalizeDates(evt) {
+  if (evt.startDate && !isIso(evt.startDate)) evt.startDate = toIso(evt.startDate)
+  if (evt.endDate && !isIso(evt.endDate)) evt.endDate = toIso(evt.endDate)
 }
 
-const healthHandler = (req, res) => {
+/**
+ * Extract brokerageId from body or query.
+ * Backend is the source of truth.
+ */
+function getBrokerageId(req) {
+  const bodyVal = req.body?.brokerageId
+  const queryVal = req.query?.brokerageId
+  return (bodyVal || queryVal || '').toString().trim()
+}
+
+// Health
+app.get(['/health', '/api/health'], (req, res) => {
   const stats = getStorageStats()
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '4.0.0-mvp', // backend version; keep simple for now
+    version: '4.0.0-mvp',
     storage: {
       type: isFirestoreEnabled() ? 'hybrid (memory + Firestore)' : 'in-memory',
-      events: stats.totalEvents,
-      firestore: isFirestoreEnabled()
+      events: stats.totalEvents
     },
     uptime: stats.uptime
   })
-}
+})
 
-// Health check endpoint (temporary dual routing for compatibility)
-app.get(['/health', '/api/health'], healthHandler)
-
-// Parse and publish endpoint - core functionality (with alias support)
+// Parse + Publish
 app.post('/api/parse-and-publish', async (req, res) => {
   try {
-    const body = req.body || {}
-
-    // --- Brokerage tenancy enforcement (write) ---
-    const brokerageId =
-      body.brokerageId ||
-      req.headers['x-flypost-brokerage-id']
-
+    const brokerageId = getBrokerageId(req)
     if (!brokerageId) {
       return res.status(400).json({
         success: false,
-        error: 'Missing brokerageId (required for multi-tenant isolation)'
+        error: 'Missing brokerageId in request body'
       })
     }
 
-    // Accept aliases for ergonomics
-    let naturalLanguageInput =
-      body.naturalLanguageInput ??
-      body.text ??
-      body.input
+    const body = req.body || {}
+    let input = body.naturalLanguageInput ?? body.text ?? body.input
 
-    const userContext = body.userContext
-
-    if (typeof naturalLanguageInput !== 'string') {
+    if (typeof input !== 'string' || !input.trim()) {
       return res.status(400).json({
         success: false,
-        error: 'Missing event description. Provide "naturalLanguageInput" (preferred) or one of ["text","input"] as a non-empty string.',
-        providedKeys: Object.keys(body)
+        error: 'Missing naturalLanguageInput'
       })
     }
+    input = input.trim()
+    console.log(`🤖 Parsing for brokerage "${brokerageId}" input="${input.slice(0, 100)}..."`)
 
-    naturalLanguageInput = naturalLanguageInput.trim()
-    if (!naturalLanguageInput.length) {
-      return res.status(400).json({
-        success: false,
-        error: 'Event description cannot be empty after trimming'
-      })
-    }
+    const parsed = await parseEventWithLLM(input, body.userContext)
+    normalizeDates(parsed)
 
-    console.log(`🤖 Processing: "${naturalLanguageInput.substring(0, 100)}..." (brokerageId=${brokerageId})`)
+    parsed.flypost = parsed.flypost || {}
+    parsed.flypost.eventId = `evt_${Math.random().toString(36).slice(2, 11)}_${Date.now()}`
+    parsed.flypost.submissionTimestamp = new Date().toISOString()
+    parsed.flypost.brokerageId = brokerageId
 
-    // Step 1: Parse with LLM
-    const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
-    console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
-
-    // Step 1.25: Normalize date fields to ISO 8601 to satisfy schema validation
-    normalizeEventDates(parsedEvent, userContext)
-
-    // Step 1.5: Enforce server-side ID & timestamp to avoid overwrites
-    parsedEvent.flypost = parsedEvent.flypost || {}
-    parsedEvent.flypost.eventId = `evt_${Math.random().toString(36).slice(2, 11)}_${Date.now()}`
-    parsedEvent.flypost.submissionTimestamp = new Date().toISOString()
-
-    // Step 2: Validate against schema (LLM output should not have hash)
-    const validation = validateEventData(parsedEvent)
+    const validation = validateEventData(parsed)
     if (!validation.success) {
-      console.error('❌ Validation failed:', validation.errors)
       return res.status(400).json({
         success: false,
         error: 'Event validation failed',
@@ -154,205 +112,70 @@ app.post('/api/parse-and-publish', async (req, res) => {
       })
     }
 
-    // Step 3: Compute hash of validated event
-    // Hash is computed AFTER validation and Flypost enrichment, BEFORE adding hash field itself
-    const eventHash = computeEventHash(validation.data)
-
-    // Attach brokerageId for multi-tenant isolation
-    const eventWithHash = {
-      ...validation.data,
-      hash: eventHash,
-      flypost: {
-        ...validation.data.flypost,
-        brokerageId
-      }
-    }
-    console.log(`🔐 Computed event hash: ${eventHash.value.substring(0, 16)}... (brokerageId=${brokerageId})`)
-
-    // Step 4: Store event (with hash) to memory and Firestore
-    const storedEvent = await storeEvent(eventWithHash)
-    console.log(`📦 Stored event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.flypost.brokerageId})`)
+    const hash = computeEventHash(validation.data)
+    const stored = await storeEvent({ ...validation.data, hash })
 
     res.json({
       success: true,
       data: {
-        eventId: storedEvent.flypost.eventId,
-        event: storedEvent,
-        processing: {
-          parsed: true,
-          validated: true,
-          hashed: true,
-          stored: true
-        }
+        eventId: stored.flypost.eventId,
+        event: stored
       }
     })
-
-  } catch (error) {
-    console.error('❌ Parse and publish error:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Parse and publish failed',
-      details: error.message
-    })
+  } catch (err) {
+    console.error('❌ Parse error:', err)
+    res.status(500).json({ success: false, error: err.message })
   }
 })
 
-// Events near endpoint (opinionated "near" with Santa Monica default)
+// Events Near
 app.get('/v1/events/near', async (req, res) => {
   try {
-    // --- Brokerage tenancy enforcement (read) ---
-    const brokerageId =
-      req.query.brokerageId ||
-      req.headers['x-flypost-brokerage-id']
-
+    const brokerageId = getBrokerageId(req)
     if (!brokerageId) {
       return res.status(400).json({
         success: false,
-        error: 'Missing brokerageId (required for multi-tenant isolation)'
+        error: 'Missing brokerageId query parameter'
       })
     }
 
-    // Default: Santa Monica if no explicit coords passed
-    const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
-    const longitude = parseFloat(req.query.lng || req.query.longitude || '-118.4912')
+    const lat = parseFloat(req.query.lat || req.query.latitude || '34.0195')
+    const lng = parseFloat(req.query.lng || req.query.longitude || '-118.4912')
     const radius = parseFloat(req.query.radius || '10')
 
-    const useFirestore = isFirestoreEnabled()
-    console.log(
-      `📋 Events endpoint: GET ${req.protocol}://${req.get('host')}${req.originalUrl} (brokerageId=${brokerageId})`
-    )
+    const useFs = isFirestoreEnabled()
 
-    const events = await getEventsNear(latitude, longitude, radius, useFirestore)
-
-    // Multi-tenant isolation at server layer: only return events for this brokerage
-    const filteredEvents = events.filter(evt =>
-      evt.flypost?.brokerageId === brokerageId
-    )
+    const all = await getEventsNear(lat, lng, radius, useFs)
+    const filtered = all.filter(e => e.flypost?.brokerageId === brokerageId)
 
     res.json({
       success: true,
       data: {
-        events: filteredEvents,
-        total: filteredEvents.length,
-        query: req.query || {},
-        brokerageId,
-        source: useFirestore ? 'Firestore' : 'Memory',
-        note: useFirestore
-          ? 'Querying from Firestore with geospatial filtering; events filtered by brokerageId on server.'
-          : 'Naive in-memory retrieval; events filtered by brokerageId on server.'
+        events: filtered,
+        total: filtered.length,
+        query: req.query,
+        source: useFs ? 'Firestore' : 'Memory'
       }
     })
-  } catch (error) {
-    console.error('❌ Error retrieving events:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Failed to retrieve events',
-      details: error.message
-    })
+  } catch (err) {
+    console.error('❌ near error:', err)
+    res.status(500).json({ success: false, error: err.message })
   }
 })
 
-/**
- * Dev-only utilities (schema/stats/clear/mock event)
- * Enabled when NODE_ENV !== 'production'
- */
+// Dev tools
 if (process.env.NODE_ENV !== 'production') {
-  console.log('🧪 Dev utilities enabled (NODE_ENV !== "production")')
+  console.log('🧪 Dev utilities enabled')
 
-  // Introspect current schema
-  app.get('/api/schema', (req, res) => {
-    res.json(getSchema())
-  })
+  app.get('/api/schema', (req, res) => res.json(getSchema()))
+  app.get('/api/stats', (req, res) => res.json(getStorageStats()))
 
-  // Storage stats
-  app.get('/api/stats', (req, res) => {
-    res.json(getStorageStats())
-  })
-
-  // Debug endpoint to clear all events
   app.delete('/api/events', (req, res) => {
     const cleared = clearEvents()
-    res.json({
-      success: true,
-      message: `Cleared ${cleared} events`
-    })
-  })
-
-  // Test endpoint to add mock events (for testing without OpenAI)
-  app.post('/api/test-add-event', async (req, res) => {
-    const mockEvent = {
-      '@context': 'https://schema.org',
-      '@type': 'Event',
-      flypost: {
-        eventId: `evt_test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        category: req.body.category || 'garage-sales',
-        realTimeData: true,
-        crawlable: true,
-        queryable: true,
-        submissionTimestamp: new Date().toISOString()
-        // Note: dev endpoint does not force brokerageId; these events will
-        // not appear in brokerage-filtered /v1/events/near unless you add it.
-      },
-      name: req.body.name || 'Test Event',
-      description: req.body.description || 'Mock event for testing',
-      startDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
-      location: {
-        '@type': 'Place',
-        name: req.body.location || '123 Main Street',
-        address: {
-          '@type': 'PostalAddress',
-          streetAddress: req.body.location || '123 Main Street',
-          addressLocality: 'Santa Monica',
-          addressRegion: 'CA',
-          postalCode: '90405',
-          addressCountry: 'US'
-        }
-      },
-      organizer: {
-        '@type': 'Person',
-        name: req.body.organizer || 'Test Organizer',
-        email: req.body.email || 'test@example.com'
-      }
-    }
-
-    const validation = validateEventData(mockEvent)
-    if (!validation.success) {
-      return res.status(400).json({
-        success: false,
-        error: 'Mock event validation failed',
-        details: validation.errors
-      })
-    }
-
-    const eventHash = computeEventHash(validation.data)
-    const eventWithHash = {
-      ...validation.data,
-      hash: eventHash
-    }
-
-    const storedEvent = await storeEvent(eventWithHash)
-
-    res.json({
-      success: true,
-      data: {
-        eventId: storedEvent.flypost.eventId,
-        event: storedEvent
-      }
-    })
+    res.json({ success: true, cleared })
   })
 }
 
 app.listen(port, () => {
-  console.log('\n🚀 Flypost v4 Backend Server Started (v10 + brokerage isolation)')
-  console.log(`📡 Listening on port ${port}`)
-  console.log(`🌐 Health check:       http://localhost:${port}/health`)
-  console.log(`🤖 Parse endpoint:     POST   http://localhost:${port}/api/parse-and-publish`)
-  console.log(`📋 Events endpoint:    GET    http://localhost:${port}/v1/events/near`)
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`🧪 Dev: schema:        GET    http://localhost:${port}/api/schema`)
-    console.log(`🧪 Dev: stats:         GET    http://localhost:${port}/api/stats`)
-    console.log(`🧪 Dev: clear events:  DELETE http://localhost:${port}/api/events`)
-    console.log(`🧪 Dev: test add:      POST   http://localhost:${port}/api/test-add-event`)
-  }
-  console.log('')
+  console.log(`🚀 Backend running on ${port}`)
 })
