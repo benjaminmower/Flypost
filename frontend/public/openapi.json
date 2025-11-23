@@ -3,12 +3,12 @@
   "info": {
     "title": "Flypost Event API",
     "version": "4.0.0-mvp",
-    "description": "Flypost parses natural-language event descriptions into structured Schema.org Event objects and provides location-based queries, with multi-tenant routing via brokerageId."
+    "description": "Flypost parses natural-language event descriptions into structured Event objects and provides a location-based, multi-tenant query API."
   },
   "servers": [
     {
       "url": "https://api.goflypost.com",
-      "description": "Flypost Backend API (Cloud Run)"
+      "description": "Flypost API (Cloud Run)"
     }
   ],
   "paths": {
@@ -30,11 +30,12 @@
         }
       }
     },
+
     "/api/parse-and-publish": {
       "post": {
         "summary": "Parse a natural-language event and publish it",
         "operationId": "parseAndPublishEvent",
-        "description": "Parses an event description, validates it, stores it with a Flypost eventId, and computes a hash. Requires brokerageId for multi-tenant isolation.",
+        "description": "Parses an event description, validates it, computes a hash, assigns a brokerageId, and stores it.",
         "requestBody": {
           "required": true,
           "content": {
@@ -47,7 +48,7 @@
         },
         "responses": {
           "200": {
-            "description": "Event parsed and stored successfully.",
+            "description": "Event parsed and stored.",
             "content": {
               "application/json": {
                 "schema": {
@@ -57,7 +58,7 @@
             }
           },
           "400": {
-            "description": "Invalid input or validation failure.",
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": {
@@ -67,7 +68,7 @@
             }
           },
           "500": {
-            "description": "Server-side error.",
+            "description": "Internal server error",
             "content": {
               "application/json": {
                 "schema": {
@@ -76,66 +77,68 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "WriteTokenAuth": []
+          }
+        ]
       }
     },
+
     "/v1/events/near": {
       "get": {
-        "summary": "Get events near a location",
+        "summary": "Get events near a coordinate",
         "operationId": "getEventsNear",
-        "description": "Retrieves events near latitude/longitude within a radius, filtered by brokerageId.",
+        "description": "Retrieves events near a latitude/longitude within a radius, filtered by brokerageId.",
         "parameters": [
+          {
+            "name": "brokerageId",
+            "in": "query",
+            "description": "Brokerage tenant identifier (e.g., 'vista-sir').",
+            "required": true,
+            "schema": { "type": "string" }
+          },
           {
             "name": "lat",
             "in": "query",
+            "description": "Latitude in decimal degrees.",
             "required": false,
-            "schema": { "type": "number", "format": "double" },
-            "description": "Latitude (defaults to Santa Monica)."
+            "schema": { "type": "number", "format": "double" }
           },
           {
             "name": "lng",
             "in": "query",
+            "description": "Longitude in decimal degrees.",
             "required": false,
-            "schema": { "type": "number", "format": "double" },
-            "description": "Longitude (defaults to Santa Monica)."
+            "schema": { "type": "number", "format": "double" }
           },
           {
             "name": "radius",
             "in": "query",
+            "description": "Search radius in kilometers.",
             "required": false,
-            "schema": { "type": "number", "format": "double", "default": 10 },
-            "description": "Search radius in kilometers."
-          },
-          {
-            "name": "brokerageId",
-            "in": "query",
-            "required": true,
-            "schema": { "type": "string" },
-            "description": "Brokerage identifier for multi-tenant isolation (e.g. 'vista-sir')."
+            "schema": { "type": "number", "format": "double", "default": 10 }
           }
         ],
         "responses": {
           "200": {
-            "description": "Events retrieved successfully.",
+            "description": "Events retrieved.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/EventsNearResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Missing or invalid parameters.",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/EventsNearResponse"
+                }
               }
             }
           },
           "500": {
-            "description": "Server-side error.",
+            "description": "Server error.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -143,7 +146,17 @@
       }
     }
   },
+
   "components": {
+    "securitySchemes": {
+      "WriteTokenAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Flypost-Write-Token",
+        "description": "Required write token for POST requests."
+      }
+    },
+
     "schemas": {
       "HealthResponse": {
         "type": "object",
@@ -151,36 +164,33 @@
           "status": { "type": "string" },
           "timestamp": { "type": "string", "format": "date-time" },
           "version": { "type": "string" },
-          "storage": { "type": "object" },
+          "storage": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "events": { "type": "integer" }
+            }
+          },
           "uptime": { "type": "number" }
         }
       },
+
       "ParseAndPublishRequest": {
         "type": "object",
-        "required": ["brokerageId"],
         "properties": {
+          "naturalLanguageInput": { "type": "string" },
           "brokerageId": {
             "type": "string",
-            "description": "Brokerage tenant identifier (required)."
-          },
-          "naturalLanguageInput": {
-            "type": "string",
-            "description": "Primary event description text."
-          },
-          "text": {
-            "type": "string",
-            "description": "Alias for naturalLanguageInput."
-          },
-          "input": {
-            "type": "string",
-            "description": "Alias for naturalLanguageInput."
+            "description": "Brokerage tenant identifier. Hardcoded by GPT."
           },
           "userContext": {
             "type": "object",
             "additionalProperties": true
           }
-        }
+        },
+        "required": ["naturalLanguageInput", "brokerageId"]
       },
+
       "ParseAndPublishResponse": {
         "type": "object",
         "properties": {
@@ -194,6 +204,7 @@
           }
         }
       },
+
       "EventsNearResponse": {
         "type": "object",
         "properties": {
@@ -206,23 +217,74 @@
                 "items": { "$ref": "#/components/schemas/FlypostEvent" }
               },
               "total": { "type": "integer" },
-              "query": { "type": "object" },
-              "source": { "type": "string" }
+              "query": { "type": "object" }
             }
           }
         }
       },
+
       "FlypostEvent": {
         "type": "object",
-        "description": "Schema.org Event with Flypost metadata.",
-        "additionalProperties": true
+        "description": "Simplified Event + Flypost metadata.",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "startDate": { "type": "string", "format": "date-time" },
+          "endDate": { "type": "string", "format": "date-time", "nullable": true },
+
+          "location": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "streetAddress": { "type": "string" },
+              "city": { "type": "string" },
+              "region": { "type": "string" },
+              "postalCode": { "type": "string" },
+              "latitude": { "type": "number" },
+              "longitude": { "type": "number" }
+            },
+            "additionalProperties": true
+          },
+
+          "organizer": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "email": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+
+          "flypost": {
+            "type": "object",
+            "properties": {
+              "eventId": { "type": "string" },
+              "brokerageId": { "type": "string" },
+              "category": { "type": "string" },
+              "submissionTimestamp": { "type": "string", "format": "date-time" }
+            },
+            "required": ["eventId", "brokerageId"],
+            "additionalProperties": true
+          },
+
+          "hash": {
+            "type": "object",
+            "properties": {
+              "algorithm": { "type": "string" },
+              "value": { "type": "string" }
+            },
+            "required": ["algorithm", "value"]
+          }
+        },
+        "required": ["name", "startDate", "location", "flypost"]
       },
+
       "ErrorResponse": {
         "type": "object",
         "properties": {
           "success": { "type": "boolean" },
           "error": { "type": "string" },
-          "details": { "type": "string", "nullable": true }
+          "details": { "type": "string" }
         }
       }
     }
