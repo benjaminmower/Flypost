@@ -1,6 +1,6 @@
-// v14 – Flypost robust forwarder
+// v15 – Flypost robust forwarder with brokerage tenancy
 // Adds request-id propagation, richer logging, latency metrics,
-// cleaner CORS, and safer debug information.
+// cleaner CORS, safer debug information, and header-based brokerage isolation.
 // Preserves: ID token, status passthrough, hop-by-hop stripping, arraybuffer handling.
 
 const { GoogleAuth, OAuth2Client } = require('google-auth-library')
@@ -103,12 +103,19 @@ module.exports = function createForward() {
     const targetUrl = BACKEND_BASE + req.originalUrl
 
     //-------------------------------------
-    // OUTBOUND LOG
+    // OUTBOUND LOG (structured for Cloud Logging / BigQuery)
     //-------------------------------------
-    console.log(
-      `[proxy → backend] ${req.method} ${req.originalUrl} ` +
-      `(origin=${origin || 'n/a'}, id=${requestId}, useIdToken=${USE_ID_TOKEN}, firebaseAuth=${HAS_FIREBASE_AUTH})`
-    )
+    console.log(JSON.stringify({
+      severity: 'INFO',
+      event: 'proxy_to_backend',
+      method: req.method,
+      path: req.originalUrl,
+      brokerageId: req.brokerageId || null,
+      requestId,
+      origin: origin || null,
+      useIdToken: USE_ID_TOKEN,
+      firebaseEnabled: HAS_FIREBASE_AUTH
+    }))
 
     try {
       //-------------------------------------
@@ -144,6 +151,7 @@ module.exports = function createForward() {
       // Clone/sanitize headers
       //-------------------------------------
       const headers = { ...req.headers }
+
       const hopByHop = [
         'connection','keep-alive','proxy-authenticate','proxy-authorization',
         'te','trailer','transfer-encoding','upgrade','accept-encoding'
@@ -153,6 +161,11 @@ module.exports = function createForward() {
       delete headers.Authorization
 
       headers.host = new URL(BACKEND_BASE).host
+
+      // --- Brokerage tenancy header injection ---
+      if (req.brokerageId) {
+        headers['x-flypost-brokerage-id'] = req.brokerageId
+      }
 
       //-------------------------------------
       // Source channel hint for backend provenance
@@ -199,6 +212,7 @@ module.exports = function createForward() {
                   : undefined
             }
           : {}
+
         req.body = {
           ...(typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {}),
           userContext: {
@@ -213,6 +227,21 @@ module.exports = function createForward() {
               receivedAt: new Date().toISOString()
             }
           }
+        }
+
+        // Ensure brokerageId survives the rewrite
+        if (req.brokerageId) {
+          req.body.brokerageId = req.brokerageId
+        }
+      } else {
+        // For non-parse-and-publish, still ensure brokerageId is present if we have it
+        if (
+          req.brokerageId &&
+          req.body &&
+          typeof req.body === 'object' &&
+          !Array.isArray(req.body)
+        ) {
+          req.body.brokerageId = req.brokerageId
         }
       }
 
@@ -258,7 +287,7 @@ module.exports = function createForward() {
       const rawBody = Buffer.from(backendRes.data || '')
 
       //-------------------------------------
-      // INBOUND LOG (colorized status)
+      // INBOUND LOG (colorized status to stdout)
       //-------------------------------------
       const status = backendRes.status
       const color =
@@ -269,7 +298,7 @@ module.exports = function createForward() {
       console.log(
         `[backend → proxy] ${color}${status}\x1b[0m ` +
         `${req.method} ${req.originalUrl} ` +
-        `(bytes=${rawBody.length}, ${durationMs}ms, id=${requestId})`
+        `(brokerageId=${req.brokerageId || 'none'}, bytes=${rawBody.length}, ${durationMs}ms, id=${requestId})`
       )
 
       //-------------------------------------
