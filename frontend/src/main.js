@@ -1,4 +1,4 @@
-// *v4
+// *v5
 // * Flypost v4 Frontend - Main Application Logic
 
 import { parseAndPublishEvent, getEventsNear, getHealth } from './api.js'
@@ -31,6 +31,7 @@ const authStatusDiv = document.getElementById('auth-status')
 const modal = document.getElementById('event-modal')
 const modalClose = document.getElementById('modal-close')
 const modalTitle = document.getElementById('modal-title')
+const modalMeta = document.getElementById('modal-meta')
 const modalDesc = document.getElementById('modal-description')
 const modalShare = document.getElementById('modal-share')
 
@@ -287,6 +288,65 @@ function truncate(text, maxLen) {
   return s.slice(0, maxLen - 1) + '…'
 }
 
+// Build address string from schema.org location/address
+function buildAddress(ev) {
+  const loc = ev?.location || {}
+  const addr = loc.address || loc || {}
+  const street = addr.streetAddress || ''
+  const city = addr.addressLocality || addr.city || ''
+  const region = addr.addressRegion || addr.region || ''
+  const postal = addr.postalCode || ''
+
+  const parts = []
+  if (street) parts.push(street)
+  const cityRegion = [city, region].filter(Boolean).join(', ')
+  if (cityRegion) parts.push(cityRegion)
+  if (postal) parts.push(postal)
+
+  return parts.join(' · ')
+}
+
+// Format date & time window from startDate / endDate
+function buildTimeWindow(ev) {
+  const startRaw = ev?.startDate
+  const endRaw = ev?.endDate
+  if (!startRaw && !endRaw) return ''
+
+  const start = startRaw ? new Date(startRaw) : null
+  const end = endRaw ? new Date(endRaw) : null
+
+  if (start && !isNaN(start.getTime())) {
+    const dateStr = start.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
+    const startTime = start.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+    let timePart = startTime
+
+    if (end && !isNaN(end.getTime())) {
+      const endTime = end.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit'
+      })
+      timePart = `${startTime} – ${endTime}`
+    }
+
+    return `${dateStr} · ${timePart}`
+  }
+
+  // Fallback if only end is valid
+  if (end && !isNaN(end.getTime())) {
+    return end.toLocaleString('en-US')
+  }
+
+  return ''
+}
+
 // Refresh events (read-only)
 async function refreshEvents() {
   if (!eventsList) return
@@ -342,23 +402,35 @@ function escapeHtml(str) {
 
 // ===== Modal helpers =====
 function showEventModal(ev) {
-  if (!modal || !modalTitle || !modalDesc || !modalShare) return
+  if (!modal || !modalTitle || !modalDesc || !modalShare || !modalMeta) return
 
   const name = ev.name || '(no name)'
   const description = ev.description || 'No description available.'
+  const address = buildAddress(ev)
+  const timeWindow = buildTimeWindow(ev)
 
   modalTitle.textContent = name
+
+  const metaParts = []
+  if (timeWindow) metaParts.push(timeWindow)
+  if (address) metaParts.push(address)
+  modalMeta.textContent = metaParts.join('\n')
+
   modalDesc.textContent = description
   modal.classList.remove('hidden')
 
   modalShare.onclick = () => {
-    const text = `${name}\n\n${description}`
+    const textBlocks = [name]
+    if (metaParts.length) textBlocks.push(metaParts.join(' · '))
+    textBlocks.push('', description)
+    const shareText = textBlocks.join('\n')
+
     if (!navigator.clipboard) {
       alert('Clipboard not available in this browser.')
       return
     }
     navigator.clipboard
-      .writeText(text)
+      .writeText(shareText)
       .then(() => alert('Copied to clipboard!'))
       .catch(() => alert('Could not copy.'))
   }
