@@ -156,37 +156,46 @@
         .horizontal-scroll {
             display: flex;
             flex-direction: row;
-            gap: 12px;
+            gap: 16px;
             overflow-x: auto;
-            padding-bottom: 10px;
+            padding: 10px 0 12px;
             scroll-snap-type: x mandatory;
             -webkit-overflow-scrolling: touch;
         }
 
         /* Event cards */
         .event-item {
-            min-width: 260px;
-            max-width: 260px;
+            min-width: 320px;
+            max-width: 320px;
+            max-height: 280px;
             flex: 0 0 auto;
             background: white;
             border: 1px solid #e1e5e9;
             border-radius: 10px;
-            padding: 15px;
+            padding: 14px 14px 10px;
             scroll-snap-align: start;
             box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
         }
 
         .event-item h4 {
-            color: #333;
-            margin-bottom: 5px;
+            color: #222;
+            margin-bottom: 6px;
+            font-size: 15px;
+            font-weight: 600;
         }
         
         .event-item p {
-            color: #666;
-            font-size: 14px;
+            color: #555;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-line;      /* respect \n if you ever add them */
+            overflow-y: auto;           /* scroll inside card if very long */
+            padding-right: 4px;         /* space for scrollbar */
         }
 
-        /* Optional scroll bar styling */
+        /* Optional scroll bar styling for the horizontal lane */
         .horizontal-scroll::-webkit-scrollbar {
             height: 8px;
         }
@@ -276,7 +285,7 @@
         <div class="events-panel">
             <h3>Recent Events</h3>
 
-            <!-- 🔥 Horizontal scroll list -->
+            <!-- Horizontal scroll list -->
             <div id="events-list" class="horizontal-scroll">
                 <p style="color: #666; font-style: italic;">No events yet. Parse your first event above!</p>
             </div>
