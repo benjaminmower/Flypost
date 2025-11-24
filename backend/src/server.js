@@ -1,4 +1,4 @@
-/* v11
+/* v12
  * Flypost v4 - Minimal Backend Server (tenancy, brokerageId added after validation)
  * Endpoints: /health, POST /api/parse-and-publish, GET /v1/events/near
  * - Multi-tenant via brokerageId
@@ -222,41 +222,49 @@ app.post('/api/parse-and-publish', async (req, res) => {
   }
 })
 
-// Events near (with brokerage filter)
+// Events near (with optional brokerage filter)
 app.get('/v1/events/near', async (req, res) => {
   try {
     const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
-    const longitude = parseFloat(req.query.lng || req.query.longitude || '-118.4912')
+    const longitude = parseFloat(
+      req.query.lng || req.query.longitude || '-118.4912'
+    )
     const radius = parseFloat(req.query.radius || '10')
 
     const useFirestore = isFirestoreEnabled()
 
-    // tenancy: header wins, then query.brokerageId
+    // tenancy: header wins, then query.brokerageId — but now OPTIONAL
     const brokerageId =
       getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId || null
-
-    if (!brokerageId) {
-      return res.status(400).json({
-        success: false,
-        error:
-          'Missing brokerageId. This should normally be injected by the proxy from the write token, or provided as a query parameter.'
-      })
-    }
 
     console.log(
       `📋 Events endpoint: GET ${req.protocol}://${req.get('host')}${
         req.originalUrl
-      } (brokerageId=${brokerageId})`
+      } (brokerageId=${brokerageId || 'ALL'})`
     )
 
     const events = await getEventsNear(latitude, longitude, radius, useFirestore)
 
-    // Server-side brokerage isolation
-    const filteredEvents = (events || []).filter(
-      ev =>
-        ev?.brokerageId === brokerageId ||
-        ev?.flypost?.brokerageId === brokerageId // backward compat if any old data ever used that
-    )
+    let filteredEvents = events || []
+    let note
+
+    if (brokerageId) {
+      // Server-side brokerage isolation
+      filteredEvents = filteredEvents.filter(
+        ev =>
+          ev?.brokerageId === brokerageId ||
+          ev?.flypost?.brokerageId === brokerageId // backward compat if any old data ever used that
+      )
+
+      note = useFirestore
+        ? 'Querying from Firestore with geospatial filtering (then brokerage filter in server)'
+        : 'Naive in-memory retrieval with brokerage filter'
+    } else {
+      // No brokerageId → return all events (for generic Flypost app)
+      note = useFirestore
+        ? 'Querying from Firestore with geospatial filtering (no brokerage filter)'
+        : 'Naive in-memory retrieval (no brokerage filter)'
+    }
 
     res.json({
       success: true,
@@ -264,11 +272,9 @@ app.get('/v1/events/near', async (req, res) => {
         events: filteredEvents,
         total: filteredEvents.length,
         query: req.query || {},
-        brokerageId,
+        brokerageId: brokerageId || null,
         source: useFirestore ? 'Firestore' : 'Memory',
-        note: useFirestore
-          ? 'Querying from Firestore with geospatial filtering (then brokerage filter in server)'
-          : 'Naive in-memory retrieval with brokerage filter'
+        note
       }
     })
   } catch (error) {
@@ -373,7 +379,9 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.listen(port, () => {
-  console.log('\n🚀 Flypost v4 Backend Server Started (tenancy-enabled, brokerageId post-validate)')
+  console.log(
+    '\n🚀 Flypost v4 Backend Server Started (tenancy-enabled, brokerageId post-validate)'
+  )
   console.log(`📡 Listening on port ${port}`)
   console.log(`🌐 Health check:       http://localhost:${port}/health`)
   console.log(
