@@ -1,4 +1,4 @@
-// *v3
+// *v4
 // * Flypost v4 Frontend - Main Application Logic
 
 import { parseAndPublishEvent, getEventsNear, getHealth } from './api.js'
@@ -9,7 +9,7 @@ import {
   auth
 } from './firebase.js'
 
-// DOM elements (existing)
+// DOM elements
 const eventForm = document.getElementById('event-form')
 const eventText = document.getElementById('event-text')
 const parseBtn = document.getElementById('parse-btn')
@@ -21,15 +21,23 @@ const statusDiv = document.getElementById('status')
 const eventsList = document.getElementById('events-list')
 const refreshBtn = document.getElementById('refresh-events')
 
-// New auth elements
+// Auth elements
 const authEmailInput = document.getElementById('auth-email')
 const sendLinkBtn = document.getElementById('send-link-btn')
 const signOutBtn = document.getElementById('signout-btn')
 const authStatusDiv = document.getElementById('auth-status')
 
+// Modal elements
+const modal = document.getElementById('event-modal')
+const modalClose = document.getElementById('modal-close')
+const modalTitle = document.getElementById('modal-title')
+const modalDesc = document.getElementById('modal-description')
+const modalShare = document.getElementById('modal-share')
+
 // App state
 let lastParsedEvent = null
 let currentUser = null
+const eventCache = new Map() // key -> full event object
 
 // Initialize app
 async function init() {
@@ -139,6 +147,27 @@ function setupEventListeners() {
       if (!auth.currentUser) return
       await auth.signOut()
       if (authStatusDiv) authStatusDiv.textContent = 'Signed out.'
+    })
+  }
+
+  // Click-to-expand event cards
+  if (eventsList) {
+    eventsList.addEventListener('click', e => {
+      const card = e.target.closest('.event-item')
+      if (!card) return
+      const id = card.getAttribute('data-id')
+      if (!id) return
+      const ev = eventCache.get(id)
+      if (!ev) return
+      showEventModal(ev)
+    })
+  }
+
+  // Modal close handlers
+  if (modalClose && modal) {
+    modalClose.addEventListener('click', hideEventModal)
+    modal.addEventListener('click', e => {
+      if (e.target === modal) hideEventModal()
     })
   }
 }
@@ -251,7 +280,14 @@ function copyJsonToClipboard() {
     })
 }
 
-// Refresh events
+// Small helper: truncate long text for card previews
+function truncate(text, maxLen) {
+  const s = text || ''
+  if (s.length <= maxLen) return s
+  return s.slice(0, maxLen - 1) + '…'
+}
+
+// Refresh events (read-only)
 async function refreshEvents() {
   if (!eventsList) return
 
@@ -260,22 +296,28 @@ async function refreshEvents() {
   try {
     const data = await getEventsNear()
     const events = data?.data?.events || []
+
     if (!events.length) {
       eventsList.innerHTML =
         '<p style="color:#666;font-style:italic;">No events yet. Parse your first event above!</p>'
       return
     }
-    eventsList.innerHTML = events
-      .map(ev => {
-        return `<div class="event-item">
-          <h4>${escapeHtml(ev.name || '(no name)')}</h4>
-          <p>${escapeHtml(ev.description || '')}</p>
-          <p style="font-size:12px;color:#999;">ID: ${escapeHtml(
-            ev.flypost?.eventId || ''
-          )}</p>
-        </div>`
-      })
-      .join('')
+
+    eventCache.clear()
+    const cards = events.map((ev, idx) => {
+      const key = ev.flypost?.eventId || ev.id || `idx_${idx}`
+      eventCache.set(key, ev)
+
+      const name = escapeHtml(ev.name || '(no name)')
+      const descPreview = escapeHtml(truncate(ev.description || '', 220))
+
+      return `<div class="event-item" data-id="${escapeHtml(key)}">
+        <h4>${name}</h4>
+        <p>${descPreview}</p>
+      </div>`
+    })
+
+    eventsList.innerHTML = cards.join('')
   } catch (e) {
     eventsList.innerHTML = `<p style="color:#c00;">Failed to load events: ${escapeHtml(
       e.message || 'error'
@@ -296,6 +338,35 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+}
+
+// ===== Modal helpers =====
+function showEventModal(ev) {
+  if (!modal || !modalTitle || !modalDesc || !modalShare) return
+
+  const name = ev.name || '(no name)'
+  const description = ev.description || 'No description available.'
+
+  modalTitle.textContent = name
+  modalDesc.textContent = description
+  modal.classList.remove('hidden')
+
+  modalShare.onclick = () => {
+    const text = `${name}\n\n${description}`
+    if (!navigator.clipboard) {
+      alert('Clipboard not available in this browser.')
+      return
+    }
+    navigator.clipboard
+      .writeText(text)
+      .then(() => alert('Copied to clipboard!'))
+      .catch(() => alert('Could not copy.'))
+  }
+}
+
+function hideEventModal() {
+  if (!modal) return
+  modal.classList.add('hidden')
 }
 
 // Start app
