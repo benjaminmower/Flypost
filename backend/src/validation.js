@@ -17,11 +17,10 @@ const __dirname = dirname(__filename)
 const schemaPath = join(__dirname, '../schemas/flypost-event-v4.schema.json')
 const schema = JSON.parse(readFileSync(schemaPath, 'utf8'))
 
-// Create AJV instance with removeAdditional option to filter unexpected properties
-// while maintaining compliance for required fields
+// Create AJV instance
+// Schema now allows additional properties for backward compatibility and agent flexibility
 const ajv = new Ajv({ 
-  allErrors: true,
-  removeAdditional: true  // Remove additional properties not defined in schema
+  allErrors: true
 })
 addFormats(ajv)
 
