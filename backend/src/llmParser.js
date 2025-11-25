@@ -112,9 +112,7 @@ function createUserPrompt(text, userContext = {}) {
     contextParts.push(`Current date/time: ${new Date().toISOString()}`)
   }
   
-  if (contextParts.length > 0) {
-    out += `CONTEXT:\n${contextParts.join('\n')}\n\n`
-  }
+  out += `CONTEXT:\n${contextParts.join('\n')}\n\n`
   
   out += `INPUT TEXT:\n${text}\n\n`
   out += `Parse the above text and return a complete, valid Flypost event JSON object with ALL required fields.`
