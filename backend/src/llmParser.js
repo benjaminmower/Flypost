@@ -243,16 +243,17 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
   }
 
   // Validate and normalize dates
-  if (parsedEvent.startDate) {
-    try {
-      const startDate = new Date(parsedEvent.startDate)
-      if (isNaN(startDate.getTime())) {
-        throw new Error('Invalid startDate')
-      }
-      parsedEvent.startDate = startDate.toISOString()
-    } catch (err) {
-      throw new Error(`Invalid startDate format: ${parsedEvent.startDate}`)
+  if (!parsedEvent.startDate) {
+    throw new Error('Parsed event missing required startDate field')
+  }
+  try {
+    const startDate = new Date(parsedEvent.startDate)
+    if (isNaN(startDate.getTime())) {
+      throw new Error('Invalid startDate')
     }
+    parsedEvent.startDate = startDate.toISOString()
+  } catch (err) {
+    throw new Error(`Invalid startDate format: ${parsedEvent.startDate}`)
   }
 
   if (parsedEvent.endDate) {
