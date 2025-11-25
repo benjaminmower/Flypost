@@ -3,7 +3,12 @@
  * Hybrid storage: maintains in-memory store for tests while also persisting to Firestore
  */
 
-import { saveEvent as saveToFirestore, getAllEvents as getFirestoreEvents, isFirestoreEnabled } from './firestoreClient.js'
+import { 
+  saveEvent as saveToFirestore, 
+  getAllEvents as getFirestoreEvents, 
+  isFirestoreEnabled,
+  findEventByCanonicalKey // <--- Import this new function
+} from './firestoreClient.js'
 
 // In-memory event store
 let eventStore = new Map()
@@ -14,30 +19,63 @@ let eventStore = new Map()
  * @returns {Promise<object>} - Stored event with generated ID
  */
 export async function storeEvent(eventData) {
-  const eventId = eventData.flypost.eventId
-  const storedEvent = {
-    ...eventData,
-    id: eventId,
-    storedAt: new Date().toISOString()
+  let finalEvent = { ...eventData }
+  let isUpdate = false
+  let updateCount = 0
+
+  // 1. CHECK: Does this exist in Firestore?
+  // Note: This performs a query on every event ingestion when Firestore is enabled.
+  // For high-volume scenarios, consider implementing a cache layer or batch processing.
+  if (isFirestoreEnabled() && finalEvent.flypost.canonicalKey) {
+    try {
+      const existing = await findEventByCanonicalKey(finalEvent.flypost.canonicalKey)
+      
+      if (existing) {
+        console.log(`🔄 Found existing event ${existing.flypost.eventId} for key ${finalEvent.flypost.canonicalKey}`)
+        isUpdate = true
+        updateCount = (existing.flypost?.updateCount || 0) + 1
+        
+        // MERGE STRATEGY:
+        // 1. Keep the stable identifiers
+        finalEvent.flypost.eventId = existing.flypost.eventId
+        finalEvent.flypost.updateCount = updateCount
+        finalEvent.id = existing.flypost.eventId
+        
+        // 2. Preserve creation timestamps, update modification
+        finalEvent._firestoreMetadata = {
+          ...existing._firestoreMetadata,
+          updatedAt: new Date()
+        }
+        
+        // Note: Hash will be recomputed for the updated event data
+        // The hash.canonicalVersion field is a constant (1) indicating the hash algorithm version,
+        // not an incrementing counter
+      }
+    } catch (err) {
+      console.error('⚠️ Error checking canonical key:', err)
+      // Fallback: Proceed as new create if check fails
+    }
   }
+
+  // 2. Standard Storage Logic
+  const eventId = finalEvent.flypost.eventId
+  finalEvent.storedAt = new Date().toISOString()
   
   // Store in memory
-  eventStore.set(eventId, storedEvent)
+  eventStore.set(eventId, finalEvent)
   
-  console.log(`📦 Stored event in memory: ${eventId} (${eventData.name})`)
-  console.log(`📊 Total events in store: ${eventStore.size}`)
+  console.log(`📦 ${isUpdate ? 'Updated' : 'Stored new'} event in memory: ${eventId} (update #${updateCount})`)
   
-  // Also save to Firestore if enabled
+  // Save to Firestore
   if (isFirestoreEnabled()) {
     try {
-      await saveToFirestore(storedEvent)
+      await saveToFirestore(finalEvent)
     } catch (error) {
-      console.error('⚠️  Firestore save failed, event is in memory only:', error.message)
-      // Don't throw - event is still in memory
+      console.error('⚠️ Firestore save failed:', error.message)
     }
   }
   
-  return storedEvent
+  return finalEvent
 }
 
 /**
