@@ -47,7 +47,7 @@ app.use((req, _res, next) => {
 const WRITE_TOKENS = [
   process.env.FLYPOST_WRITE_TOKEN,   // global token (e.g., "goflypost")
   process.env.VISTA_WRITE_TOKEN,     // Vista-specific token (e.g., "vist@sir")
-  process.env.BHHS_WRITE_TOKEN,      // future brokerage
+  process.env.BHHS_UTAH_WRITE_TOKEN,      // BHHS_UTAH brokerage
   // add more here: process.env.COMPASS_WRITE_TOKEN, etc.
 ].filter(Boolean)
 
