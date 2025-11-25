@@ -79,7 +79,7 @@
           "description": "The UTC timestamp when the event data was submitted to Flypost."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "name": {
       "type": "string",
@@ -270,5 +270,5 @@
       "additionalProperties": false
     }
   },
-  "additionalProperties": false
+  "additionalProperties": true
 }
