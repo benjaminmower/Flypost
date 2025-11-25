@@ -226,6 +226,11 @@ export async function getAllEvents(limit = 100) {
  * @returns {Promise<object|null>}
  */
 export async function findEventByCanonicalKey(canonicalKey) {
+  // Check if Firestore is enabled before attempting query
+  if (!isFirestoreEnabled()) {
+    return null
+  }
+  
   const eventsCollection = getEventsCollection()
   
   try {
