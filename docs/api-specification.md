@@ -120,7 +120,8 @@ Events follow Schema.org Event type with Flypost extensions:
   "organizer": {
     "@type": "Person",
     "name": "John Smith",
-    "email": "john@example.com"
+    "email": "john@example.com",
+    "phone": "+1-555-0123"
   }
 }
 ```
@@ -149,8 +150,6 @@ Events follow Schema.org Event type with Flypost extensions:
 | `description` | string | 1-2000 chars | Event description |
 | `startDate` | string | ISO 8601 | Event start time |
 | `location.address.streetAddress` | string | min 1 char | Street address |
-| `organizer.name` | string | min 1 char | Organizer name |
-| `organizer.email` | string | email format | Contact email |
 
 ### Optional Fields
 | Field | Type | Description |
@@ -158,13 +157,20 @@ Events follow Schema.org Event type with Flypost extensions:
 | `endDate` | string | ISO 8601 end time |
 | `location.name` | string | Location name |
 | `location.geo` | object | Lat/lng coordinates |
-| `organizer.telephone` | string | Contact phone |
+| `organizer.@type` | string | "Person" or "Organization" |
+| `organizer.name` | string | Organizer name |
+| `organizer.email` | string | Contact email |
+| `organizer.phone` | string | Contact phone (preferred) |
+| `organizer.telephone` | string | Deprecated: use `phone` instead |
+| `organizer.licenseId` | string | Agent license ID |
+| `organizer.mlsNumber` | string | MLS listing number |
 | `keywords` | array | Event tags |
+
+**Note**: The `organizer` object has `additionalProperties: true` to support future extensibility. All organizer fields are optional.
 
 ### Excluded Fields
 Fields deliberately excluded from v4:
 - Image galleries and metadata
-- MLS integration fields  
 - Performer arrays
 - Complex event status enums
 - Accessibility metadata
