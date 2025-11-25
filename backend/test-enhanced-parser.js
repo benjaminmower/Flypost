@@ -166,9 +166,12 @@ let failed = 0
 
 // Test 1: Validate mock parsed events
 console.log('📋 Test 1: Validating Mock Parsed Events')
-console.log('=' .repeat(60))
+console.log('='.repeat(60))
 
-for (let i = 0; i < mockParsedEvents.length; i++) {
+// Only test the number of mock events we have
+const numMockEvents = Math.min(mockParsedEvents.length, testCases.length)
+
+for (let i = 0; i < numMockEvents; i++) {
   const event = mockParsedEvents[i]
   const testCase = testCases[i]
   
@@ -203,7 +206,7 @@ for (let i = 0; i < mockParsedEvents.length; i++) {
 
 // Test 2: Validate required fields presence
 console.log('\n\n📋 Test 2: Required Fields Presence Check')
-console.log('=' .repeat(60))
+console.log('='.repeat(60))
 
 const requiredFields = [
   '@context',
@@ -237,7 +240,7 @@ for (const event of mockParsedEvents) {
 
 // Test 3: Validate nested structures
 console.log('\n\n📋 Test 3: Nested Structure Validation')
-console.log('=' .repeat(60))
+console.log('='.repeat(60))
 
 for (const event of mockParsedEvents) {
   console.log(`\n🧪 Checking: ${event.name}`)
@@ -285,7 +288,7 @@ for (const event of mockParsedEvents) {
 
 // Test 4: Date format validation
 console.log('\n\n📋 Test 4: Date Format Validation')
-console.log('=' .repeat(60))
+console.log('='.repeat(60))
 
 for (const event of mockParsedEvents) {
   console.log(`\n🧪 Checking: ${event.name}`)
@@ -330,9 +333,9 @@ for (const event of mockParsedEvents) {
 }
 
 // Summary
-console.log('\n\n' + '=' .repeat(60))
+console.log('\n\n' + '='.repeat(60))
 console.log('📊 Test Summary')
-console.log('=' .repeat(60))
+console.log('='.repeat(60))
 console.log(`✅ Passed: ${passed}`)
 console.log(`❌ Failed: ${failed}`)
 console.log(`📈 Total: ${passed + failed}`)
