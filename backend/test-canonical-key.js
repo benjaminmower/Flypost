@@ -300,7 +300,7 @@ async function runTests() {
     
     if (passed === total) {
       console.log('🎉 All canonical key tests passed!')
-      return true
+      process.exit(0)
     } else {
       console.log('❌ Some tests failed.')
       process.exit(1)

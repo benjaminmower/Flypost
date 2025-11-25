@@ -23,6 +23,8 @@ export async function storeEvent(eventData) {
   let isUpdate = false
 
   // 1. CHECK: Does this exist in Firestore?
+  // Note: This performs a query on every event ingestion when Firestore is enabled.
+  // For high-volume scenarios, consider implementing a cache layer or batch processing.
   if (isFirestoreEnabled() && finalEvent.flypost.canonicalKey) {
     try {
       const existing = await findEventByCanonicalKey(finalEvent.flypost.canonicalKey)
