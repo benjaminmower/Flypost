@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Flypost Event API",
-    "version": "4.0.0-mvp",
+    "version": "4.0.1",
     "description": "Flypost parses natural-language event descriptions into structured Event objects and provides a location-based, multi-tenant query API."
   },
   "servers": [
@@ -238,8 +238,13 @@
           },
           "organizer": {
             "type": "object",
-            "description": "Listing agent or team hosting the open house.",
+            "description": "Listing agent or team hosting the event. All fields are optional.",
             "properties": {
+              "@type": {
+                "type": "string",
+                "enum": ["Person", "Organization"],
+                "description": "The Schema.org type for the organizer."
+              },
               "name": {
                 "type": "string",
                 "description": "Agent or team name as provided by the brokerage."
@@ -251,7 +256,12 @@
               },
               "phone": {
                 "type": "string",
-                "description": "Agent phone number as provided, with no enforced formatting. Stored verbatim."
+                "description": "Agent phone number as provided, with no enforced formatting. Stored verbatim. Preferred over 'telephone'."
+              },
+              "telephone": {
+                "type": "string",
+                "description": "Deprecated: Use 'phone' instead. Legacy field retained for backward compatibility.",
+                "deprecated": true
               },
               "licenseId": {
                 "type": "string",

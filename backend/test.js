@@ -44,7 +44,7 @@ const mockEvent = {
     "@type": "Person",
     "name": "John Smith",
     "email": "john@example.com",
-    "telephone": "+1-555-0123"
+    "phone": "+1-555-0123"
   },
   "keywords": ["furniture", "electronics", "household"]
 }
@@ -179,6 +179,123 @@ function testEventWithHash() {
   }
 }
 
+// Test organizer with only telephone (legacy field)
+function testOrganizerWithTelephone() {
+  console.log('\n🧪 Testing Organizer with telephone (legacy)...')
+  
+  const eventWithTelephone = {
+    ...mockEvent,
+    organizer: {
+      "@type": "Person",
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "telephone": "+1-555-9876"
+    }
+  }
+  
+  const result = validateEventData(eventWithTelephone)
+  
+  if (result.success) {
+    console.log('✅ Event with legacy telephone field validates correctly')
+    return true
+  } else {
+    console.error('❌ Event with telephone validation failed:', result.errors)
+    return false
+  }
+}
+
+// Test organizer with phone, licenseId, and mlsNumber
+function testOrganizerWithNewFields() {
+  console.log('\n🧪 Testing Organizer with phone, licenseId, mlsNumber...')
+  
+  const eventWithNewFields = {
+    ...mockEvent,
+    organizer: {
+      "@type": "Person",
+      "name": "Agent Smith",
+      "email": "agent@realty.com",
+      "phone": "+1-555-1234",
+      "licenseId": "DRE01234567",
+      "mlsNumber": "MLS12345678"
+    }
+  }
+  
+  const result = validateEventData(eventWithNewFields)
+  
+  if (result.success) {
+    // Verify the fields are preserved
+    const org = result.data.organizer
+    if (org.phone === "+1-555-1234" && org.licenseId === "DRE01234567" && org.mlsNumber === "MLS12345678") {
+      console.log('✅ Event with new organizer fields validates correctly')
+      return true
+    } else {
+      console.error('❌ New organizer fields not preserved correctly')
+      return false
+    }
+  } else {
+    console.error('❌ Event with new organizer fields validation failed:', result.errors)
+    return false
+  }
+}
+
+// Test organizer without email (all fields now optional)
+function testOrganizerWithoutEmail() {
+  console.log('\n🧪 Testing Organizer without email (optional fields)...')
+  
+  const eventWithoutEmail = {
+    ...mockEvent,
+    organizer: {
+      "@type": "Person",
+      "name": "No Email Agent",
+      "phone": "+1-555-0000"
+    }
+  }
+  
+  const result = validateEventData(eventWithoutEmail)
+  
+  if (result.success) {
+    console.log('✅ Event with organizer missing email validates correctly')
+    return true
+  } else {
+    console.error('❌ Event without email validation failed:', result.errors)
+    return false
+  }
+}
+
+// Test organizer with additional arbitrary properties (additionalProperties: true)
+function testOrganizerWithAdditionalProperties() {
+  console.log('\n🧪 Testing Organizer with additional properties...')
+  
+  const eventWithExtraProps = {
+    ...mockEvent,
+    organizer: {
+      "@type": "Person",
+      "name": "Future Agent",
+      "email": "future@example.com",
+      "phone": "+1-555-FUTURE",
+      "customField": "some-value",
+      "anotherField": 12345
+    }
+  }
+  
+  const result = validateEventData(eventWithExtraProps)
+  
+  if (result.success) {
+    // Verify additional properties are preserved
+    const org = result.data.organizer
+    if (org.customField === "some-value" && org.anotherField === 12345) {
+      console.log('✅ Event with additional organizer properties validates correctly')
+      return true
+    } else {
+      console.error('❌ Additional organizer properties not preserved')
+      return false
+    }
+  } else {
+    console.error('❌ Event with additional properties validation failed:', result.errors)
+    return false
+  }
+}
+
 // Run all tests
 async function runTests() {
   console.log('🚀 Starting Flypost v4 Backend Tests\n')
@@ -188,6 +305,10 @@ async function runTests() {
       testValidation(),
       testHashComputation(),
       testEventWithHash(),
+      testOrganizerWithTelephone(),
+      testOrganizerWithNewFields(),
+      testOrganizerWithoutEmail(),
+      testOrganizerWithAdditionalProperties(),
       await testStorage(), 
       await testNearQuery(),
       await testMultipleEvents()

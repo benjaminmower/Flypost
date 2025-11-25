@@ -41,6 +41,19 @@ Events follow a minimal JSON-LD schema based on Schema.org with Flypost extensio
 
 See `docs/event-model.md` for complete details.
 
+### Organizer Fields (v4.0.1)
+
+The organizer object supports the following optional fields:
+- `@type`: "Person" or "Organization"
+- `name`: Organizer name
+- `email`: Contact email
+- `phone`: Contact phone (preferred field)
+- `telephone`: Deprecated - use `phone` instead
+- `licenseId`: Agent license ID
+- `mlsNumber`: MLS listing number
+
+**Backward Compatibility**: Events using the legacy `telephone` field are automatically normalized to `phone` during ingestion. Both fields are accepted for validation. The `additionalProperties: true` setting allows future extensibility.
+
 ## Storage
 
 Events are stored in a hybrid system:

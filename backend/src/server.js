@@ -156,6 +156,15 @@ app.post('/api/parse-and-publish', async (req, res) => {
     // 1.25) Normalize dates
     normalizeEventDates(parsedEvent, userContext)
 
+    // 1.3) Normalize organizer phone field (telephone → phone alias)
+    if (parsedEvent.organizer && typeof parsedEvent.organizer === 'object') {
+      const org = parsedEvent.organizer
+      if (!org.phone && org.telephone) {
+        org.phone = org.telephone
+        console.log(`📱 Normalized organizer.telephone → phone: ${org.phone}`)
+      }
+    }
+
     // 1.5) Enforce server-side eventId + timestamp (inside flypost)
     parsedEvent.flypost = parsedEvent.flypost || {}
     parsedEvent.flypost.eventId = `evt_${Math.random()

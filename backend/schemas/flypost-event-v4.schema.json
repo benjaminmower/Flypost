@@ -191,12 +191,7 @@
     },
     "organizer": {
       "type": "object",
-      "description": "The person or organization organizing the event.",
-      "required": [
-        "@type",
-        "name",
-        "email"
-      ],
+      "description": "The person or organization organizing the event. All fields are optional to support various data sources.",
       "properties": {
         "@type": {
           "type": "string",
@@ -213,12 +208,24 @@
           "format": "email",
           "description": "The email address of the organizer."
         },
+        "phone": {
+          "type": "string",
+          "description": "The phone number of the organizer. Stored verbatim with no enforced formatting."
+        },
         "telephone": {
-          "type": "string", 
-          "description": "The telephone number of the organizer."
+          "type": "string",
+          "description": "Deprecated: Use 'phone' instead. Legacy telephone number field retained for backward compatibility."
+        },
+        "licenseId": {
+          "type": "string",
+          "description": "The license ID of the organizer (e.g., real estate agent license number)."
+        },
+        "mlsNumber": {
+          "type": "string",
+          "description": "The MLS listing number associated with the organizer's listing."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "keywords": {
       "type": "array",
