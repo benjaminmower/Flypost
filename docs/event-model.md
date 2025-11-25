@@ -43,7 +43,9 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
     "@type": "Person",
     "name": "John Smith",
     "email": "john@example.com",
-    "telephone": "+1-555-0123"
+    "phone": "+1-555-0123",
+    "licenseId": "DRE01234567",
+    "mlsNumber": "MLS12345678"
   },
   "keywords": ["furniture", "electronics", "household"],
   "hash": {
@@ -64,7 +66,7 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
 - `description`: Event description (1-2000 characters)
 - `startDate`: ISO 8601 datetime
 - `location`: Place object with address
-- `organizer`: Person or Organization with name and email
+- `organizer`: Person or Organization (all fields optional)
 
 ### Flypost Extensions
 - `flypost.eventId`: Unique identifier (8-64 characters, alphanumeric + _ -)
@@ -81,7 +83,13 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
 - `endDate`: Event end datetime
 - `location.name`: Friendly location name
 - `location.geo`: Latitude/longitude coordinates
-- `organizer.telephone`: Contact phone number
+- `organizer.@type`: "Person" or "Organization" (defaults to "Person" if not specified)
+- `organizer.name`: Organizer name
+- `organizer.email`: Contact email address
+- `organizer.phone`: Contact phone number (preferred field, stored verbatim)
+- `organizer.telephone`: Deprecated - use `phone` instead. Legacy field retained for backward compatibility.
+- `organizer.licenseId`: Real estate agent license ID or similar
+- `organizer.mlsNumber`: MLS listing number
 - `keywords`: Array of tags/keywords
 - `hash`: Cryptographic hash object for data integrity and DLT anchoring
   - `hash.algorithm`: "SHA-256"
@@ -89,6 +97,8 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
   - `hash.value`: 64-character hexadecimal hash
   - `hash.canonicalVersion`: Integer version of canonical representation (currently 1)
   - Note: Hash is computed by the backend after validation, not by the LLM parser
+
+**Note**: The organizer object supports `additionalProperties: true`, allowing arbitrary additional fields for future extensibility.
 
 ## Categories
 
