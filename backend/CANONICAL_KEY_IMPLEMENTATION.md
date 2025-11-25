@@ -127,7 +127,7 @@ Type: Ascending
 2. **Natural Updates**: Just re-ingest the event to update it
 3. **Version Tracking**: `canonicalVersion` tracks how many times updated
 4. **Multi-tenant Safe**: Brokerage ID in key prevents cross-tenant conflicts
-5. **Idempotent**: Ingesting the same event multiple times is safe
+5. **Multiple ingestions**: Re-ingesting the same event updates the existing record while incrementing the version counter
 6. **Backward Compatible**: Works with existing events without canonical keys
 
 ## Future Enhancements
