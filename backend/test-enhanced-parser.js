@@ -106,8 +106,8 @@ const mockParsedEvents = [
     },
     'name': 'Open House - Beautiful 3BR Home',
     'description': 'Open house Sunday 2-4pm, beautiful 3 bedroom home at 456 Oak Ave, Santa Monica CA 90405. Agent: Jane Smith, phone 555-1234, MLS# 12345',
-    'startDate': new Date(Date.now() + 172800000).toISOString().replace(/T.*/, 'T14:00:00.000Z'),
-    'endDate': new Date(Date.now() + 172800000).toISOString().replace(/T.*/, 'T16:00:00.000Z'),
+    'startDate': (() => { const d = new Date(Date.now() + 172800000); d.setUTCHours(14, 0, 0, 0); return d.toISOString(); })(),
+    'endDate': (() => { const d = new Date(Date.now() + 172800000); d.setUTCHours(16, 0, 0, 0); return d.toISOString(); })(),
     'location': {
       '@type': 'Place',
       'name': '456 Oak Ave',
