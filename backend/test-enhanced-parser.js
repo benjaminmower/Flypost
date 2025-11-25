@@ -74,8 +74,8 @@ const mockParsedEvents = [
     },
     'name': 'Saturday Garage Sale',
     'description': 'Garage sale on Saturday from 8am to 2pm at 123 Main St, Springfield IL. Selling furniture and electronics. Contact John at john@example.com',
-    'startDate': new Date(Date.now() + 86400000).toISOString().replace(/T.*/, 'T08:00:00.000Z'),
-    'endDate': new Date(Date.now() + 86400000).toISOString().replace(/T.*/, 'T14:00:00.000Z'),
+    'startDate': (() => { const d = new Date(Date.now() + 86400000); d.setUTCHours(8, 0, 0, 0); return d.toISOString(); })(),
+    'endDate': (() => { const d = new Date(Date.now() + 86400000); d.setUTCHours(14, 0, 0, 0); return d.toISOString(); })(),
     'location': {
       '@type': 'Place',
       'name': '123 Main St',
