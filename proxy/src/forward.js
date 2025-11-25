@@ -17,7 +17,7 @@ const USE_ID_TOKEN = process.env.PROXY_USE_ID_TOKEN !== 'false'
 
 // ---- Static write tokens (add more brokerages here) ----
 const VISTA_TOKEN = process.env.VISTA_WRITE_TOKEN || ''
-const BHHS_TOKEN = process.env.BHHS_WRITE_TOKEN || ''
+const BHHS_TOKEN = process.env.BHHS_UTAH_WRITE_TOKEN || ''
 const GLOBAL_TOKEN = process.env.FLYPOST_WRITE_TOKEN || ''
 
 // List of *values* that are accepted as write tokens
