@@ -22,6 +22,9 @@ export function computeCanonicalKey(event, brokerageId) {
 
   // Normalize: lowercase, remove special chars, trim
   // Example: "123 Main St, City" -> "123mainst-city"
+  // Note: This intentionally removes ALL special characters (including spaces, dots, hyphens)
+  // to create a consistent canonical key. Addresses like "St. Paul" and "St Paul" will
+  // generate the same key, which is desired behavior for deduplication.
   const normalizedAddress = parts
     .map(p => (p || '').toString().toLowerCase().replace(/[^a-z0-9]/g, ''))
     .filter(Boolean) // remove empty parts

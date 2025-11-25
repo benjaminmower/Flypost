@@ -208,7 +208,7 @@ async function runTests() {
       console.log('🎉 All integration tests passed!')
       console.log('\nℹ️  Note: Full "Edit instead of Create" behavior requires Firestore.')
       console.log('   These tests verify the canonical key infrastructure is in place.')
-      return true
+      process.exit(0)
     } else {
       console.log('❌ Some tests failed.')
       process.exit(1)
