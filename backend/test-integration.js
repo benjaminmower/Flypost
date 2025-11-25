@@ -18,7 +18,7 @@ dotenv.config()
 const hasOpenAIKey = !!process.env.OPENAI_API_KEY
 
 console.log('🚀 Enhanced Parser Integration Test')
-console.log('=' .repeat(70))
+console.log('='.repeat(70))
 
 if (!hasOpenAIKey) {
   console.log('⚠️  OPENAI_API_KEY not found - running mock validation only')
