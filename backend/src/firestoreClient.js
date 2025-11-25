@@ -213,6 +213,39 @@ export async function getAllEvents(limit = 100) {
 }
 
 /**
+ * Find a single event by its canonical key.
+ * Requires a Firestore index on 'flypost.canonicalKey'.
+ * @param {string} canonicalKey 
+ * @returns {Promise<object|null>}
+ */
+export async function findEventByCanonicalKey(canonicalKey) {
+  const db = getFirestoreClient()
+  const eventsCollection = db.collection('events')
+  
+  try {
+    const snapshot = await eventsCollection
+      .where('flypost.canonicalKey', '==', canonicalKey)
+      .limit(1)
+      .get()
+
+    if (snapshot.empty) return null
+    return snapshot.docs[0].data()
+  } catch (error) {
+    console.error('❌ Firestore findEventByCanonicalKey error:', error)
+    throw new Error(`Failed to find event by canonical key: ${error.message}`)
+  }
+}
+
+/**
+ * Get events collection reference
+ * @returns {FirebaseFirestore.CollectionReference} - Events collection reference
+ */
+function getEventsCollection() {
+  const db = getFirestoreClient()
+  return db.collection('events')
+}
+
+/**
  * Check if Firestore is enabled
  * @returns {boolean} - True if Firestore is configured
  */

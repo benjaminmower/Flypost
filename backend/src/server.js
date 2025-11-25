@@ -13,6 +13,7 @@ import { validateEventData, getSchema } from './validation.js'
 import { storeEvent, getEventsNear, getStorageStats, clearEvents } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
+import { computeCanonicalKey } from './utils/canonicalKey.js'
 
 dotenv.config()
 
@@ -153,6 +154,21 @@ app.post('/api/parse-and-publish', async (req, res) => {
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
 
+    // 1.5) NORMALIZE & KEYING (NEW)
+    // Compute the canonical key immediately so it travels with the event
+    const canonicalKey = computeCanonicalKey(parsedEvent, brokerageId)
+    
+    if (canonicalKey) {
+      parsedEvent.flypost = {
+        ...parsedEvent.flypost,
+        canonicalKey: canonicalKey,
+        brokerageId: brokerageId
+      }
+      console.log(`🔑 Generated Canonical Key: ${canonicalKey}`)
+    } else {
+      console.warn('⚠️ Could not generate canonical key (missing address?)')
+    }
+
     // 1.25) Normalize dates
     normalizeEventDates(parsedEvent, userContext)
 
@@ -166,11 +182,13 @@ app.post('/api/parse-and-publish', async (req, res) => {
     }
 
     // 1.5) Enforce server-side eventId + timestamp (inside flypost)
-    parsedEvent.flypost = parsedEvent.flypost || {}
-    parsedEvent.flypost.eventId = `evt_${Math.random()
-      .toString(36)
-      .slice(2, 11)}_${Date.now()}`
-    parsedEvent.flypost.submissionTimestamp = new Date().toISOString()
+    parsedEvent.flypost = {
+      ...parsedEvent.flypost,
+      eventId: `evt_${Math.random()
+        .toString(36)
+        .slice(2, 11)}_${Date.now()}`,
+      submissionTimestamp: new Date().toISOString()
+    }
 
     // 2) Validate the *schema-only* event (no brokerageId yet)
     const validation = validateEventData(parsedEvent)
@@ -367,6 +385,17 @@ if (process.env.NODE_ENV !== 'production') {
     }
 
     const validatedEvent = validation.data
+    
+    // Compute canonical key
+    const canonicalKey = computeCanonicalKey(validatedEvent, brokerageId)
+    if (canonicalKey) {
+      validatedEvent.flypost = {
+        ...validatedEvent.flypost,
+        canonicalKey: canonicalKey,
+        brokerageId: brokerageId
+      }
+    }
+    
     const eventHash = computeEventHash(validatedEvent)
 
     const eventToStore = {
