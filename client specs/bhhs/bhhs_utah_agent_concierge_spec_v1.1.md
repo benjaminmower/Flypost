@@ -131,6 +131,7 @@ Body:
 ```json
 {
   "naturalLanguageInput": "<summary and optional remarks>",
+  "brokerageId": "bhhs_utah",
   "userContext": {
     "source": "bhhs-utah-agent-gpt",
     "channel": "gpt-actions"
