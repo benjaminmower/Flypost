@@ -55,13 +55,20 @@ export async function saveEvent(event) {
     // Save the event using eventId as document ID for idempotency
     const docRef = eventsCollection.doc(eventId)
     
-    // Add server timestamp for tracking
+    // Prepare metadata: preserve existing createdAt if present, always update updatedAt
+    const metadata = event._firestoreMetadata?.createdAt
+      ? {
+          createdAt: event._firestoreMetadata.createdAt, // Preserve existing
+          updatedAt: Firestore.FieldValue.serverTimestamp()
+        }
+      : {
+          createdAt: Firestore.FieldValue.serverTimestamp(), // New event
+          updatedAt: Firestore.FieldValue.serverTimestamp()
+        }
+    
     const eventWithMetadata = {
       ...event,
-      _firestoreMetadata: {
-        createdAt: Firestore.FieldValue.serverTimestamp(),
-        updatedAt: Firestore.FieldValue.serverTimestamp()
-      }
+      _firestoreMetadata: metadata
     }
 
     await docRef.set(eventWithMetadata)
@@ -219,8 +226,7 @@ export async function getAllEvents(limit = 100) {
  * @returns {Promise<object|null>}
  */
 export async function findEventByCanonicalKey(canonicalKey) {
-  const db = getFirestoreClient()
-  const eventsCollection = db.collection('events')
+  const eventsCollection = getEventsCollection()
   
   try {
     const snapshot = await eventsCollection

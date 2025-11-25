@@ -4,8 +4,7 @@
  */
 
 import { computeCanonicalKey } from './src/utils/canonicalKey.js'
-import { storeEvent, clearEvents, getEventById } from './src/storage.js'
-import { validateEventData } from './src/validation.js'
+import { storeEvent, clearEvents } from './src/storage.js'
 import { computeEventHash } from './src/hashUtils.js'
 
 // Mock event data with complete address
