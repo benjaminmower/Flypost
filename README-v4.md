@@ -9,8 +9,19 @@ Flypost v4 represents a minimal, machine-to-machine event ingestion and query sy
 - **Backend**: Minimal Express.js server with 3 endpoints
 - **Frontend**: Simple HTML interface with textarea input
 - **Storage**: Hybrid in-memory + Firestore persistence
-- **AI**: OpenAI GPT-4 for event parsing
+- **AI**: Enhanced OpenAI GPT-4 parser with improved prompts and validation
 - **Integrity**: SHA-256 hashing for event data verification and future DLT anchoring
+
+### Enhanced Parsing Logic (v3)
+
+The backend includes an enhanced natural-language parser with:
+- **Better prompt engineering**: Detailed field extraction rules for higher accuracy
+- **Enhanced validation**: Comprehensive field checking before LLM fallback
+- **Context awareness**: Support for location defaults, timezones, and date context
+- **Robust normalization**: Automatic field structure enforcement and date validation
+- **Smart fallback**: GPT-4o-mini primary with GPT-4o fallback for complex cases
+
+See [`backend/ENHANCED_PARSING.md`](backend/ENHANCED_PARSING.md) for detailed documentation.
 
 ## Endpoints
 
