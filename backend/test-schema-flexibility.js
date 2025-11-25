@@ -299,7 +299,7 @@ function testAdditionalPropertiesPreserved() {
 }
 
 // Run all tests
-async function runTests() {
+function runTests() {
   console.log('🚀 Starting Schema Flexibility Tests\n')
   
   try {
