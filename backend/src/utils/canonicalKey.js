@@ -33,5 +33,6 @@ export function computeCanonicalKey(event, brokerageId) {
   if (!normalizedAddress) return null
 
   // Append brokerageId to namespace the uniqueness
-  return `${normalizedAddress}|${brokerageId}`
+  // Encode brokerageId to prevent delimiter collision with '|' character
+  return `${normalizedAddress}|${encodeURIComponent(brokerageId)}`
 }

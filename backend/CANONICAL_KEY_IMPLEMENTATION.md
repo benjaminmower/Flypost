@@ -14,8 +14,9 @@ This implementation introduces a **canonical key** system for event ingestion th
 When Firestore is enabled:
 - The system checks for existing events using the canonical key
 - If found, it preserves the stable `eventId` while updating the event data
-- Increments the `canonicalVersion` in the hash
+- Increments the `updateCount` in `flypost` to track the number of updates
 - Preserves creation timestamp, updates modification timestamp
+- The hash is recomputed for the updated event data (hash.canonicalVersion remains 1, indicating the hash algorithm version)
 
 ### 3. Brokerage Isolation
 - The canonical key includes the `brokerageId` to namespace uniqueness
@@ -125,9 +126,9 @@ Type: Ascending
 
 1. **Stable Event IDs**: Once created, an event's ID never changes
 2. **Natural Updates**: Just re-ingest the event to update it
-3. **Version Tracking**: `canonicalVersion` tracks how many times updated
+3. **Version Tracking**: `updateCount` in `flypost` tracks the number of times an event has been updated
 4. **Multi-tenant Safe**: Brokerage ID in key prevents cross-tenant conflicts
-5. **Multiple ingestions**: Re-ingesting the same event updates the existing record while incrementing the version counter
+5. **Multiple ingestions**: Re-ingesting the same event updates the existing record while incrementing the update counter
 6. **Backward Compatible**: Works with existing events without canonical keys
 
 ## Future Enhancements

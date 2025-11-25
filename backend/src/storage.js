@@ -21,6 +21,7 @@ let eventStore = new Map()
 export async function storeEvent(eventData) {
   let finalEvent = { ...eventData }
   let isUpdate = false
+  let updateCount = 0
 
   // 1. CHECK: Does this exist in Firestore?
   // Note: This performs a query on every event ingestion when Firestore is enabled.
@@ -32,24 +33,23 @@ export async function storeEvent(eventData) {
       if (existing) {
         console.log(`🔄 Found existing event ${existing.flypost.eventId} for key ${finalEvent.flypost.canonicalKey}`)
         isUpdate = true
+        updateCount = (existing.flypost?.updateCount || 0) + 1
         
         // MERGE STRATEGY:
         // 1. Keep the stable identifiers
         finalEvent.flypost.eventId = existing.flypost.eventId
+        finalEvent.flypost.updateCount = updateCount
         finalEvent.id = existing.flypost.eventId
         
-        // 2. Increment Version
-        finalEvent.hash = {
-          ...finalEvent.hash,
-          id: existing.flypost.eventId, // ensure hash ID matches stable ID
-          canonicalVersion: (existing.hash?.canonicalVersion || 1) + 1
-        }
-        
-        // 3. Preserve creation timestamps, update modification
+        // 2. Preserve creation timestamps, update modification
         finalEvent._firestoreMetadata = {
           ...existing._firestoreMetadata,
           updatedAt: new Date()
         }
+        
+        // Note: Hash will be recomputed for the updated event data
+        // The hash.canonicalVersion field is a constant (1) indicating the hash algorithm version,
+        // not an incrementing counter
       }
     } catch (err) {
       console.error('⚠️ Error checking canonical key:', err)
@@ -64,7 +64,7 @@ export async function storeEvent(eventData) {
   // Store in memory
   eventStore.set(eventId, finalEvent)
   
-  console.log(`📦 ${isUpdate ? 'Updated' : 'Stored new'} event in memory: ${eventId} (v${finalEvent.hash?.canonicalVersion || 1})`)
+  console.log(`📦 ${isUpdate ? 'Updated' : 'Stored new'} event in memory: ${eventId} (update #${updateCount})`)
   
   // Save to Firestore
   if (isFirestoreEnabled()) {
