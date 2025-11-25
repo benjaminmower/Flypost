@@ -55,13 +55,20 @@ export async function saveEvent(event) {
     // Save the event using eventId as document ID for idempotency
     const docRef = eventsCollection.doc(eventId)
     
-    // Add server timestamp for tracking
+    // Prepare metadata: preserve existing createdAt if present, always update updatedAt
+    const metadata = event._firestoreMetadata?.createdAt
+      ? {
+          createdAt: event._firestoreMetadata.createdAt, // Preserve existing
+          updatedAt: Firestore.FieldValue.serverTimestamp()
+        }
+      : {
+          createdAt: Firestore.FieldValue.serverTimestamp(), // New event
+          updatedAt: Firestore.FieldValue.serverTimestamp()
+        }
+    
     const eventWithMetadata = {
       ...event,
-      _firestoreMetadata: {
-        createdAt: Firestore.FieldValue.serverTimestamp(),
-        updatedAt: Firestore.FieldValue.serverTimestamp()
-      }
+      _firestoreMetadata: metadata
     }
 
     await docRef.set(eventWithMetadata)
@@ -210,6 +217,43 @@ export async function getAllEvents(limit = 100) {
     console.error('❌ Firestore get all events error:', error)
     throw new Error(`Failed to retrieve events from Firestore: ${error.message}`)
   }
+}
+
+/**
+ * Find a single event by its canonical key.
+ * Requires a Firestore index on 'flypost.canonicalKey'.
+ * @param {string} canonicalKey 
+ * @returns {Promise<object|null>}
+ */
+export async function findEventByCanonicalKey(canonicalKey) {
+  // Check if Firestore is enabled before attempting query
+  if (!isFirestoreEnabled()) {
+    return null
+  }
+  
+  const eventsCollection = getEventsCollection()
+  
+  try {
+    const snapshot = await eventsCollection
+      .where('flypost.canonicalKey', '==', canonicalKey)
+      .limit(1)
+      .get()
+
+    if (snapshot.empty) return null
+    return snapshot.docs[0].data()
+  } catch (error) {
+    console.error('❌ Firestore findEventByCanonicalKey error:', error)
+    throw new Error(`Failed to find event by canonical key: ${error.message}`)
+  }
+}
+
+/**
+ * Get events collection reference
+ * @returns {FirebaseFirestore.CollectionReference} - Events collection reference
+ */
+function getEventsCollection() {
+  const db = getFirestoreClient()
+  return db.collection('events')
 }
 
 /**
