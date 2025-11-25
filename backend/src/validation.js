@@ -18,7 +18,7 @@ const schemaPath = join(__dirname, '../schemas/flypost-event-v4.schema.json')
 const schema = JSON.parse(readFileSync(schemaPath, 'utf8'))
 
 // Create AJV instance
-// Schema now allows additional properties for backward compatibility and agent flexibility
+// Note: Flexibility for additional properties is controlled by the schema file, not by the AJV instance configuration.
 const ajv = new Ajv({ 
   allErrors: true
 })
