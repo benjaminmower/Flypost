@@ -30,7 +30,6 @@
         }
       }
     },
-
     "/api/parse-and-publish": {
       "post": {
         "summary": "Parse a natural-language event and publish it",
@@ -85,7 +84,6 @@
         ]
       }
     },
-
     "/v1/events/near": {
       "get": {
         "summary": "Get events near a coordinate",
@@ -146,7 +144,6 @@
       }
     }
   },
-
   "components": {
     "securitySchemes": {
       "WriteTokenAuth": {
@@ -156,7 +153,6 @@
         "description": "Required write token for POST requests."
       }
     },
-
     "schemas": {
       "HealthResponse": {
         "type": "object",
@@ -174,7 +170,6 @@
           "uptime": { "type": "number" }
         }
       },
-
       "ParseAndPublishRequest": {
         "type": "object",
         "properties": {
@@ -190,7 +185,6 @@
         },
         "required": ["naturalLanguageInput", "brokerageId"]
       },
-
       "ParseAndPublishResponse": {
         "type": "object",
         "properties": {
@@ -204,7 +198,6 @@
           }
         }
       },
-
       "EventsNearResponse": {
         "type": "object",
         "properties": {
@@ -222,7 +215,6 @@
           }
         }
       },
-
       "FlypostEvent": {
         "type": "object",
         "description": "Simplified Event + Flypost metadata.",
@@ -231,7 +223,6 @@
           "description": { "type": "string" },
           "startDate": { "type": "string", "format": "date-time" },
           "endDate": { "type": "string", "format": "date-time", "nullable": true },
-
           "location": {
             "type": "object",
             "properties": {
@@ -245,16 +236,34 @@
             },
             "additionalProperties": true
           },
-
           "organizer": {
             "type": "object",
+            "description": "Listing agent or team hosting the open house.",
             "properties": {
-              "name": { "type": "string" },
-              "email": { "type": "string" }
+              "name": {
+                "type": "string",
+                "description": "Agent or team name as provided by the brokerage."
+              },
+              "email": {
+                "type": "string",
+                "format": "email",
+                "description": "Agent email, if provided."
+              },
+              "phone": {
+                "type": "string",
+                "description": "Agent phone number as provided, with no enforced formatting. Stored verbatim."
+              },
+              "licenseId": {
+                "type": "string",
+                "description": "Agent license ID, if provided."
+              },
+              "mlsNumber": {
+                "type": "string",
+                "description": "MLS listing number, if provided."
+              }
             },
             "additionalProperties": true
           },
-
           "flypost": {
             "type": "object",
             "properties": {
@@ -266,7 +275,6 @@
             "required": ["eventId", "brokerageId"],
             "additionalProperties": true
           },
-
           "hash": {
             "type": "object",
             "properties": {
@@ -278,7 +286,6 @@
         },
         "required": ["name", "startDate", "location", "flypost"]
       },
-
       "ErrorResponse": {
         "type": "object",
         "properties": {
