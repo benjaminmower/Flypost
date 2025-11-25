@@ -65,8 +65,14 @@ Parameters allowed:
 - `lat`
 - `lng`
 - `radius` (optional)
+- `brokerageId`
 
 The brokerage header (`x-flypost-brokerage-id: bhhs_utah`) is automatically applied.
+
+**Search Rules:**
+1. Always filter results to only `brokerageId: bhhs_utah` to ensure tenancy isolation.
+2. The API may return events from multiple brokerages - you must filter client-side.
+3. Never display events from other brokerages.
 
 ### 4.2 After Retrieval
 The Concierge must:
@@ -112,7 +118,8 @@ Never convert neighborhoods or cities to coordinates.
 When calling `GET /v1/events/near`:
 1. Only send parameters explicitly provided (lat/lng, radius).  
 2. If radius missing → default to **5 miles**.  
-3. Do NOT:  
+3. Always include `brokerageId=bhhs_utah` to ensure tenancy isolation.
+4. Do NOT:  
    - invent coordinates  
    - infer ZIP codes  
    - convert neighborhood names to coordinates  
