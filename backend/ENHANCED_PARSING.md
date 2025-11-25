@@ -130,9 +130,12 @@ The enhanced parser can handle:
 
 ## Testing
 
-The enhanced parser includes comprehensive test coverage:
+The enhanced parser includes comprehensive test coverage with multiple test files:
 
-### Test File: `test-enhanced-parser.js`
+### Test Files
+
+#### 1. `test-enhanced-parser.js` - Schema Validation Tests
+Tests schema compliance of mock parsed events.
 
 **Test Categories:**
 1. **Mock Event Validation**: Validates schema compliance of parsed events
@@ -150,6 +153,47 @@ node test-enhanced-parser.js
 - 12 tests covering various natural language patterns
 - 100% pass rate for schema-compliant outputs
 - Validation of all required and nested fields
+
+#### 2. `test-integration.js` - End-to-End Integration Tests
+Tests the complete parsing pipeline from natural language to validated payload.
+
+**Features:**
+- Tests 5 different event types with realistic inputs
+- Validates complete parse → validate → hash flow
+- Works with or without OpenAI API key (mock mode)
+- Tests context handling (location, timezone)
+
+**Run Tests:**
+```bash
+cd backend
+# Without API key (mock validation)
+node test-integration.js
+
+# With API key (full LLM parsing)
+OPENAI_API_KEY=your_key node test-integration.js
+```
+
+**Test Cases:**
+- Garage sale with time range
+- Open house with real estate details
+- Job posting with location context
+- Community alert with date range
+- Happy hour with recurring pattern
+
+#### 3. `test.js` - Core Backend Tests
+Original backend tests ensuring backward compatibility.
+
+**Run Tests:**
+```bash
+cd backend
+node test.js
+```
+
+**Coverage:**
+- Event validation
+- Hash computation
+- Storage operations
+- Organizer field handling
 
 ## Performance Characteristics
 
