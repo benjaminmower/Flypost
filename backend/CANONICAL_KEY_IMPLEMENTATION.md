@@ -15,7 +15,7 @@ When Firestore is enabled:
 - The system checks for existing events using the canonical key
 - If found, it preserves the stable `eventId` while updating the event data
 - Increments the `canonicalVersion` in the hash
-- Preserves creation timestamps, updates modification timestamp
+- Preserves creation timestamp, updates modification timestamp
 
 ### 3. Brokerage Isolation
 - The canonical key includes the `brokerageId` to namespace uniqueness
