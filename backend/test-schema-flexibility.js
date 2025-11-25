@@ -90,8 +90,7 @@ function testRequiredFieldsStillEnforced() {
   const eventMissingEventId = {
     ...baseEvent,
     flypost: {
-      ...baseEvent.flypost,
-      eventId: undefined
+      ...baseEvent.flypost
     }
   }
   delete eventMissingEventId.flypost.eventId
@@ -109,8 +108,7 @@ function testRequiredFieldsStillEnforced() {
   const eventMissingCategory = {
     ...baseEvent,
     flypost: {
-      ...baseEvent.flypost,
-      category: undefined
+      ...baseEvent.flypost
     }
   }
   delete eventMissingCategory.flypost.category
@@ -261,6 +259,45 @@ function testRichNaturalLanguageInput() {
   }
 }
 
+function testAdditionalPropertiesPreserved() {
+  console.log('\n🧪 Testing that additional properties are preserved (not filtered)...')
+  
+  const eventWithExtras = {
+    ...baseEvent,
+    "customRootProp": "root-value",
+    flypost: {
+      ...baseEvent.flypost,
+      "customFlypostProp": "flypost-value",
+      "agentMetadata": {
+        "key": "value"
+      }
+    }
+  }
+  
+  const result = validateEventData(eventWithExtras)
+  
+  if (result.success) {
+    // Verify additional properties are preserved in validated data
+    if (result.data.customRootProp === "root-value" &&
+        result.data.flypost.customFlypostProp === "flypost-value" &&
+        result.data.flypost.agentMetadata &&
+        result.data.flypost.agentMetadata.key === "value") {
+      console.log('✅ Additional properties are preserved in validated data')
+      return true
+    } else {
+      console.error('❌ Additional properties were not preserved')
+      console.error('Expected customRootProp:', eventWithExtras.customRootProp)
+      console.error('Got:', result.data.customRootProp)
+      console.error('Expected customFlypostProp:', eventWithExtras.flypost.customFlypostProp)
+      console.error('Got:', result.data.flypost.customFlypostProp)
+      return false
+    }
+  } else {
+    console.error('❌ Validation failed for event with extras:', result.errors)
+    return false
+  }
+}
+
 // Run all tests
 async function runTests() {
   console.log('🚀 Starting Schema Flexibility Tests\n')
@@ -273,7 +310,8 @@ async function runTests() {
       testInvalidRequiredFieldsRejected(),
       testCombinedAdditionalAndRequiredFields(),
       testBackwardCompatibility(),
-      testRichNaturalLanguageInput()
+      testRichNaturalLanguageInput(),
+      testAdditionalPropertiesPreserved()
     ]
     
     const passed = results.filter(r => r).length
