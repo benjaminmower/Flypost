@@ -1,9 +1,16 @@
-/* v2
- * Flypost v4 - Always-On Lean Parser with Automatic Fallback
+/* v3
+ * Flypost v4 - Enhanced Always-On Parser with Better Field Extraction
  *
+ * ENHANCEMENTS:
+ * - Improved prompt engineering for better schema compliance
+ * - Enhanced validation with detailed field checking before fallback
+ * - Better context handling (location, timezone, current date)
+ * - Comprehensive field normalization and validation
+ * - Robust error handling with descriptive messages
+ * 
+ * FEATURES:
  * - Primary model: gpt-4o-mini (cheap + fast)
- * - Automatic fallback: gpt-4o (only for malformed JSON or missing fields)
- * - Compact schema (no token waste)
+ * - Automatic fallback: gpt-4o (only for malformed JSON or missing required fields)
  * - Production-ready: no dev mode switching, no config toggles
  */
 
@@ -29,34 +36,88 @@ function initializeOpenAI() {
   openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 }
 
-// Shared system prompt
+// Enhanced system prompt with better field extraction guidance
 const systemPrompt = `You are an expert event data formatter for Flypost v4.
 Output ONLY valid JSON matching the Flypost schema. No markdown, no prose, no commentary.
 
-Rules:
-- Only include fields required by the schema.
-- If optional fields are not present, omit them.
-- Parse dates to ISO 8601.
-- organizer.@type defaults to "Person" unless clearly an Organization.
-- category must be one of:
-  ["apartments","garage-sales","open-houses","job-postings","live-events","community-alerts","happy-hours","missing-pets"]
-- Include location.geo ONLY if lat/lng are explicitly provided.
-- Phone numbers: store exactly as given.
-- You may generate flypost.eventId if missing: "evt_" + random suffix.
-- You may set flypost.submissionTimestamp to current UTC time.
-- Defaults: realTimeData=true, crawlable=true, queryable=true.`
+CRITICAL SCHEMA REQUIREMENTS:
+- ALL required fields MUST be present: @context, @type, flypost, name, description, startDate, location, organizer
+- Use EXACT field names as specified in the schema
 
-// User prompt
+PARSING RULES:
+
+1. EVENT IDENTIFICATION:
+   - name: Extract the event title or create a descriptive name (max 200 chars)
+   - description: Detailed event information (1-2000 chars). If brief, expand with relevant details.
+   - category: Choose the BEST match from ["apartments","garage-sales","open-houses","job-postings","live-events","community-alerts","happy-hours","missing-pets"]
+
+2. DATE/TIME HANDLING:
+   - startDate: REQUIRED. Parse to ISO 8601 (YYYY-MM-DDTHH:MM:SS.000Z)
+   - endDate: Optional. Include if mentioned, otherwise omit
+   - If only date given (no time), default to 09:00:00.000Z
+   - If relative dates ("tomorrow", "next Saturday"), calculate from current time
+
+3. LOCATION (REQUIRED):
+   - location.@type: Always "Place"
+   - location.name: Extract if mentioned, otherwise use streetAddress
+   - location.address.@type: Always "PostalAddress"
+   - location.address.streetAddress: REQUIRED. Extract street address
+   - location.address.addressLocality: City (extract if present)
+   - location.address.addressRegion: State/province (extract if present, use 2-letter code if US)
+   - location.address.postalCode: ZIP/postal code (extract if present)
+   - location.address.addressCountry: Country (default "US" if context suggests USA)
+   - location.geo: Include ONLY if latitude/longitude explicitly provided
+
+4. ORGANIZER (REQUIRED):
+   - organizer.@type: "Person" for individuals, "Organization" for companies/groups
+   - organizer.name: Extract if mentioned, use "Event Organizer" as fallback
+   - organizer.email: Extract if valid email found
+   - organizer.phone: Extract and store EXACTLY as given (with or without formatting)
+   - organizer.licenseId: Real estate license number if mentioned
+   - organizer.mlsNumber: MLS listing number if mentioned
+
+5. OPTIONAL FIELDS:
+   - keywords: Array of relevant tags if you can infer them from content
+   - Only include optional fields if you have valid data
+
+6. FLYPOST METADATA:
+   - Generate flypost.eventId: "evt_" + random alphanumeric
+   - Set flypost.submissionTimestamp to current UTC ISO string
+   - Set flypost.realTimeData: true
+   - Set flypost.crawlable: true
+   - Set flypost.queryable: true
+
+QUALITY CHECKS:
+- Ensure description is informative (minimum 10 chars)
+- Validate date formats are proper ISO 8601
+- Ensure location has at minimum a streetAddress
+- If information is missing, use reasonable defaults rather than omitting required fields`
+
+// Enhanced user prompt with better context handling
 function createUserPrompt(text, userContext = {}) {
   let out = `Flypost Event JSON Schema:\n${compactSchemaString}\n\n`
-  out += `Convert the following input into a structured Flypost JSON event:\n${text}`
-
+  
+  // Add context information first to help with parsing
+  const contextParts = []
+  
   if (userContext.defaultLocation) {
-    out += `\nDefault location context: ${userContext.defaultLocation}`
+    contextParts.push(`Default location: ${userContext.defaultLocation}`)
   }
   if (userContext.timezone) {
-    out += `\nTimezone context: ${userContext.timezone}`
+    contextParts.push(`Timezone: ${userContext.timezone}`)
   }
+  if (userContext.currentDate) {
+    contextParts.push(`Current date/time: ${userContext.currentDate}`)
+  } else {
+    contextParts.push(`Current date/time: ${new Date().toISOString()}`)
+  }
+  
+  if (contextParts.length > 0) {
+    out += `CONTEXT:\n${contextParts.join('\n')}\n\n`
+  }
+  
+  out += `INPUT TEXT:\n${text}\n\n`
+  out += `Parse the above text and return a complete, valid Flypost event JSON object with ALL required fields.`
 
   return out
 }
@@ -98,7 +159,7 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
     jsonString = null
   }
 
-  // Validate & fallback check
+  // Validate & fallback check - Enhanced validation
   let parsedMini = null
   let needsFallback = false
 
@@ -106,11 +167,24 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
     try {
       parsedMini = JSON.parse(jsonString)
 
-      // Basic schema sanity checks
-      if (!parsedMini.name || !parsedMini.startDate) {
+      // Enhanced schema sanity checks
+      const missingFields = []
+      if (!parsedMini.name) missingFields.push('name')
+      if (!parsedMini.description) missingFields.push('description')
+      if (!parsedMini.startDate) missingFields.push('startDate')
+      if (!parsedMini.location || !parsedMini.location.address || !parsedMini.location.address.streetAddress) {
+        missingFields.push('location.address.streetAddress')
+      }
+      if (!parsedMini.organizer) missingFields.push('organizer')
+      if (!parsedMini['@context']) missingFields.push('@context')
+      if (!parsedMini['@type']) missingFields.push('@type')
+      
+      if (missingFields.length > 0) {
+        console.log(`⚠️ Mini model missing fields: ${missingFields.join(', ')}`)
         needsFallback = true
       }
-    } catch {
+    } catch (parseError) {
+      console.error(`⚠️ Mini model JSON parse error: ${parseError.message}`)
       needsFallback = true
     }
   } else {
@@ -132,6 +206,10 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
   // At this point parsedMini is our canonical parsed event
   const parsedEvent = parsedMini
 
+  // Ensure required top-level fields with defaults
+  if (!parsedEvent['@context']) parsedEvent['@context'] = 'https://schema.org'
+  if (!parsedEvent['@type']) parsedEvent['@type'] = 'Event'
+
   // Ensure flypost metadata
   if (!parsedEvent.flypost) parsedEvent.flypost = {}
 
@@ -143,6 +221,52 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
   if (parsedEvent.flypost.realTimeData === undefined) parsedEvent.flypost.realTimeData = true
   if (parsedEvent.flypost.crawlable === undefined) parsedEvent.flypost.crawlable = true
   if (parsedEvent.flypost.queryable === undefined) parsedEvent.flypost.queryable = true
+
+  // Ensure location structure
+  if (!parsedEvent.location) {
+    throw new Error('Parsed event missing required location field')
+  }
+  if (!parsedEvent.location['@type']) parsedEvent.location['@type'] = 'Place'
+  if (!parsedEvent.location.address) {
+    throw new Error('Parsed event missing required location.address field')
+  }
+  if (!parsedEvent.location.address['@type']) {
+    parsedEvent.location.address['@type'] = 'PostalAddress'
+  }
+  
+  // Ensure organizer structure
+  if (!parsedEvent.organizer) {
+    throw new Error('Parsed event missing required organizer field')
+  }
+  if (!parsedEvent.organizer['@type']) {
+    parsedEvent.organizer['@type'] = 'Person'
+  }
+
+  // Validate and normalize dates
+  if (parsedEvent.startDate) {
+    try {
+      const startDate = new Date(parsedEvent.startDate)
+      if (isNaN(startDate.getTime())) {
+        throw new Error('Invalid startDate')
+      }
+      parsedEvent.startDate = startDate.toISOString()
+    } catch (err) {
+      throw new Error(`Invalid startDate format: ${parsedEvent.startDate}`)
+    }
+  }
+
+  if (parsedEvent.endDate) {
+    try {
+      const endDate = new Date(parsedEvent.endDate)
+      if (isNaN(endDate.getTime())) {
+        delete parsedEvent.endDate // Remove invalid endDate
+      } else {
+        parsedEvent.endDate = endDate.toISOString()
+      }
+    } catch (err) {
+      delete parsedEvent.endDate // Remove invalid endDate
+    }
+  }
 
   return parsedEvent
 }
