@@ -45,6 +45,7 @@ CRITICAL REQUIREMENTS:
 8. Set defaults: realTimeData: true, crawlable: true, queryable: true
 9. Parse dates/times into ISO 8601 format for startDate and endDate
 10. Only include 'location.geo' if latitude and longitude are clearly inferable, otherwise omit it.
+11. For phone numbers, prefer 'phone' field over legacy 'telephone'. Store phone numbers verbatim without formatting changes.
 
 RESPONSE FORMAT: Return only valid JSON that matches the provided schema exactly.`
 
