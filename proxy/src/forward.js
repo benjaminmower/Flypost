@@ -26,7 +26,7 @@ const WRITE_TOKENS = [GLOBAL_TOKEN, VISTA_TOKEN, BHHS_TOKEN].filter(Boolean)
 // Map token value -> canonical brokerageId
 const TOKEN_TENANCY = {}
 if (VISTA_TOKEN) TOKEN_TENANCY[VISTA_TOKEN] = 'vista-sir'
-if (BHHS_TOKEN) TOKEN_TENANCY[BHHS_TOKEN] = 'bhhs'
+if (BHHS_TOKEN) TOKEN_TENANCY[BHHS_TOKEN] = 'bhhs_utah'
 // You can add more here, e.g.
 // const COMPASS_TOKEN = process.env.COMPASS_WRITE_TOKEN || ''
 // if (COMPASS_TOKEN) {
