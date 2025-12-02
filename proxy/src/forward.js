@@ -16,23 +16,20 @@ if (!BACKEND_BASE) {
 const USE_ID_TOKEN = process.env.PROXY_USE_ID_TOKEN !== 'false'
 
 // ---- Static write tokens (add more brokerages here) ----
+// ---- Static write tokens (add more brokerages here) ----
 const VISTA_TOKEN = process.env.VISTA_WRITE_TOKEN || ''
 const BHHS_TOKEN = process.env.BHHS_UTAH_WRITE_TOKEN || ''
+const COMPASS_TOKEN = process.env. COMPASS_WRITE_TOKEN || ''  // ← ADD THIS
 const GLOBAL_TOKEN = process.env.FLYPOST_WRITE_TOKEN || ''
 
 // List of *values* that are accepted as write tokens
-const WRITE_TOKENS = [GLOBAL_TOKEN, VISTA_TOKEN, BHHS_TOKEN].filter(Boolean)
+const WRITE_TOKENS = [GLOBAL_TOKEN, VISTA_TOKEN, BHHS_TOKEN, COMPASS_TOKEN].filter(Boolean)  // ← ADD COMPASS_TOKEN
 
 // Map token value -> canonical brokerageId
 const TOKEN_TENANCY = {}
 if (VISTA_TOKEN) TOKEN_TENANCY[VISTA_TOKEN] = 'vista-sir'
 if (BHHS_TOKEN) TOKEN_TENANCY[BHHS_TOKEN] = 'bhhs_utah'
-// You can add more here, e.g.
-// const COMPASS_TOKEN = process.env.COMPASS_WRITE_TOKEN || ''
-// if (COMPASS_TOKEN) {
-//   WRITE_TOKENS.push(COMPASS_TOKEN)
-//   TOKEN_TENANCY[COMPASS_TOKEN] = 'compass'
-// }
+if (COMPASS_TOKEN) TOKEN_TENANCY[COMPASS_TOKEN] = 'compass'  // ← ADD THIS
 
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || ''
 const HAS_FIREBASE_AUTH = Boolean(FIREBASE_PROJECT_ID)
