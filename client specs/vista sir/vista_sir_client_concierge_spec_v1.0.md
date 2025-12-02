@@ -127,16 +127,38 @@ The Concierge must return results from **one clean API call**.
 
 ## 7. Most Recent Version Rule
 
-Flypost may store multiple versions of the same property.
+Flypost may store multiple versions of the same property (for example, multiple open house dates or edited descriptions).
+
+The Concierge must always show **one card per property**, using the **freshest** version of that property.
+
+### 7.1 How “Same Property” Is Defined
+
+Two events are treated as the same property if they share the same **canonical location key**:
+
+`streetAddress + postalCode + city + region + lat + lng + brokerageId`
+
+This is equivalent to using the Flypost **`location` deduplication strategy** (ignores specific open house dates and focuses on the property itself).
+
+### 7.2 How Freshest Version Is Chosen
+
+When multiple events share the same canonical location key, the Concierge must select the authoritative version using the same waterfall as the Flypost `parseFreshness()` function, in this priority order:
+
+1. `flypost.submissionTimestamp` (highest priority)  
+2. `storedAt`  
+3. Firestore `updatedAt`  
+4. Firestore `createdAt`  
+5. `startDate` (lowest priority)
 
 The Concierge must:
-- Identify versions using:  
-  `streetAddress + postalCode + brokerageId`
-- Choose the **latest** (`updatedAt` or `storedAt`)
-- Ignore all older versions  
-- Never mention version history  
 
-Clients must always see exactly **one** open house per property.
+- Group events by canonical location key.  
+- Within each group, select the **single freshest** event using the priority list above.  
+- Present only that freshest event to the client.  
+- Ignore all older versions in that group.  
+- Never display multiple cards for the same property at once.  
+- Never mention event version history.
+
+Clients should always experience **one up-to-date card per property**, even if multiple open house dates or prior versions exist in Flypost.
 
 ---
 

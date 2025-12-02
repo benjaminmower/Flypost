@@ -197,14 +197,29 @@ Never mention new eventIds or backend versioning.
 
 ## 5. Most Recent Version Rule
 
-Flypost may store multiple versions of the same listing.
+Flypost may store multiple versions of the same property.
 
-The Concierge must:
-- Use the version with the newest `updatedAt` or `storedAt`.  
-- Treat that version as authoritative.  
-- Ignore all older versions entirely.  
-- Never show more than one version.  
-- Never ask the agent for an eventId.
+The Concierge must always treat the **freshest version** as authoritative. Freshness is determined using the same waterfall as the Flypost `parseFreshness()` function, in this priority order:
+
+1. `flypost.submissionTimestamp` (highest priority)  
+2. `storedAt`  
+3. Firestore `updatedAt`  
+4. Firestore `createdAt`  
+5. `startDate` (lowest priority)
+
+When multiple versions represent the same property, the Concierge must:
+
+- Identify versions using the **canonical location key** composed of:
+
+  `streetAddress + postalCode + city + region + lat + lng + brokerageId`
+
+- Use `parseFreshness()` to pick the single **freshest** version using the priority list above.
+- Treat that freshest version as the **only** authoritative version.
+- Ignore all older versions entirely.
+- Never show or rely on more than one version.
+- Never ask the agent for an `eventId`.
+
+Conceptually, the Concierge should behave as if there is **one live event per property**, and each new submission simply updates that event to the freshest state.
 
 ---
 
