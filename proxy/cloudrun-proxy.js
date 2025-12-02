@@ -47,8 +47,8 @@ app.use((req, _res, next) => {
 const WRITE_TOKENS = [
   process.env.FLYPOST_WRITE_TOKEN,   // global token (e.g., "goflypost")
   process.env.VISTA_WRITE_TOKEN,     // Vista-specific token (e.g., "vist@sir")
-  process.env.BHHS_UTAH_WRITE_TOKEN,      // BHHS_UTAH brokerage
-  // add more here: process.env.COMPASS_WRITE_TOKEN, etc.
+  process.env.BHHS_UTAH_WRITE_TOKEN, // BHHS Utah brokerage
+  process.env.COMPASS_WRITE_TOKEN,   // Compass brokerage
 ].filter(Boolean)
 
 function requireWriteToken(req, res, next) {

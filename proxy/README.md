@@ -13,13 +13,27 @@ A lightweight proxy server for Flypost v4 that forwards requests to the backend 
 
 - `PORT` (default: `8080`): Port for the proxy server
 - `BACKEND_URL`: URL of the backend service to forward requests to
-- `FLYPOST_WRITE_TOKEN` (optional): If set, requires this token in the `x-flypost-write-token` header for all POST requests to `/api/*` endpoints
+- `FLYPOST_WRITE_TOKEN` (optional): Global write token for all POST requests to `/api/*` endpoints
+- `VISTA_WRITE_TOKEN` (optional): Vista SIR brokerage-specific write token for agent GPTs
+- `BHHS_UTAH_WRITE_TOKEN` (optional): BHHS Utah brokerage-specific write token for agent GPTs
+- `COMPASS_WRITE_TOKEN` (optional): Compass brokerage-specific write token for agent GPTs
 - `FRONTEND_ORIGIN` (optional): Comma-separated list of allowed CORS origins
 - `PROXY_USE_ID_TOKEN` (default: `true`): Whether to use Google Cloud ID tokens for backend authentication
 
 ## Write-Token Authentication
 
 The proxy includes a middleware that protects write operations (POST requests to `/api/*`) with an optional authentication token.
+
+### Multi-Token Support
+
+The proxy supports multiple write tokens to enable brokerage-specific access control:
+- **Global token** (`FLYPOST_WRITE_TOKEN`): Universal write access
+- **Brokerage-specific tokens**: Allow individual brokerages to publish events to their tenancy
+  - `VISTA_WRITE_TOKEN`: Vista SIR brokerage
+  - `BHHS_UTAH_WRITE_TOKEN`: BHHS Utah brokerage
+  - `COMPASS_WRITE_TOKEN`: Compass brokerage
+
+Each brokerage's agent GPT uses their specific token to ensure proper tenancy isolation.
 
 ### How it works
 
