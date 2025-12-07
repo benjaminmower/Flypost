@@ -270,8 +270,9 @@ export class FlypostClient {
         })
       }
 
-      // Handle network errors
-      if (error instanceof TypeError || error.message?.includes('fetch')) {
+      // Handle network errors (check message content to catch mocked errors)
+      if (error instanceof TypeError || error.name === 'TypeError' || 
+          error.message?.includes('fetch') || error.message?.includes('Network')) {
         throw new FlypostError(error.message || 'Network request failed', {
           code: 'NETWORK_ERROR',
           url,
@@ -369,8 +370,9 @@ export class FlypostClient {
         })
       }
 
-      // Handle network errors
-      if (error instanceof TypeError || error.message?.includes('fetch')) {
+      // Handle network errors (check message content to catch mocked errors)
+      if (error instanceof TypeError || error.name === 'TypeError' || 
+          error.message?.includes('fetch') || error.message?.includes('Network')) {
         throw new FlypostError(error.message || 'Network request failed', {
           code: 'NETWORK_ERROR',
           url,
