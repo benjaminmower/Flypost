@@ -13,12 +13,14 @@ export class FlypostError extends Error {
   status?: number
   url?: string
   details?: any
+  category?: 'NETWORK_ERROR' | 'SERVER_ERROR' | 'TIMEOUT' | 'CLIENT_ERROR' | 'UNKNOWN'
 
   constructor(message: string, options?: {
     code?: string
     status?: number
     url?: string
     details?: any
+    category?: 'NETWORK_ERROR' | 'SERVER_ERROR' | 'TIMEOUT' | 'CLIENT_ERROR' | 'UNKNOWN'
   }) {
     super(message)
     this.name = 'FlypostError'
@@ -26,11 +28,20 @@ export class FlypostError extends Error {
     this.status = options?.status
     this.url = options?.url
     this.details = options?.details
+    this.category = options?.category || this.categorizeError(options?.status, options?.code)
     
     // Maintains proper stack trace for where our error was thrown
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, FlypostError)
     }
+  }
+
+  private categorizeError(status?: number, code?: string): 'NETWORK_ERROR' | 'SERVER_ERROR' | 'TIMEOUT' | 'CLIENT_ERROR' | 'UNKNOWN' {
+    if (code === 'TIMEOUT') return 'TIMEOUT'
+    if (!status) return 'NETWORK_ERROR'
+    if (status >= 500) return 'SERVER_ERROR'
+    if (status >= 400 && status < 500) return 'CLIENT_ERROR'
+    return 'UNKNOWN'
   }
 }
 
@@ -40,6 +51,9 @@ export class FlypostError extends Error {
 export interface FlypostClientConfig {
   apiBase?: string
   timeout?: number
+  retryAttempts?: number
+  retryDelay?: number
+  isMobile?: boolean
 }
 
 /**
@@ -113,10 +127,73 @@ interface EventsNearApiResponse {
 export class FlypostClient {
   private apiBase: string
   private timeout: number
+  private retryAttempts: number
+  private retryDelay: number
+  private isMobile: boolean
 
   constructor(config: FlypostClientConfig = {}) {
     this.apiBase = config.apiBase || process.env.FLYPOST_API_BASE || 'http://localhost:3001'
-    this.timeout = config.timeout || 30000 // 30 seconds default
+    
+    // Detect mobile or use explicit config
+    this.isMobile = config.isMobile ?? this.detectMobile()
+    
+    // Mobile gets longer timeout (90s vs 60s)
+    const defaultTimeout = this.isMobile ? 90000 : 60000
+    this.timeout = config.timeout || defaultTimeout
+    
+    this.retryAttempts = config.retryAttempts ?? 3
+    this.retryDelay = config.retryDelay ?? 1000
+  }
+
+  /**
+   * Detect if running on mobile device
+   */
+  private detectMobile(): boolean {
+    if (typeof navigator === 'undefined') return false
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera
+    return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase())
+  }
+
+  /**
+   * Sleep utility for retry delays
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  /**
+   * Retry wrapper with exponential backoff
+   */
+  private async withRetry<T>(
+    operation: () => Promise<T>,
+    operationName: string
+  ): Promise<T> {
+    let lastError: any
+    
+    for (let attempt = 0; attempt <= this.retryAttempts; attempt++) {
+      try {
+        return await operation()
+      } catch (error: any) {
+        lastError = error
+        
+        // Don't retry on client errors (4xx) or if it's the last attempt
+        if (error instanceof FlypostError) {
+          if (error.category === 'CLIENT_ERROR' || attempt === this.retryAttempts) {
+            throw error
+          }
+        } else if (attempt === this.retryAttempts) {
+          throw error
+        }
+        
+        // Calculate exponential backoff delay
+        const delay = this.retryDelay * Math.pow(2, attempt)
+        console.log(`[FlypostClient] ${operationName} failed (attempt ${attempt + 1}/${this.retryAttempts + 1}), retrying in ${delay}ms...`)
+        
+        await this.sleep(delay)
+      }
+    }
+    
+    throw lastError
   }
 
   /**
@@ -127,6 +204,13 @@ export class FlypostClient {
    * @throws FlypostError on API errors
    */
   async flypostParseAndPublish(args: ParseAndPublishArgs): Promise<ParseAndPublishResponse> {
+    return this.withRetry(
+      () => this.performParseAndPublish(args),
+      'flypostParseAndPublish'
+    )
+  }
+
+  private async performParseAndPublish(args: ParseAndPublishArgs): Promise<ParseAndPublishResponse> {
     const url = `${this.apiBase}/api/parse-and-publish`
     
     try {
@@ -164,6 +248,7 @@ export class FlypostClient {
           status: response.status,
           url,
           details: data,
+          category: 'SERVER_ERROR',
         })
       }
 
@@ -178,16 +263,28 @@ export class FlypostClient {
       
       // Handle timeout
       if (error.name === 'AbortError') {
-        throw new FlypostError('Request timeout', {
+        throw new FlypostError(`Request timeout after ${this.timeout}ms`, {
           code: 'TIMEOUT',
           url,
+          category: 'TIMEOUT',
         })
       }
 
       // Handle network errors
-      throw new FlypostError(error.message || 'Network request failed', {
+      if (error instanceof TypeError || error.message?.includes('fetch')) {
+        throw new FlypostError(error.message || 'Network request failed', {
+          code: 'NETWORK_ERROR',
+          url,
+          details: error,
+          category: 'NETWORK_ERROR',
+        })
+      }
+
+      // Generic error
+      throw new FlypostError(error.message || 'Unknown error occurred', {
         url,
         details: error,
+        category: 'UNKNOWN',
       })
     }
   }
@@ -200,6 +297,13 @@ export class FlypostClient {
    * @throws FlypostError on API errors
    */
   async flypostEventsNear(args: EventsNearArgs = {}): Promise<EventsNearResponse> {
+    return this.withRetry(
+      () => this.performEventsNear(args),
+      'flypostEventsNear'
+    )
+  }
+
+  private async performEventsNear(args: EventsNearArgs = {}): Promise<EventsNearResponse> {
     const { lat, lng, radius = 10 } = args
     
     const params = new URLSearchParams()
@@ -243,6 +347,7 @@ export class FlypostClient {
           status: response.status,
           url,
           details: data,
+          category: 'SERVER_ERROR',
         })
       }
 
@@ -257,16 +362,28 @@ export class FlypostClient {
       
       // Handle timeout
       if (error.name === 'AbortError') {
-        throw new FlypostError('Request timeout', {
+        throw new FlypostError(`Request timeout after ${this.timeout}ms`, {
           code: 'TIMEOUT',
           url,
+          category: 'TIMEOUT',
         })
       }
 
       // Handle network errors
-      throw new FlypostError(error.message || 'Network request failed', {
+      if (error instanceof TypeError || error.message?.includes('fetch')) {
+        throw new FlypostError(error.message || 'Network request failed', {
+          code: 'NETWORK_ERROR',
+          url,
+          details: error,
+          category: 'NETWORK_ERROR',
+        })
+      }
+
+      // Generic error
+      throw new FlypostError(error.message || 'Unknown error occurred', {
         url,
         details: error,
+        category: 'UNKNOWN',
       })
     }
   }

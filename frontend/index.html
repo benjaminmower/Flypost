@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>FLYPOST</title>
     <style>
         * {
@@ -16,6 +19,15 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        /* Mobile-specific improvements */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
         }
         
         .container {
@@ -25,6 +37,14 @@
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             padding: 30px;
+        }
+        
+        /* Mobile responsive container */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                border-radius: 8px;
+            }
         }
         
         .header {
@@ -37,6 +57,12 @@
             font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
         }
         
         .header p {
@@ -65,11 +91,19 @@
             font-family: inherit;
             resize: vertical;
             transition: border-color 0.3s ease;
+            -webkit-appearance: none; /* Remove iOS styling */
         }
         
         .input-textarea:focus {
             outline: none;
             border-color: #667eea;
+        }
+        
+        /* Prevent zoom on iOS when focusing inputs */
+        @media (max-width: 768px) {
+            .input-textarea {
+                font-size: 16px; /* Prevents auto-zoom on iOS */
+            }
         }
         
         .parse-button {
@@ -83,11 +117,17 @@
             border-radius: 8px;
             cursor: pointer;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+            touch-action: manipulation; /* Improve touch responsiveness */
         }
         
         .parse-button:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .parse-button:active:not(:disabled) {
+            transform: translateY(0);
         }
         
         .parse-button:disabled {

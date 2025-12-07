@@ -27,20 +27,46 @@ const frontendOrigins = [
     .map(origin => origin.trim())
     .filter(Boolean)),
   'https://flypost.netlify.app',
-  'https://app.goflypost.com'
+  'https://app.goflypost.com',
+  'http://localhost:5173',
+  'http://localhost:3000'
 ]
+
+console.log('📋 Backend allowed CORS origins:', frontendOrigins)
 
 app.use(
   cors({
-    origin: frontendOrigins,
-    credentials: true
+    origin: (origin, cb) => {
+      // Allow requests with no origin (mobile apps, server-to-server)
+      if (!origin) {
+        console.log('✅ Backend CORS: Allowing request with no origin')
+        return cb(null, true)
+      }
+      
+      const isAllowed = frontendOrigins.includes(origin)
+      if (isAllowed) {
+        console.log(`✅ Backend CORS: Allowing origin: ${origin}`)
+        return cb(null, true)
+      }
+      
+      console.log(`❌ Backend CORS: Rejecting origin: ${origin}`)
+      return cb(new Error('Not allowed by CORS: ' + origin))
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-flypost-brokerage-id'],
+    exposedHeaders: ['Content-Length', 'Content-Type'],
+    maxAge: 86400
   })
 )
 app.use(express.json({ limit: '1mb' }))
 
-// Request logging
+// Request logging with device detection
 app.use((req, res, next) => {
-  console.log(`📡 ${req.method} ${req.path}`)
+  const userAgent = req.get('user-agent') || 'unknown'
+  const isMobile = /mobile|android|iphone|ipad|ipod/i.test(userAgent)
+  const deviceType = isMobile ? '📱' : '💻'
+  console.log(`${deviceType} ${req.method} ${req.path}`)
   next()
 })
 
