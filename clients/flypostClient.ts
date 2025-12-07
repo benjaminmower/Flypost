@@ -149,8 +149,11 @@ export class FlypostClient {
    * Detect if running on mobile device
    */
   private detectMobile(): boolean {
-    if (typeof navigator === 'undefined') return false
-    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera
+    // Check if we're in a browser environment
+    const global = globalThis as any
+    if (typeof global.navigator === 'undefined') return false
+    
+    const userAgent = global.navigator.userAgent || global.navigator.vendor || global.window?.opera || ''
     return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase())
   }
 
