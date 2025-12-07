@@ -51,12 +51,19 @@ The example demonstrates:
   - `flypostParseAndPublish()` - Parse and store events
   - `flypostEventsNear()` - Search events by location
   - `FlypostError` - Normalized error handling
+  - **Configurable timeout and retry logic** for high-latency environments
+  - **Authentication token support** for secured endpoints
+  - **Multi-tenancy support** via brokerageId
 
 ### Example
 - **`examples/flypost-agent.ts`** - Working OpenAI function calling demo
 
 ### Tests
-- **`tests/flypostClient.test.ts`** - Comprehensive test suite (13 tests)
+- **`tests/flypostClient.test.ts`** - Comprehensive test suite (38 tests)
+  - Happy path scenarios
+  - Retry logic and timeout handling
+  - Authentication and brokerageId support
+  - Enhanced error messages
 
 ### Documentation
 - **`docs/tools.md`** - Complete API documentation
@@ -88,9 +95,10 @@ Search for events near a geographic location.
 
 ```typescript
 {
-  lat?: number      // Optional: Latitude (defaults to Santa Monica)
-  lng?: number      // Optional: Longitude (defaults to Santa Monica)
-  radius?: number   // Optional: Search radius in km (default: 10)
+  lat?: number          // Optional: Latitude (defaults to Santa Monica)
+  lng?: number          // Optional: Longitude (defaults to Santa Monica)
+  radius?: number       // Optional: Search radius in km (default: 10)
+  brokerageId?: string  // Optional: Filter by brokerage for multi-tenant setups
 }
 ```
 
@@ -99,10 +107,44 @@ Search for events near a geographic location.
 const result = await client.flypostEventsNear({
   lat: 34.0195,
   lng: -118.4912,
-  radius: 10
+  radius: 10,
+  brokerageId: 'vista-sir'  // Optional: Filter by brokerage
 })
 // Returns: { events: array, total: number }
 ```
+
+## Client Configuration
+
+The Flypost client supports various configuration options to handle different network conditions and environments:
+
+```typescript
+import { createFlypostClient } from './clients/flypostClient.js'
+
+const client = createFlypostClient({
+  apiBase: 'https://api.goflypost.com',  // API endpoint
+  timeout: 60000,                         // Request timeout in ms (default: 60s)
+  maxRetries: 3,                          // Max retry attempts (default: 3)
+  retryDelay: 1000,                       // Initial retry delay in ms (default: 1s)
+  writeToken: 'your-write-token',         // Authentication token (optional)
+  brokerageId: 'vista-sir'                // Default brokerageId (optional)
+})
+```
+
+### Configuration Options
+
+- **`apiBase`**: Flypost API base URL (default: `http://localhost:3001` or `FLYPOST_API_BASE` env var)
+- **`timeout`**: Request timeout in milliseconds (default: 60000ms / 60s)
+  - Increased from 30s to handle high-latency environments (private browsing, mobile networks)
+- **`maxRetries`**: Maximum number of retry attempts for transient failures (default: 3)
+  - Retries are performed with exponential backoff
+  - Only retries server errors (5xx) and network errors, not client errors (4xx) or timeouts
+- **`retryDelay`**: Initial delay between retries in milliseconds (default: 1000ms)
+  - Each retry doubles the delay (exponential backoff)
+- **`writeToken`**: Authentication token for write operations
+  - Sent as `X-Flypost-Write-Token` header
+- **`brokerageId`**: Default brokerage ID for multi-tenant operations
+  - Can be overridden per-request
+  - Sent as `X-Flypost-Brokerage-Id` header and query parameter
 
 ## Usage with OpenAI
 
@@ -141,7 +183,7 @@ if (response.choices[0].message.tool_calls) {
 
 ## Error Handling
 
-All errors are normalized to `FlypostError`:
+All errors are normalized to `FlypostError` with enhanced error messages and suggestions:
 
 ```typescript
 try {
@@ -150,10 +192,31 @@ try {
   if (error instanceof FlypostError) {
     console.error('Error:', error.message)
     console.error('Status:', error.status)
+    console.error('Code:', error.code)
     console.error('Details:', error.details)
+    
+    // Error details may include suggestions
+    if (error.details?.suggestion) {
+      console.log('Suggestion:', error.details.suggestion)
+    }
   }
 }
 ```
+
+### Error Types
+
+- **`TIMEOUT`**: Request exceeded timeout limit
+  - Suggestion: Increase timeout value in client configuration
+  - Note: Timeouts are NOT retried automatically
+- **`NETWORK_ERROR`**: Network connectivity issues
+  - Automatically retried with exponential backoff
+  - Suggestion: Check network connectivity, disable private browsing, or try a different network
+- **`RETRY_EXHAUSTED`**: All retry attempts failed
+  - Details include number of attempts and original error
+  - Suggestion: Check server availability and network connectivity
+- **`4xx` Client Errors**: Bad request, unauthorized, etc.
+  - NOT retried automatically
+  - Check request parameters and authentication
 
 ## API Reference
 
@@ -164,9 +227,13 @@ See [`docs/tools.md`](./docs/tools.md) for complete API documentation.
 The test suite covers:
 - ✅ Happy paths for both endpoints
 - ✅ Error normalization from server responses
-- ✅ Timeout handling
-- ✅ Network error handling
+- ✅ Timeout handling (no automatic retries)
+- ✅ Network error handling with retry logic
 - ✅ Invalid response format handling
+- ✅ Retry logic with exponential backoff
+- ✅ Authentication token support
+- ✅ Multi-tenancy brokerageId support
+- ✅ Enhanced error messages with suggestions
 
 Run tests with: `npm test`
 
