@@ -124,6 +124,7 @@ describe('FlypostClient', () => {
       const shortTimeoutClient = new FlypostClient({
         apiBase: 'http://test.example.com',
         timeout: 100,
+        retryAttempts: 0, // Disable retries for this test
       })
 
       // Mock fetch to throw an AbortError
@@ -140,14 +141,20 @@ describe('FlypostClient', () => {
         const flypostError = error as FlypostError
         expect(flypostError.message).toContain('timeout')
         expect(flypostError.code).toBe('TIMEOUT')
+        expect(flypostError.category).toBe('TIMEOUT')
       }
     })
 
     it('should handle network errors', async () => {
+      const noRetryClient = new FlypostClient({
+        apiBase: 'http://test.example.com',
+        retryAttempts: 0, // Disable retries for this test
+      })
+      
       fetchMock.mockRejectedValue(new Error('Network error'))
 
       try {
-        await client.flypostParseAndPublish({
+        await noRetryClient.flypostParseAndPublish({
           naturalLanguageInput: 'Test event',
         })
         // Should not reach here
@@ -156,10 +163,16 @@ describe('FlypostClient', () => {
         expect(error).toBeInstanceOf(FlypostError)
         const flypostError = error as FlypostError
         expect(flypostError.message).toBe('Network error')
+        expect(flypostError.category).toBe('NETWORK_ERROR')
       }
     })
 
     it('should handle invalid response format', async () => {
+      const noRetryClient = new FlypostClient({
+        apiBase: 'http://test.example.com',
+        retryAttempts: 0, // Disable retries for this test
+      })
+      
       fetchMock.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -167,7 +180,7 @@ describe('FlypostClient', () => {
       })
 
       await expect(
-        client.flypostParseAndPublish({
+        noRetryClient.flypostParseAndPublish({
           naturalLanguageInput: 'Test event',
         })
       ).rejects.toThrow('Invalid response format from API')
@@ -285,6 +298,7 @@ describe('FlypostClient', () => {
       const shortTimeoutClient = new FlypostClient({
         apiBase: 'http://test.example.com',
         timeout: 100,
+        retryAttempts: 0, // Disable retries for this test
       })
 
       // Mock fetch to throw an AbortError
@@ -299,6 +313,7 @@ describe('FlypostClient', () => {
         const flypostError = error as FlypostError
         expect(flypostError.message).toContain('timeout')
         expect(flypostError.code).toBe('TIMEOUT')
+        expect(flypostError.category).toBe('TIMEOUT')
       }
     })
   })
@@ -327,6 +342,197 @@ describe('FlypostClient', () => {
       expect(error.name).toBe('FlypostError')
       expect(error.code).toBeUndefined()
       expect(error.status).toBeUndefined()
+    })
+
+    it('should categorize timeout errors correctly', () => {
+      const error = new FlypostError('Timeout error', {
+        code: 'TIMEOUT',
+      })
+
+      expect(error.category).toBe('TIMEOUT')
+    })
+
+    it('should categorize network errors correctly', () => {
+      const error = new FlypostError('Network error', {
+        code: 'NETWORK_ERROR',
+      })
+
+      expect(error.category).toBe('NETWORK_ERROR')
+    })
+
+    it('should categorize server errors (5xx) correctly', () => {
+      const error = new FlypostError('Server error', {
+        status: 500,
+      })
+
+      expect(error.category).toBe('SERVER_ERROR')
+    })
+
+    it('should categorize client errors (4xx) correctly', () => {
+      const error = new FlypostError('Client error', {
+        status: 400,
+      })
+
+      expect(error.category).toBe('CLIENT_ERROR')
+    })
+
+    it('should categorize unknown errors correctly', () => {
+      const error = new FlypostError('Unknown error', {
+        status: 200, // Success status but error created
+      })
+
+      expect(error.category).toBe('UNKNOWN')
+    })
+
+    it('should allow explicit category override', () => {
+      const error = new FlypostError('Custom error', {
+        status: 500,
+        category: 'NETWORK_ERROR', // Override automatic categorization
+      })
+
+      expect(error.category).toBe('NETWORK_ERROR')
+    })
+  })
+
+  describe('Retry Mechanism', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('should retry on network errors with exponential backoff', async () => {
+      const retryClient = new FlypostClient({
+        apiBase: 'http://test.example.com',
+        timeout: 5000,
+        retryAttempts: 2,
+        retryDelay: 100,
+      })
+
+      let attemptCount = 0
+      fetchMock.mockImplementation(() => {
+        attemptCount++
+        if (attemptCount < 3) {
+          return Promise.reject(new TypeError('Network error'))
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              eventId: 'evt_retry_test',
+              event: { '@type': 'Event' },
+            },
+          }),
+        })
+      })
+
+      const promise = retryClient.flypostParseAndPublish({
+        naturalLanguageInput: 'Test event',
+      })
+
+      // Fast-forward through retry delays
+      await vi.runAllTimersAsync()
+
+      const result = await promise
+      expect(result.eventId).toBe('evt_retry_test')
+      expect(attemptCount).toBe(3) // Initial attempt + 2 retries
+    })
+
+    it('should not retry on client errors (4xx)', async () => {
+      const retryClient = new FlypostClient({
+        apiBase: 'http://test.example.com',
+        retryAttempts: 3,
+      })
+
+      let attemptCount = 0
+      fetchMock.mockImplementation(() => {
+        attemptCount++
+        return Promise.resolve({
+          ok: false,
+          status: 400,
+          json: async () => ({
+            success: false,
+            error: 'Bad request',
+          }),
+        })
+      })
+
+      try {
+        await retryClient.flypostParseAndPublish({
+          naturalLanguageInput: 'Invalid input',
+        })
+        expect(true).toBe(false) // Should not reach here
+      } catch (error) {
+        expect(error).toBeInstanceOf(FlypostError)
+        expect(attemptCount).toBe(1) // Should not retry
+      }
+    })
+
+    it('should give up after max retries', async () => {
+      const retryClient = new FlypostClient({
+        apiBase: 'http://test.example.com',
+        retryAttempts: 2,
+        retryDelay: 100,
+      })
+
+      let attemptCount = 0
+      fetchMock.mockImplementation(() => {
+        attemptCount++
+        return Promise.reject(new TypeError('Network error'))
+      })
+
+      const promise = retryClient.flypostParseAndPublish({
+        naturalLanguageInput: 'Test event',
+      })
+
+      await vi.runAllTimersAsync()
+
+      try {
+        await promise
+        expect(true).toBe(false)
+      } catch (error) {
+        expect(error).toBeInstanceOf(FlypostError)
+        expect((error as FlypostError).category).toBe('NETWORK_ERROR')
+        expect(attemptCount).toBe(3) // Initial + 2 retries
+      }
+    })
+  })
+
+  describe('Mobile Configuration', () => {
+    it('should use longer timeout for mobile devices', () => {
+      const mobileClient = new FlypostClient({
+        apiBase: 'http://test.example.com',
+        isMobile: true,
+      })
+
+      // Access private property for testing (TypeScript workaround)
+      const timeout = (mobileClient as any).timeout
+      expect(timeout).toBe(90000) // 90 seconds for mobile
+    })
+
+    it('should use standard timeout for desktop', () => {
+      const desktopClient = new FlypostClient({
+        apiBase: 'http://test.example.com',
+        isMobile: false,
+      })
+
+      const timeout = (desktopClient as any).timeout
+      expect(timeout).toBe(60000) // 60 seconds for desktop
+    })
+
+    it('should respect explicit timeout override', () => {
+      const customClient = new FlypostClient({
+        apiBase: 'http://test.example.com',
+        isMobile: true,
+        timeout: 120000, // Override
+      })
+
+      const timeout = (customClient as any).timeout
+      expect(timeout).toBe(120000)
     })
   })
 })
