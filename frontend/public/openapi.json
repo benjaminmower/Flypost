@@ -18,7 +18,7 @@
         "operationId": "getHealth",
         "responses": {
           "200": {
-            "description": "Service health status",
+            "description": "Service health status.",
             "content": {
               "application/json": {
                 "schema": {
@@ -30,6 +30,7 @@
         }
       }
     },
+
     "/api/parse-and-publish": {
       "post": {
         "summary": "Parse a natural-language event and publish it",
@@ -57,7 +58,7 @@
             }
           },
           "400": {
-            "description": "Validation error",
+            "description": "Validation error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -67,22 +68,22 @@
             }
           },
           "500": {
-            "description": "Internal server error",
+            "description": "Internal server error.",
             "content": {
               "application/json": {
-                "$ref": "#/components/schemas/ErrorResponse"
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
-          },
-          "security": [
-            {
-              "WriteTokenAuth": []
-            }
-          ]
-        }
+          }
+        },
+        "security": [
+          { "WriteTokenAuth": [] }
+        ]
       }
     },
+
     "/v1/events/near": {
       "get": {
         "summary": "Get events near a coordinate",
@@ -92,29 +93,26 @@
           {
             "name": "brokerageId",
             "in": "query",
-            "description": "Brokerage tenant identifier (e.g., 'vista-sir').",
             "required": true,
+            "description": "Brokerage tenant identifier (e.g., 'vista-sir').",
             "schema": { "type": "string" }
           },
           {
             "name": "lat",
             "in": "query",
             "description": "Latitude in decimal degrees.",
-            "required": false,
             "schema": { "type": "number", "format": "double" }
           },
           {
             "name": "lng",
             "in": "query",
             "description": "Longitude in decimal degrees.",
-            "required": false,
             "schema": { "type": "number", "format": "double" }
           },
           {
             "name": "radius",
             "in": "query",
             "description": "Search radius in kilometers.",
-            "required": false,
             "schema": { "type": "number", "format": "double", "default": 10 }
           }
         ],
@@ -133,9 +131,7 @@
             "description": "Bad request.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -143,9 +139,7 @@
             "description": "Not found or no events.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -153,9 +147,7 @@
             "description": "Server error.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -163,6 +155,7 @@
       }
     }
   },
+
   "components": {
     "securitySchemes": {
       "WriteTokenAuth": {
@@ -172,6 +165,7 @@
         "description": "Required write token for POST requests."
       }
     },
+
     "schemas": {
       "HealthResponse": {
         "type": "object",
@@ -189,21 +183,23 @@
           "uptime": { "type": "number" }
         }
       },
+
       "ParseAndPublishRequest": {
         "type": "object",
+        "required": ["naturalLanguageInput", "brokerageId"],
         "properties": {
           "naturalLanguageInput": { "type": "string" },
           "brokerageId": {
             "type": "string",
-            "description": "Brokerage tenant identifier. Hardcoded by GPT."
+            "description": "Brokerage tenant identifier."
           },
           "userContext": {
             "type": "object",
             "additionalProperties": true
           }
-        },
-        "required": ["naturalLanguageInput", "brokerageId"]
+        }
       },
+
       "ParseAndPublishResponse": {
         "type": "object",
         "properties": {
@@ -217,84 +213,105 @@
           }
         }
       },
+
       "EventsNearResponse": {
         "type": "object",
         "properties": {
           "success": { "type": "boolean" },
           "data": {
             "type": "object",
+            "required": ["events", "total"],
             "properties": {
               "events": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/FlypostEvent" }
               },
               "total": { "type": "integer" },
-              "query": { "type": "object", "additionalProperties": true },
-              "brokerageId": { "type": "string", "description": "Brokerage tenant identifier." },
-              "source": { "type": "string", "description": "Backend source (e.g., Firestore)." },
-              "note": { "type": "string", "description": "Internal note about the query method." }
-            },
-            "required": ["events", "total"]
+              "query": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "brokerageId": { "type": "string" },
+              "source": { "type": "string" },
+              "note": { "type": "string" }
+            }
           }
         }
       },
+
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["success", "error"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "error": { "type": "string" },
+          "details": { "type": "string" }
+        }
+      },
+
       "FlypostEvent": {
         "type": "object",
         "description": "Schema.org Event plus Flypost metadata.",
+        "additionalProperties": true,
+        "required": ["name", "startDate", "location", "flypost"],
         "properties": {
-          "@context": { "type": "string", "description": "Schema.org context, typically 'https://schema.org'." },
-          "@type": { "type": "string", "description": "Schema.org type, typically 'Event'." },
+          "@context": { "type": "string" },
+          "@type": { "type": "string" },
+
           "name": { "type": "string" },
           "description": { "type": "string" },
+
           "startDate": { "type": "string", "format": "date-time" },
-          "endDate": { "type": "string", "format": "date-time", "nullable": true },
+          "endDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+
           "location": {
             "type": "object",
-            "description": "Schema.org Place or location info.",
+            "description": "Schema.org Place + PostalAddress.",
             "additionalProperties": true
           },
+
           "organizer": {
             "type": "object",
-            "description": "Host or organizer of the event.",
-            "properties": {
-              "@type": { "type": "string", "enum": ["Person", "Organization"] },
-              "name": { "type": "string" },
-              "email": { "type": "string", "format": "email" },
-              "phone": { "type": "string" }
-            },
             "additionalProperties": true
           },
+
           "brokerageId": { "type": "string" },
+
           "flypost": {
             "type": "object",
+            "required": ["eventId", "brokerageId"],
+            "additionalProperties": true,
             "properties": {
               "eventId": { "type": "string" },
-              "brokerageId": { "type": "string" }
-            },
-            "required": ["eventId", "brokerageId"],
-            "additionalProperties": true
+              "brokerageId": { "type": "string" },
+              "category": { "type": "string" },
+              "submissionTimestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
           },
+
           "hash": {
             "type": "object",
+            "required": ["algorithm", "value"],
+            "additionalProperties": true,
             "properties": {
               "algorithm": { "type": "string" },
               "value": { "type": "string" },
               "encoding": { "type": "string" },
               "canonicalVersion": { "type": "integer" }
-            },
-            "required": ["algorithm", "value"]
+            }
           },
-          "storedAt": { "type": "string", "format": "date-time" }
-        },
-        "required": ["name", "startDate", "location", "flypost"],
-        "additionalProperties": true
-      },
-      "ErrorResponse": {
-        "type": "object",
-        "properties": {
-          "success": { "type": "boolean" },
-          "error": { "type": "string" },
-          "details": { "type": "string" }
+
+          "storedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       }
     }
