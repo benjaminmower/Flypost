@@ -70,18 +70,17 @@
             "description": "Internal server error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
-          }
-        },
-        "security": [
-          {
-            "WriteTokenAuth": []
-          }
-        ]
+          },
+          "security": [
+            {
+              "WriteTokenAuth": []
+            }
+          ]
+        }
       }
     },
     "/v1/events/near": {
@@ -126,6 +125,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EventsNearResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found or no events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -210,77 +229,47 @@
                 "items": { "$ref": "#/components/schemas/FlypostEvent" }
               },
               "total": { "type": "integer" },
-              "query": { "type": "object" }
-            }
+              "query": { "type": "object", "additionalProperties": true },
+              "brokerageId": { "type": "string", "description": "Brokerage tenant identifier." },
+              "source": { "type": "string", "description": "Backend source (e.g., Firestore)." },
+              "note": { "type": "string", "description": "Internal note about the query method." }
+            },
+            "required": ["events", "total"]
           }
         }
       },
       "FlypostEvent": {
         "type": "object",
-        "description": "Simplified Event + Flypost metadata.",
+        "description": "Schema.org Event plus Flypost metadata.",
         "properties": {
+          "@context": { "type": "string", "description": "Schema.org context, typically 'https://schema.org'." },
+          "@type": { "type": "string", "description": "Schema.org type, typically 'Event'." },
           "name": { "type": "string" },
           "description": { "type": "string" },
           "startDate": { "type": "string", "format": "date-time" },
           "endDate": { "type": "string", "format": "date-time", "nullable": true },
           "location": {
             "type": "object",
-            "properties": {
-              "name": { "type": "string" },
-              "streetAddress": { "type": "string" },
-              "city": { "type": "string" },
-              "region": { "type": "string" },
-              "postalCode": { "type": "string" },
-              "latitude": { "type": "number" },
-              "longitude": { "type": "number" }
-            },
+            "description": "Schema.org Place or location info.",
             "additionalProperties": true
           },
           "organizer": {
             "type": "object",
-            "description": "Listing agent or team hosting the event. All fields are optional.",
+            "description": "Host or organizer of the event.",
             "properties": {
-              "@type": {
-                "type": "string",
-                "enum": ["Person", "Organization"],
-                "description": "The Schema.org type for the organizer."
-              },
-              "name": {
-                "type": "string",
-                "description": "Agent or team name as provided by the brokerage."
-              },
-              "email": {
-                "type": "string",
-                "format": "email",
-                "description": "Agent email, if provided."
-              },
-              "phone": {
-                "type": "string",
-                "description": "Agent phone number as provided, with no enforced formatting. Stored verbatim. Preferred over 'telephone'."
-              },
-              "telephone": {
-                "type": "string",
-                "description": "Deprecated: Use 'phone' instead. Legacy field retained for backward compatibility.",
-                "deprecated": true
-              },
-              "licenseId": {
-                "type": "string",
-                "description": "Agent license ID, if provided."
-              },
-              "mlsNumber": {
-                "type": "string",
-                "description": "MLS listing number, if provided."
-              }
+              "@type": { "type": "string", "enum": ["Person", "Organization"] },
+              "name": { "type": "string" },
+              "email": { "type": "string", "format": "email" },
+              "phone": { "type": "string" }
             },
             "additionalProperties": true
           },
+          "brokerageId": { "type": "string" },
           "flypost": {
             "type": "object",
             "properties": {
               "eventId": { "type": "string" },
-              "brokerageId": { "type": "string" },
-              "category": { "type": "string" },
-              "submissionTimestamp": { "type": "string", "format": "date-time" }
+              "brokerageId": { "type": "string" }
             },
             "required": ["eventId", "brokerageId"],
             "additionalProperties": true
@@ -289,12 +278,16 @@
             "type": "object",
             "properties": {
               "algorithm": { "type": "string" },
-              "value": { "type": "string" }
+              "value": { "type": "string" },
+              "encoding": { "type": "string" },
+              "canonicalVersion": { "type": "integer" }
             },
             "required": ["algorithm", "value"]
-          }
+          },
+          "storedAt": { "type": "string", "format": "date-time" }
         },
-        "required": ["name", "startDate", "location", "flypost"]
+        "required": ["name", "startDate", "location", "flypost"],
+        "additionalProperties": true
       },
       "ErrorResponse": {
         "type": "object",
