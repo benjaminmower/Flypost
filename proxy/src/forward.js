@@ -295,7 +295,9 @@ module.exports = function createForward() {
         headers,
         data,
         responseType: 'arraybuffer',
-        validateStatus: () => true
+        validateStatus: () => true,
+        timeout: 120000, // 120 seconds timeout for high-latency environments
+        maxRedirects: 5
       })
       const durationMs = Date.now() - start
 
@@ -333,12 +335,35 @@ module.exports = function createForward() {
 
       setCors(res, origin)
 
-      return res.status(502).json({
+      // Provide more detailed error messages based on error type
+      let errorDetail = err && err.message ? err.message : String(err)
+      let errorCode = 'PROXY_ERROR'
+      let statusCode = 502
+      
+      if (err.code === 'ECONNREFUSED') {
+        errorDetail = 'Backend service is not available. Please try again later.'
+        errorCode = 'BACKEND_UNAVAILABLE'
+        statusCode = 503
+      } else if (err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED') {
+        errorDetail = 'Request timeout - backend took too long to respond. This may be due to high-latency network conditions.'
+        errorCode = 'TIMEOUT'
+        statusCode = 504
+      } else if (err.code === 'ENOTFOUND') {
+        errorDetail = 'Backend service hostname could not be resolved'
+        errorCode = 'DNS_ERROR'
+        statusCode = 502
+      }
+
+      return res.status(statusCode).json({
         success: false,
         error: 'proxy forward error',
-        detail: err && err.message ? err.message : String(err),
+        code: errorCode,
+        detail: errorDetail,
         target: targetUrl,
-        requestId
+        requestId,
+        suggestion: err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED'
+          ? 'Consider disabling private browsing mode or trying a different network connection'
+          : 'Check backend service availability and network connectivity'
       })
     }
   }
