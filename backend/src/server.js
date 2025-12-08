@@ -8,6 +8,7 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import rateLimit from 'express-rate-limit'
 import { parseEventWithLLM } from './llmParser.js'
 import { validateEventData, getSchema } from './validation.js'
 import { storeEvent, getEventsNear, getStorageStats, clearEvents } from './storage.js'
@@ -37,6 +38,26 @@ app.use(
   })
 )
 app.use(express.json({ limit: '1mb' }))
+
+// Trust proxy for rate limiting (important for deployment behind proxies)
+app.set('trust proxy', 1)
+
+// Rate limiters
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // Limit each IP to 50 requests per 15 min
+  message: { success: false, error: 'Too many event submissions, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+const readLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Limit each IP to 500 requests per 15 min
+  message: { success: false, error: 'Too many read requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 
 // Request logging
 app.use((req, res, next) => {
@@ -105,7 +126,7 @@ const healthHandler = (_req, res) => {
 app.get(['/health', '/api/health'], healthHandler)
 
 // Parse & publish
-app.post('/api/parse-and-publish', async (req, res) => {
+app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
   try {
     const body = req.body || {}
 
@@ -250,7 +271,7 @@ app.post('/api/parse-and-publish', async (req, res) => {
 })
 
 // Events near (with optional brokerage filter)
-app.get('/v1/events/near', async (req, res) => {
+app.get('/v1/events/near', readLimiter, async (req, res) => {
   try {
     const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
     const longitude = parseFloat(
