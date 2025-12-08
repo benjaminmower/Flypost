@@ -78,7 +78,7 @@ const ENABLE_CONCIERGE = process.env.ENABLE_CONCIERGE === 'true'
 if (ENABLE_CONCIERGE) {
   console.log('🎯 Web Concierge feature enabled')
   try {
-    const { createConciergeRouter } = await import('../../concierge/backend/routes.js')
+    const { createConciergeRouter } = await import('./concierge/routes.js')
     const conciergeRouter = createConciergeRouter({
       backendUrl: `http://localhost:${port}`
     })

@@ -27,6 +27,8 @@ The Web Concierge feature provides:
          ▼
 ┌─────────────────┐
 │ Backend Routes  │
+│ (backend/src/   │
+│  concierge/)    │
 │  - Validation   │
 │  - Rate limit   │
 └────────┬────────┘
@@ -43,6 +45,24 @@ The Web Concierge feature provides:
 │ /v1/events/near │
 │  (existing API) │
 └─────────────────┘
+```
+
+## File Structure
+
+```
+v4/
+├── backend/
+│   └── src/
+│       ├── server.js           # Main server with feature flag
+│       └── concierge/
+│           ├── chatHandler.js  # OpenAI integration
+│           └── routes.js       # Express routes
+└── concierge/
+    ├── README.md               # This file
+    └── widget/
+        ├── index.html          # Standalone widget
+        ├── build.js            # Build script
+        └── package.json        # Widget metadata
 ```
 
 ## Setup
@@ -196,7 +216,7 @@ Edit `concierge/widget/index.html` to customize:
 
 ### System Prompt
 
-Edit `concierge/backend/chatHandler.js` to customize the AI assistant's behavior:
+Edit `backend/src/concierge/chatHandler.js` to customize the AI assistant's behavior:
 
 ```javascript
 const systemPrompt = `You are a helpful Web Concierge assistant...`
@@ -204,7 +224,7 @@ const systemPrompt = `You are a helpful Web Concierge assistant...`
 
 ### Rate Limits
 
-Edit `concierge/backend/routes.js` to adjust rate limits:
+Edit `backend/src/concierge/routes.js` to adjust rate limits:
 
 ```javascript
 const chatLimiter = rateLimit({

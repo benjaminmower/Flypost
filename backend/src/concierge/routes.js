@@ -5,7 +5,7 @@
  * This is completely isolated from the main v4 production endpoints.
  */
 
-import express from 'express'
+import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import { processChatMessage } from './chatHandler.js'
 
@@ -14,10 +14,10 @@ import { processChatMessage } from './chatHandler.js'
  * 
  * @param {Object} config - Configuration object
  * @param {string} config.backendUrl - Internal backend URL for API calls
- * @returns {express.Router} Express router
+ * @returns {Router} Express router
  */
 export function createConciergeRouter(config) {
-  const router = express.Router()
+  const router = Router()
   const backendUrl = config.backendUrl || process.env.BACKEND_INTERNAL_URL || 'http://localhost:3001'
 
   // Rate limiter for chat endpoint - more restrictive than regular API
