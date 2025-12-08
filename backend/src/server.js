@@ -37,8 +37,15 @@ const conciergeOrigins = ((process.env.CONCIERGE_ALLOWED_ORIGINS || '')
   .map(origin => origin.trim())
   .filter(origin => {
     if (!origin) return false
-    // Basic URL validation - must start with http:// or https://
-    return /^https?:\/\/.+/.test(origin)
+    // Validate URL using built-in URL constructor
+    try {
+      const url = new URL(origin)
+      // Must be http or https
+      return url.protocol === 'http:' || url.protocol === 'https:'
+    } catch {
+      console.warn(`⚠️  Invalid origin skipped: ${origin}`)
+      return false
+    }
   }))
 
 const allAllowedOrigins = [...frontendOrigins, ...conciergeOrigins]
