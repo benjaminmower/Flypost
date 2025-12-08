@@ -66,11 +66,11 @@ async function executeGetEventsNear(args, backendUrl) {
 
   const url = `${backendUrl}/v1/events/near?${params.toString()}`
   
+  // Create manual timeout using AbortController for better compatibility
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+  
   try {
-    // Create manual timeout using AbortController for better compatibility
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -78,8 +78,6 @@ async function executeGetEventsNear(args, backendUrl) {
       },
       signal: controller.signal
     })
-
-    clearTimeout(timeoutId)
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
@@ -103,6 +101,9 @@ async function executeGetEventsNear(args, backendUrl) {
       error: error.message || 'Failed to fetch events',
       events: []
     }
+  } finally {
+    // Always clear timeout to prevent race conditions
+    clearTimeout(timeoutId)
   }
 }
 
