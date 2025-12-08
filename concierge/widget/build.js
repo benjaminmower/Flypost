@@ -15,11 +15,49 @@ console.log('🔨 Building Web Concierge widget...')
 // Read the source HTML
 const sourceHtml = readFileSync(join(__dirname, 'index.html'), 'utf-8')
 
-// Extract just the widget div and script with safe regex
-// Using more specific patterns to avoid ReDoS
-const widgetMatch = sourceHtml.match(/<div class="flypost-concierge-widget">[^]*?<\/div>/i)
-const styleMatch = sourceHtml.match(/<style>[^]*?<\/style>/i)
-const scriptMatch = sourceHtml.match(/<script>[^]*?<\/script>/i)
+// Extract components by finding matching pairs of opening/closing tags
+// This handles nested tags correctly by counting depth
+function extractTag(html, tagName, className = null) {
+  const openTagPattern = className 
+    ? new RegExp(`<${tagName}[^>]*class="${className}"[^>]*>`, 'i')
+    : new RegExp(`<${tagName}[^>]*>`, 'i')
+  
+  const openMatch = html.match(openTagPattern)
+  if (!openMatch) return null
+  
+  const startIndex = openMatch.index
+  const afterOpenTag = startIndex + openMatch[0].length
+  
+  // Count nested tags to find the matching closing tag
+  let depth = 1
+  let currentIndex = afterOpenTag
+  const closeTag = `</${tagName}>`
+  const openTag = `<${tagName}`
+  
+  while (depth > 0 && currentIndex < html.length) {
+    const nextOpen = html.indexOf(openTag, currentIndex)
+    const nextClose = html.indexOf(closeTag, currentIndex)
+    
+    if (nextClose === -1) break
+    
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      depth++
+      currentIndex = nextOpen + openTag.length
+    } else {
+      depth--
+      if (depth === 0) {
+        return html.substring(startIndex, nextClose + closeTag.length)
+      }
+      currentIndex = nextClose + closeTag.length
+    }
+  }
+  
+  return null
+}
+
+const widgetMatch = extractTag(sourceHtml, 'div', 'flypost-concierge-widget')
+const styleMatch = extractTag(sourceHtml, 'style')
+const scriptMatch = extractTag(sourceHtml, 'script')
 
 if (!widgetMatch || !styleMatch || !scriptMatch) {
   console.error('❌ Failed to extract widget components')
@@ -29,11 +67,11 @@ if (!widgetMatch || !styleMatch || !scriptMatch) {
 // Create embeddable version
 const embeddable = `<!-- Flypost Web Concierge Widget -->
 <!-- Include this snippet in your HTML -->
-${styleMatch[0]}
+${styleMatch}
 
-${widgetMatch[0]}
+${widgetMatch}
 
-${scriptMatch[0]}
+${scriptMatch}
 `
 
 writeFileSync(join(__dirname, 'embeddable.html'), embeddable)

@@ -19,19 +19,21 @@ function waitForServer(port, timeout = 10000) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now()
     const checkServer = async () => {
+      // Check timeout before making the request
+      if (Date.now() - startTime > timeout) {
+        reject(new Error('Server did not start in time'))
+        return
+      }
+      
       try {
         const response = await fetch(`http://localhost:${port}/health`)
         if (response.ok) {
           resolve()
         } else {
-          throw new Error('Server not ready')
-        }
-      } catch (error) {
-        if (Date.now() - startTime > timeout) {
-          reject(new Error('Server did not start in time'))
-        } else {
           setTimeout(checkServer, 100)
         }
+      } catch (error) {
+        setTimeout(checkServer, 100)
       }
     }
     checkServer()

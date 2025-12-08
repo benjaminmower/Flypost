@@ -40,8 +40,8 @@ const conciergeOrigins = ((process.env.CONCIERGE_ALLOWED_ORIGINS || '')
     // Validate URL using built-in URL constructor
     try {
       const url = new URL(origin)
-      // Must be http or https
-      return url.protocol === 'http:' || url.protocol === 'https:'
+      // Robust URL validation: must be a valid http(s) URL with a hostname
+      return (url.protocol === 'http:' || url.protocol === 'https:') && !!url.hostname
     } catch {
       console.warn(`⚠️  Invalid origin skipped: ${origin}`)
       return false
