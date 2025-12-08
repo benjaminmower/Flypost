@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flypost Web Concierge</title>
+  <style>
+    /* Web Concierge Widget Styles */
+    .flypost-concierge-widget {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 600px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+
+    .flypost-concierge-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .flypost-concierge-header h2 {
+      margin: 0 0 8px 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .flypost-concierge-header p {
+      margin: 0;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .flypost-concierge-messages {
+      height: 400px;
+      overflow-y: auto;
+      padding: 20px;
+      background: #f8f9fa;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .flypost-message {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      line-height: 1.5;
+      font-size: 15px;
+    }
+
+    .flypost-message.user {
+      align-self: flex-end;
+      background: #667eea;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .flypost-message.assistant {
+      align-self: flex-start;
+      background: white;
+      color: #333;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      border-bottom-left-radius: 4px;
+    }
+
+    .flypost-message.system {
+      align-self: center;
+      background: #e9ecef;
+      color: #6c757d;
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      max-width: 90%;
+      text-align: center;
+    }
+
+    .flypost-message.error {
+      align-self: center;
+      background: #fee;
+      color: #c33;
+      border: 1px solid #fcc;
+      max-width: 90%;
+    }
+
+    .flypost-concierge-input {
+      padding: 16px;
+      border-top: 1px solid #e9ecef;
+      background: white;
+      display: flex;
+      gap: 8px;
+    }
+
+    .flypost-concierge-input input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid #dee2e6;
+      border-radius: 24px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .flypost-concierge-input input:focus {
+      border-color: #667eea;
+    }
+
+    .flypost-concierge-input button {
+      padding: 12px 24px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 24px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .flypost-concierge-input button:hover:not(:disabled) {
+      background: #5568d3;
+    }
+
+    .flypost-concierge-input button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    .flypost-typing {
+      padding: 8px 16px;
+      background: white;
+      border-radius: 16px;
+      align-self: flex-start;
+      max-width: 100px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .flypost-typing span {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #667eea;
+      margin: 0 2px;
+      animation: typing 1.4s infinite;
+    }
+
+    .flypost-typing span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .flypost-typing span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes typing {
+      0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: 0.3;
+      }
+      30% {
+        transform: translateY(-10px);
+        opacity: 1;
+      }
+    }
+
+    .flypost-location-status {
+      padding: 12px 20px;
+      background: #e7f3ff;
+      border-bottom: 1px solid #bee5ff;
+      font-size: 13px;
+      color: #004085;
+      text-align: center;
+    }
+
+    .flypost-location-status.error {
+      background: #fff3cd;
+      border-bottom-color: #ffeaa7;
+      color: #856404;
+    }
+  </style>
+</head>
+<body>
+  <div class="flypost-concierge-widget">
+    <div class="flypost-concierge-header">
+      <h2>🗓️ Flypost Concierge</h2>
+      <p>Discover local events and activities near you</p>
+    </div>
+    
+    <div id="location-status" class="flypost-location-status">
+      📍 Getting your location...
+    </div>
+    
+    <div id="messages" class="flypost-concierge-messages">
+      <div class="flypost-message system">
+        Welcome! Ask me about events, open houses, or activities near you.
+      </div>
+    </div>
+    
+    <div class="flypost-concierge-input">
+      <input 
+        type="text" 
+        id="user-input" 
+        placeholder="What events are happening near me?"
+        disabled
+      />
+      <button id="send-button" disabled>Send</button>
+    </div>
+  </div>
+
+  <script>
+    // Configuration - Update this with your backend URL
+    const API_BASE_URL = window.FLYPOST_API_BASE || 'http://localhost:3001';
+    
+    // State
+    let userLocation = null;
+    let isProcessing = false;
+
+    // DOM elements
+    const messagesContainer = document.getElementById('messages');
+    const userInput = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-button');
+    const locationStatus = document.getElementById('location-status');
+
+    // Get user's location
+    function getUserLocation() {
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            userLocation = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+            locationStatus.textContent = '📍 Location detected';
+            locationStatus.classList.remove('error');
+            
+            // Enable input
+            userInput.disabled = false;
+            sendButton.disabled = false;
+            userInput.focus();
+          },
+          (error) => {
+            console.error('Location error:', error);
+            
+            // Use default location (Santa Monica, CA)
+            userLocation = {
+              lat: 34.0195,
+              lng: -118.4912
+            };
+            
+            locationStatus.textContent = '📍 Using default location (Santa Monica, CA)';
+            locationStatus.classList.add('error');
+            
+            // Enable input anyway
+            userInput.disabled = false;
+            sendButton.disabled = false;
+            userInput.focus();
+          }
+        );
+      } else {
+        // Geolocation not supported, use default
+        userLocation = {
+          lat: 34.0195,
+          lng: -118.4912
+        };
+        
+        locationStatus.textContent = '📍 Using default location (Santa Monica, CA)';
+        locationStatus.classList.add('error');
+        
+        // Enable input
+        userInput.disabled = false;
+        sendButton.disabled = false;
+        userInput.focus();
+      }
+    }
+
+    // Add message to chat
+    function addMessage(content, type = 'assistant') {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `flypost-message ${type}`;
+      messageDiv.textContent = content;
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    // Show typing indicator
+    function showTyping() {
+      const typingDiv = document.createElement('div');
+      typingDiv.className = 'flypost-typing';
+      typingDiv.id = 'typing-indicator';
+      typingDiv.innerHTML = '<span></span><span></span><span></span>';
+      messagesContainer.appendChild(typingDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    // Hide typing indicator
+    function hideTyping() {
+      const typingDiv = document.getElementById('typing-indicator');
+      if (typingDiv) {
+        typingDiv.remove();
+      }
+    }
+
+    // Send message to backend
+    async function sendMessage() {
+      const message = userInput.value.trim();
+      
+      if (!message || isProcessing || !userLocation) {
+        return;
+      }
+
+      // Add user message to chat
+      addMessage(message, 'user');
+      userInput.value = '';
+      
+      // Disable input while processing
+      isProcessing = true;
+      userInput.disabled = true;
+      sendButton.disabled = true;
+      showTyping();
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: message,
+            lat: userLocation.lat,
+            lng: userLocation.lng
+          })
+        });
+
+        const data = await response.json();
+        
+        hideTyping();
+
+        if (response.ok && data.success) {
+          addMessage(data.message, 'assistant');
+        } else {
+          addMessage(data.error || 'Sorry, I encountered an error. Please try again.', 'error');
+        }
+      } catch (error) {
+        console.error('Chat error:', error);
+        hideTyping();
+        addMessage('Sorry, I couldn\'t connect to the server. Please check your connection and try again.', 'error');
+      } finally {
+        // Re-enable input
+        isProcessing = false;
+        userInput.disabled = false;
+        sendButton.disabled = false;
+        userInput.focus();
+      }
+    }
+
+    // Event listeners
+    sendButton.addEventListener('click', sendMessage);
+    userInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Initialize
+    getUserLocation();
+  </script>
+</body>
+</html>
