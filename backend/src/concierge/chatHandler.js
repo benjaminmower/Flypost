@@ -67,13 +67,19 @@ async function executeGetEventsNear(args, backendUrl) {
   const url = `${backendUrl}/v1/events/near?${params.toString()}`
   
   try {
+    // Create manual timeout using AbortController for better compatibility
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
       },
-      signal: AbortSignal.timeout(10000) // 10 second timeout
+      signal: controller.signal
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
