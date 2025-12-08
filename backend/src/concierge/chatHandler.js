@@ -136,7 +136,7 @@ Guidelines:
 - If the user's location is available, use it; otherwise, ask them to specify a location
 - Format dates and times in a user-friendly way
 
-The user's current location is approximately: lat ${lat}, lng ${lng}`
+The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng ${Number(lng).toFixed(2)}`
 
   const messages = [
     {
