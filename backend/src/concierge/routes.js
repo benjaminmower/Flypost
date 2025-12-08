@@ -112,10 +112,10 @@ export function createConciergeRouter(config) {
           timestamp: new Date().toISOString()
         })
       } else {
-        console.error(`❌ Concierge error: ${result.error}`)
+        console.error(`❌ Concierge error: ${result.error || 'Unknown error'}`)
         return res.status(500).json({
           success: false,
-          error: result.message || 'Failed to process chat message',
+          error: result.error || 'Failed to process chat message',
           timestamp: new Date().toISOString()
         })
       }

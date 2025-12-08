@@ -31,11 +31,15 @@ const frontendOrigins = [
   'https://app.goflypost.com'
 ]
 
-// Add Webflow origins for Web Concierge widget
+// Add Webflow origins for Web Concierge widget (with validation)
 const conciergeOrigins = ((process.env.CONCIERGE_ALLOWED_ORIGINS || '')
   .split(',')
   .map(origin => origin.trim())
-  .filter(Boolean))
+  .filter(origin => {
+    if (!origin) return false
+    // Basic URL validation - must start with http:// or https://
+    return /^https?:\/\/.+/.test(origin)
+  }))
 
 const allAllowedOrigins = [...frontendOrigins, ...conciergeOrigins]
 

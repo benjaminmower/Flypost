@@ -16,9 +16,9 @@ console.log('🔨 Building Web Concierge widget...')
 const sourceHtml = readFileSync(join(__dirname, 'index.html'), 'utf-8')
 
 // Extract just the widget div and script
-const widgetMatch = sourceHtml.match(/<div class="flypost-concierge-widget">[\s\S]*?<\/div>/m)
-const styleMatch = sourceHtml.match(/<style>[\s\S]*?<\/style>/m)
-const scriptMatch = sourceHtml.match(/<script>[\s\S]*?<\/script>/m)
+const widgetMatch = sourceHtml.match(/<div class="flypost-concierge-widget">[\s\S]*?<\/div>/mi)
+const styleMatch = sourceHtml.match(/<style>[\s\S]*?<\/style>/mi)
+const scriptMatch = sourceHtml.match(/<script>[\s\S]*?<\/script>/mi)
 
 if (!widgetMatch || !styleMatch || !scriptMatch) {
   console.error('❌ Failed to extract widget components')
