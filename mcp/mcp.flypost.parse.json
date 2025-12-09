@@ -1,0 +1,125 @@
+{
+  "name": "FlyPost Event Parser",
+  "version": "1.0.0",
+  "description": "Parses natural-language open house descriptions, validates schemas, and publishes normalized events.",
+  "capabilities": [
+    "schema_validation",
+    "data_normalization",
+    "event_publishing"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "naturalLanguageInput": {
+        "type": "string",
+        "description": "Full open house description provided by the agent."
+      },
+      "brokerageId": {
+        "type": "string",
+        "description": "Brokerage tenant identifier, e.g. 'compass', 'vista-sir'."
+      },
+      "contextOverrides": {
+        "type": "object",
+        "description": "Optional overrides for parsing context, like default time zones or languages.",
+        "properties": {
+          "timeZone": {
+            "type": "string",
+            "description": "Time zone for interpreting date/time in the input. Example: 'America/New_York'.",
+            "default": "UTC"
+          },
+          "language": {
+            "type": "string",
+            "description": "Two-letter language code for input parsing. Defaults to 'en'.",
+            "default": "en"
+          }
+        }
+      }
+    },
+    "required": ["naturalLanguageInput", "brokerageId"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "normalizedEvent": {
+        "type": "object",
+        "description": "Structured, normalized data parsed from the input.",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "description": "Unique identifier for the event."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Event ingestion timestamp in ISO 8601 format."
+          },
+          "brokerage": {
+            "type": "string",
+            "description": "Tenant brokerage this event is tied to."
+          },
+          "property": {
+            "type": "object",
+            "description": "Details about the property from the description.",
+            "properties": {
+              "address": {
+                "type": "string",
+                "description": "Full property address."
+              },
+              "features": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Key property features such as '3 beds, 2 baths'."
+              },
+              "price": {
+                "type": "number",
+                "description": "Asking price from the description, if available."
+              }
+            }
+          },
+          "schedule": {
+            "type": "object",
+            "description": "Normalized schedule details.",
+            "properties": {
+              "startTime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 start time for the open house."
+              },
+              "endTime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 end time for the open house."
+              }
+            },
+            "required": ["startTime"]
+          }
+        },
+        "required": ["event_id", "timestamp", "brokerage"]
+      },
+      "status": {
+        "type": "string",
+        "description": "Parsing and publishing operation status ('success', 'failure')."
+      },
+      "error": {
+        "type": "object",
+        "description": "Details for failures, if any.",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Error message for debugging."
+          },
+          "code": {
+            "type": "string",
+            "description": "Error code or type."
+          }
+        }
+      }
+    },
+    "required": ["status"]
+  },
+  "metrics": {
+    "performance_tracking": true,
+    "latency_ms": 5000,
+    "enable_error_logging": true
+  }
+}
