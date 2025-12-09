@@ -1,0 +1,148 @@
+{
+  "name": "FlyPost Event Getter",
+  "version": "1.0.0",
+  "description": "Retrieves events ingested by FlyPost for processing, based on filters such as event type, brokerage, or date. Supports batching and retry policies for robust integration.",
+  "capabilities": [
+    "event_ingestion",
+    "event_fetching",
+    "filter_support",
+    "batch_processing"
+  ],
+  "input_schema": {
+    "type": "object",
+    "description": "Input parameters for fetching FlyPost events.",
+    "properties": {
+      "brokerageId": {
+        "type": "string",
+        "description": "Specific brokerage identifier for scoping events, e.g. 'compass', 'vista-sir'."
+      },
+      "eventType": {
+        "type": "string",
+        "description": "The type of event to fetch, e.g., 'open_house', 'system_log'."
+      },
+      "dateRange": {
+        "type": "object",
+        "description": "Optional date range to filter events.",
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start of the date range in ISO 8601 format."
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "End of the date range in ISO 8601 format."
+          }
+        }
+      },
+      "batchSize": {
+        "type": "integer",
+        "description": "Maximum number of events to retrieve in a single batch (default=50).",
+        "default": 50
+      },
+      "includeMetadata": {
+        "type": "boolean",
+        "description": "Whether to include metadata such as schema version and source details in the response.",
+        "default": false
+      }
+    },
+    "required": ["brokerageId"]
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "The output structure containing fetched events and associated metadata.",
+    "properties": {
+      "events": {
+        "type": "array",
+        "description": "List of events matching the query parameters.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "description": "Unique ID of the event."
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Time when the event occurred or was ingested."
+            },
+            "eventType": {
+              "type": "string",
+              "description": "The type of the event."
+            },
+            "brokerage": {
+              "type": "string",
+              "description": "The brokerage tenant this event belongs to."
+            },
+            "payload": {
+              "type": "object",
+              "description": "Raw or parsed payload of the event."
+            }
+          },
+          "required": ["event_id", "timestamp", "eventType", "brokerage", "payload"]
+        }
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Metadata about the query execution.",
+        "properties": {
+          "total_events": {
+            "type": "integer",
+            "description": "Total number of events fetched in the current batch."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Token for retrieving the next batch of events, if applicable."
+          },
+          "retrieved_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the events were retrieved."
+          }
+        }
+      },
+      "status": {
+        "type": "string",
+        "description": "Execution status of the retrieval operation, e.g., 'success' or 'failure'."
+      },
+      "error": {
+        "type": "object",
+        "description": "Optional details in case of a failure.",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Error message describing what went wrong."
+          },
+          "code": {
+            "type": "string",
+            "description": "Error code for categorization."
+          }
+        }
+      }
+    },
+    "required": ["status", "events"]
+  },
+  "configuration": {
+    "endpoint": "https://api.flypost.com/v1/get-events",
+    "auth": {
+      "type": "api_key",
+      "env_var": "FLYPOST_API_KEY"
+    },
+    "retry_policy": {
+      "max_retries": 3,
+      "backoff_strategy": "exponential"
+    },
+    "timeout_ms": 10000,
+    "pagination": {
+      "enabled": true,
+      "default_page_size": 50
+    }
+  },
+  "metrics": {
+    "performance_tracking": true,
+    "latency_ms": 5000,
+    "enable_error_logging": true
+  }
+}
