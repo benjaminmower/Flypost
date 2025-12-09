@@ -49,6 +49,11 @@ node examples/query_context.js
 ```
 
 ---
+## Architecture Overview
+FlyPost is designed to handle machine-to-machine event workflows by supporting:
+- **Event Ingestion** (mcp.flypost.get.json): Efficiently retrieve and filter events using brokerage, event type, and date-based queries.
+- **Event Parsing** (mcp.flypost.parse.json): Parse free-text inputs and normalize structured outputs using FlyPost's schema.
+These modules can be used independently or together for a complete event-driven system.
 
 ## Descriptors
 
