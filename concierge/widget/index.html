@@ -380,21 +380,12 @@
       }
     }
 
-    // Helper function to escape HTML to prevent XSS
-    function escapeHtml(unsafe) {
-      if (unsafe === null || unsafe === undefined) return '';
-      return String(unsafe)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
+
 
     // Add message to chat
     function addMessage(content, type = 'assistant') {
       // Check if content is structured JSON with listings
-      if (type === 'assistant' && typeof content === 'object' && content.listings) {
+      if (type === 'assistant' && typeof content === 'object' && Array.isArray(content.listings) && content.listings.length > 0) {
         // Render intro message
         if (content.message) {
           const introDiv = document.createElement('div');
@@ -442,6 +433,13 @@
 
     // Create a listing card element
     function createListingCard(listing) {
+      // Validate required fields
+      if (!listing.address || !listing.city || !listing.openHouse || 
+          !listing.beds || !listing.baths || !listing.price) {
+        console.warn('Listing missing required fields:', listing);
+        return document.createComment('Invalid listing data');
+      }
+      
       const card = document.createElement('div');
       card.className = 'flypost-listing-card';
       
@@ -478,14 +476,18 @@
       detailsLabel.textContent = 'Details:';
       const detailsValue = document.createElement('span');
       detailsValue.className = 'value';
-      let detailsText = `${listing.beds} beds · ${listing.baths} baths · Listed ${listing.price}`;
+      const detailsParts = [
+        `${listing.beds} beds`,
+        `${listing.baths} baths`,
+        `Listed ${listing.price}`
+      ];
       if (listing.sqft) {
-        detailsText += ` · ${listing.sqft} sqft`;
+        detailsParts.push(`${listing.sqft} sqft`);
       }
       if (listing.features) {
-        detailsText += ` · ${listing.features}`;
+        detailsParts.push(listing.features);
       }
-      detailsValue.textContent = detailsText;
+      detailsValue.textContent = detailsParts.join(' · ');
       detailsRow.appendChild(detailsLabel);
       detailsRow.appendChild(detailsValue);
       card.appendChild(detailsRow);
@@ -507,19 +509,21 @@
         const strongTag = document.createElement('strong');
         strongTag.textContent = 'Agent:';
         agentSpan.appendChild(strongTag);
-        agentSpan.appendChild(document.createTextNode(' ' + listing.agent.name));
+        if (listing.agent.name) {
+          agentSpan.appendChild(document.createTextNode(' ' + listing.agent.name));
+        }
         agentDiv.appendChild(agentSpan);
         
         if (listing.agent.phone) {
           const phoneLink = document.createElement('a');
-          phoneLink.href = `tel:${escapeHtml(listing.agent.phone)}`;
+          phoneLink.href = `tel:${encodeURIComponent(listing.agent.phone)}`;
           phoneLink.textContent = `📞 ${listing.agent.phone}`;
           agentDiv.appendChild(phoneLink);
         }
         
         if (listing.agent.email) {
           const emailLink = document.createElement('a');
-          emailLink.href = `mailto:${escapeHtml(listing.agent.email)}`;
+          emailLink.href = `mailto:${encodeURIComponent(listing.agent.email)}`;
           emailLink.textContent = '✉️ Email';
           agentDiv.appendChild(emailLink);
         }
