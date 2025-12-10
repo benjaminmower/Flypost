@@ -380,6 +380,17 @@
       }
     }
 
+    // Helper function to escape HTML to prevent XSS
+    function escapeHtml(unsafe) {
+      if (unsafe === null || unsafe === undefined) return '';
+      return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
     // Add message to chat
     function addMessage(content, type = 'assistant') {
       // Check if content is structured JSON with listings
@@ -402,7 +413,12 @@
         if (content.scheduleNote) {
           const noteDiv = document.createElement('div');
           noteDiv.className = 'flypost-schedule-note';
-          noteDiv.innerHTML = `<span class="icon">⚠️</span>${content.scheduleNote}`;
+          const iconSpan = document.createElement('span');
+          iconSpan.className = 'icon';
+          iconSpan.textContent = '⚠️';
+          noteDiv.appendChild(iconSpan);
+          const textNode = document.createTextNode(content.scheduleNote);
+          noteDiv.appendChild(textNode);
           messagesContainer.appendChild(noteDiv);
         }
         
@@ -410,7 +426,7 @@
         if (content.areaContext) {
           const contextDiv = document.createElement('div');
           contextDiv.className = 'flypost-area-context';
-          contextDiv.innerHTML = content.areaContext;
+          contextDiv.textContent = content.areaContext;
           messagesContainer.appendChild(contextDiv);
         }
       } else {
@@ -429,36 +445,88 @@
       const card = document.createElement('div');
       card.className = 'flypost-listing-card';
       
-      let html = `
-        <div class="flypost-listing-header">
-          <span class="icon">🏠</span>
-          <h4>${listing.address}, ${listing.city}</h4>
-        </div>
-        <div class="flypost-listing-row">
-          <span class="label">Open House:</span>
-          <span class="value">${listing.openHouse}</span>
-        </div>
-        <div class="flypost-listing-row">
-          <span class="label">Details:</span>
-          <span class="value">${listing.beds} beds · ${listing.baths} baths · Listed ${listing.price}${listing.sqft ? ` · ${listing.sqft} sqft` : ''}${listing.features ? ` · ${listing.features}` : ''}</span>
-        </div>
-      `;
+      // Header
+      const header = document.createElement('div');
+      header.className = 'flypost-listing-header';
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'icon';
+      iconSpan.textContent = '🏠';
+      const h4 = document.createElement('h4');
+      h4.textContent = `${listing.address}, ${listing.city}`;
+      header.appendChild(iconSpan);
+      header.appendChild(h4);
+      card.appendChild(header);
       
+      // Open House Row
+      const openHouseRow = document.createElement('div');
+      openHouseRow.className = 'flypost-listing-row';
+      const ohLabel = document.createElement('span');
+      ohLabel.className = 'label';
+      ohLabel.textContent = 'Open House:';
+      const ohValue = document.createElement('span');
+      ohValue.className = 'value';
+      ohValue.textContent = listing.openHouse;
+      openHouseRow.appendChild(ohLabel);
+      openHouseRow.appendChild(ohValue);
+      card.appendChild(openHouseRow);
+      
+      // Details Row
+      const detailsRow = document.createElement('div');
+      detailsRow.className = 'flypost-listing-row';
+      const detailsLabel = document.createElement('span');
+      detailsLabel.className = 'label';
+      detailsLabel.textContent = 'Details:';
+      const detailsValue = document.createElement('span');
+      detailsValue.className = 'value';
+      let detailsText = `${listing.beds} beds · ${listing.baths} baths · Listed ${listing.price}`;
+      if (listing.sqft) {
+        detailsText += ` · ${listing.sqft} sqft`;
+      }
+      if (listing.features) {
+        detailsText += ` · ${listing.features}`;
+      }
+      detailsValue.textContent = detailsText;
+      detailsRow.appendChild(detailsLabel);
+      detailsRow.appendChild(detailsValue);
+      card.appendChild(detailsRow);
+      
+      // Summary
       if (listing.summary) {
-        html += `<div class="flypost-listing-summary">${listing.summary}</div>`;
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'flypost-listing-summary';
+        summaryDiv.textContent = listing.summary;
+        card.appendChild(summaryDiv);
       }
       
+      // Agent
       if (listing.agent) {
-        html += `
-          <div class="flypost-listing-agent">
-            <span><strong>Agent:</strong> ${listing.agent.name}</span>
-            ${listing.agent.phone ? `<a href="tel:${listing.agent.phone}">📞 ${listing.agent.phone}</a>` : ''}
-            ${listing.agent.email ? `<a href="mailto:${listing.agent.email}">✉️ Email</a>` : ''}
-          </div>
-        `;
+        const agentDiv = document.createElement('div');
+        agentDiv.className = 'flypost-listing-agent';
+        
+        const agentSpan = document.createElement('span');
+        const strongTag = document.createElement('strong');
+        strongTag.textContent = 'Agent:';
+        agentSpan.appendChild(strongTag);
+        agentSpan.appendChild(document.createTextNode(' ' + listing.agent.name));
+        agentDiv.appendChild(agentSpan);
+        
+        if (listing.agent.phone) {
+          const phoneLink = document.createElement('a');
+          phoneLink.href = `tel:${escapeHtml(listing.agent.phone)}`;
+          phoneLink.textContent = `📞 ${listing.agent.phone}`;
+          agentDiv.appendChild(phoneLink);
+        }
+        
+        if (listing.agent.email) {
+          const emailLink = document.createElement('a');
+          emailLink.href = `mailto:${escapeHtml(listing.agent.email)}`;
+          emailLink.textContent = '✉️ Email';
+          agentDiv.appendChild(emailLink);
+        }
+        
+        card.appendChild(agentDiv);
       }
       
-      card.innerHTML = html;
       return card;
     }
 
