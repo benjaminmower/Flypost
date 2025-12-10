@@ -215,9 +215,7 @@
   <script>
     // Configuration - Update this with your backend URL
     // IMPORTANT: Use HTTPS in production to protect user data
-    if (!window.FLYPOST_API_BASE) {
-      throw new Error('FLYPOST_API_BASE is not set. Please configure window.FLYPOST_API_BASE with your backend URL.');
-    }
+
     const API_BASE_URL = window.FLYPOST_API_BASE || 'https://api.goflypost.com';
     
     // State
