@@ -19,12 +19,12 @@ const allowedOrigins = {
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // Allow non-origin requests (e.g., server-to-server)
+      if (!origin) return cb(null, true); // Allow non-origin requests (e. g., server-to-server)
       const allowedMethods = allowedOrigins[origin];
       if (allowedMethods) return cb(null, true);
       return cb(new Error('Not allowed by CORS: ' + origin));
     },
-    credentials: true,
+    credentials:  true,
   }),
 );
 
@@ -50,7 +50,7 @@ app.use((req, res, next) => {
 function enforceOriginMethods(req, res, next) {
   const origin = req.headers.origin;
   const allowedMethods = allowedOrigins[origin];
-  if (allowedMethods && !allowedMethods.includes(req.method)) {
+  if (allowedMethods && ! allowedMethods.includes(req.method)) {
     console.log(`⛔ Method ${req.method} not allowed for origin ${origin}`);
     return res.status(405).json({
       success: false,
@@ -70,7 +70,7 @@ app.use(enforceOriginMethods);
 
 // Collect all allowed tokens here
 const WRITE_TOKENS = [
-  process.env.FLYPOST_WRITE_TOKEN, // global token (e.g., "goflypost")
+  process.env. FLYPOST_WRITE_TOKEN, // global token (e.g., "goflypost")
   process.env.VISTA_WRITE_TOKEN, // Vista-specific token (e.g., "vist@sir")
   process.env.BHHS_UTAH_WRITE_TOKEN, // BHHS Utah brokerage
   process.env.COMPASS_WRITE_TOKEN, // Compass brokerage
@@ -78,7 +78,7 @@ const WRITE_TOKENS = [
 
 function requireWriteToken(req, res, next) {
   const isApiPost =
-    req.method === 'POST' && req.originalUrl.startsWith('/api/');
+    req.method === 'POST' && req.originalUrl. startsWith('/api/');
 
   if (isApiPost && WRITE_TOKENS.length > 0) {
     const token = req.get('x-flypost-write-token') || '';
@@ -119,7 +119,7 @@ app.get('/v1/events/near', forward);
 app.post('/api/parse-and-publish', forward);
 app.use('/api', forward);
 
-const PORT = parseInt(process.env.PORT || '8080', 10);
+const PORT = parseInt(process.env. PORT || '8080', 10);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Proxy listening on http://0.0.0.0:${PORT}`);
 });
