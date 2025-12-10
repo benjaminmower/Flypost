@@ -9,10 +9,10 @@ COPY package.json package-lock.json ./
 RUN npm install --only=production
 
 # Copy the rest of the widget's source files into the container
-COPY . ./
+COPY .  ./
 
 # Build the embeddable HTML widget
-RUN node build.js
+RUN node build. js
 
 # Stage 2: Run stage – Serve the widget
 FROM node:20-alpine
@@ -22,10 +22,10 @@ RUN addgroup appgroup && adduser -S appuser -G appgroup
 USER appuser
 
 # Set the working directory for serving files
-WORKDIR /app
+WORKDIR /srv
 
-# Copy the generated embeddable.html from the build stage
-COPY --from=builder /app/embeddable.html .
+# Copy the generated embeddable. html as index.html from the build stage
+COPY --from=builder /app/embeddable.html ./index.html
 
 # Install http-server to a user-accessible directory without using -g
 RUN npm install http-server
@@ -37,5 +37,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080 || exit 1
 
-# Start the HTTP server using npx
-CMD ["npx", "http-server", "-p", "8080", "-a", "0.0.0.0", "-d", "false", "-i", "embeddable.html"]
+# Start the HTTP server, serving /srv directory (not the npm install location)
+CMD ["npx", "http-server", "/srv", "-p", "8080", "-a", "0.0.0.0", "-d", "false"]
