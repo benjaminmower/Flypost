@@ -206,6 +206,7 @@ When providing Tier 2 area context, ALWAYS use this pattern:
 
 The Flypost data above contains only the verified open-house listings.
 
+> **Note:** Replace all bracketed placeholders (e.g., [specify: ...], [Answer using general knowledge]) with actual values relevant to the context.
 ## Restrictions
 
 - NEVER reference Zillow, Redfin, Realtor.com, MLS sites, or IDX portals
