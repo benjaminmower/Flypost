@@ -233,15 +233,14 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
   ]
 
   try {
-    // Initial call to OpenAI
+    // Initial call to OpenAI - no JSON format during tool calls
     let response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages,
       tools: [getEventsNearTool],
       tool_choice: 'auto',
       temperature: 0.7,
-      max_tokens: 2000,
-      response_format: { type: 'json_object' }
+      max_tokens: 2000
     })
 
     let responseMessage = response.choices[0].message
@@ -269,7 +268,7 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
         })
       }
 
-      // Get next response from OpenAI with JSON format
+      // Get next response from OpenAI - apply JSON format only for final response
       response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages,
@@ -285,8 +284,25 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
 
     // Parse the JSON response
     let parsedResponse
+    
+    // Explicitly handle empty/null response content
+    if (!responseMessage.content || responseMessage.content.trim() === '') {
+      return {
+        success: true,
+        message: "I apologize, but I couldn't generate a response. Please try rephrasing your question.",
+        listings: [],
+        scheduleNote: null,
+        areaContext: null,
+        usage: {
+          promptTokens: response.usage?.prompt_tokens || 0,
+          completionTokens: response.usage?.completion_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0
+        }
+      }
+    }
+    
     try {
-      parsedResponse = JSON.parse(responseMessage.content || '{}')
+      parsedResponse = JSON.parse(responseMessage.content)
     } catch (parseError) {
       console.warn('Failed to parse JSON response, using fallback:', parseError)
       // Fallback to plain text
@@ -304,11 +320,11 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
       }
     }
 
-    // Return structured response
+    // Return structured response with array validation
     return {
       success: true,
       message: parsedResponse.message || '',
-      listings: parsedResponse.listings || [],
+      listings: Array.isArray(parsedResponse.listings) ? parsedResponse.listings : [],
       scheduleNote: parsedResponse.scheduleNote || null,
       areaContext: parsedResponse.areaContext || null,
       usage: {
