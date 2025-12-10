@@ -12,7 +12,7 @@ RUN npm install --only=production
 COPY .  ./
 
 # Build the embeddable HTML widget
-RUN node build. js
+RUN node build.js
 
 # Stage 2: Run stage – Serve the widget
 FROM node:20-alpine
