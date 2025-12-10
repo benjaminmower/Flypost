@@ -1,51 +1,41 @@
 options:
-  logging: CLOUD_LOGGING_ONLY # Logs sent only to Cloud Logging
+  logging: "CLOUD_LOGGING_ONLY"
 
 steps:
   # Step 1: Build the Docker image for the Concierge service
-  - name: 'gcr.io/cloud-builders/docker'
-    id: build-concierge
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-concierge"
     args:
-      [
-        "build",
-        "-t",
-        "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA", # Use commit SHA to tag the image
-        "-f",
-        "widget/Dockerfile", # Dockerfile path (inside widget directory)
-        "widget",            # Build context (widget folder)
-      ]
-    dir: 'v4/concierge' # Top-level working directory for build
+      - "build"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA"
+      - "-f"
+      - "widget/Dockerfile"
+      - "widget"
+    dir: "concierge"
 
-  # Step 2: Push the Docker image to GCR
-  - name: 'gcr.io/cloud-builders/docker'
-    id: push-concierge
+  # Step 2: Push the Docker image to Google Container Registry
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-concierge"
     args:
-      [
-        "push",
-        "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA",
-      ]
+      - "push"
+      - "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA"
 
-  # Step 3: Deploy the Docker image to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: deploy-concierge
-    entrypoint: gcloud
+  # Step 3: Deploy the Concierge service to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-concierge"
+    entrypoint: "gcloud"
     args:
-      [
-        "run",
-        "deploy",
-        "flypost-concierge", # Name of the Cloud Run service
-        "--image", "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA", # Deployed image
-        "--region", "us-west1", # Deployment region
-        "--platform", "managed",
-        "--allow-unauthenticated", # Make publicly accessible
-      ]
+      - "run"
+      - "deploy"
+      - "flypost-concierge"
+      - "--image"
+      - "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA"
+      - "--region"
+      - "us-west1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
 
-# Optional: Outputs the Docker image
 images:
   - "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA"
-
-  - name: "ubuntu"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - "ls -R" # Displays all files and folders
