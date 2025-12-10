@@ -31,9 +31,28 @@ const frontendOrigins = [
   'https://app.goflypost.com'
 ]
 
+// Add Webflow origins for Web Concierge widget (with validation)
+const conciergeOrigins = ((process.env.CONCIERGE_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(origin => {
+    if (!origin) return false
+    // Validate URL using built-in URL constructor
+    try {
+      const url = new URL(origin)
+      // Robust URL validation: must be a valid http(s) URL with a hostname
+      return (url.protocol === 'http:' || url.protocol === 'https:') && !!url.hostname
+    } catch {
+      console.warn(`⚠️  Invalid origin skipped: ${origin}`)
+      return false
+    }
+  }))
+
+const allAllowedOrigins = [...frontendOrigins, ...conciergeOrigins]
+
 app.use(
   cors({
-    origin: frontendOrigins,
+    origin: allAllowedOrigins,
     credentials: true
   })
 )
@@ -64,6 +83,24 @@ app.use((req, res, next) => {
   console.log(`📡 ${req.method} ${req.path}`)
   next()
 })
+
+// Web Concierge Feature (conditionally enabled)
+const ENABLE_CONCIERGE = process.env.ENABLE_CONCIERGE === 'true'
+if (ENABLE_CONCIERGE) {
+  console.log('🎯 Web Concierge feature enabled')
+  try {
+    const { createConciergeRouter } = await import('./concierge/routes.js')
+    const conciergeRouter = createConciergeRouter({
+      backendUrl: `http://localhost:${port}`
+    })
+    app.use('/api', conciergeRouter)
+    console.log('✅ Web Concierge routes mounted at /api/chat')
+  } catch (error) {
+    console.error('❌ Failed to load Web Concierge:', error.message)
+  }
+} else {
+  console.log('⚪ Web Concierge feature disabled (set ENABLE_CONCIERGE=true to enable)')
+}
 
 /**
  * Utilities: ISO date normalization
