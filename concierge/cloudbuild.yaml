@@ -12,7 +12,7 @@ steps:
       - "-f"
       - "widget/Dockerfile"
       - "widget"
-    dir: "concierge"
+    dir: "v4/concierge"
 
   # Step 2: Push the Docker image to Google Container Registry
   - name: "gcr.io/cloud-builders/docker"
