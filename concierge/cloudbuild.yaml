@@ -43,3 +43,9 @@ steps:
 # Optional: Outputs the Docker image
 images:
   - "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA"
+
+  - name: "ubuntu"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - "ls -R" # Displays all files and folders
