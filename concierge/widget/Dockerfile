@@ -5,11 +5,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package.json and package-lock.json, then install dependencies
-COPY concierge/widget/package.json concierge/widget/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm install --only=production
 
 # Copy the source files into the container
-COPY concierge/widget/ ./
+COPY . ./
 
 # Build the embeddable HTML widget
 RUN node build.js
