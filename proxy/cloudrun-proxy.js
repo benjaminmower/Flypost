@@ -8,7 +8,7 @@ const app = express();
 
 // Define origins and their allowed methods
 const allowedOrigins = {
-  'https://ask.goflypost.com': ['GET'], // Only allow GET methods for ask
+  'https://ask.goflypost.com': ['GET', 'POST'], // GET + POST for chat queries
   'https://post.goflypost.com': ['GET', 'POST'], // Allow GET and POST for post
   'https://flypost.netlify.app': ['GET'],
   'https://app.goflypost.com': ['GET'],
@@ -66,6 +66,7 @@ app.use(enforceOriginMethods);
 // Write-token authentication middleware
 // Checks POST requests to /api/* paths before routing
 // Supports multiple static tokens (global + per-brokerage)
+// Exempts /api/chat (read-only endpoint that uses POST)
 // -------------------------------------
 
 // Collect all allowed tokens here
@@ -79,15 +80,17 @@ const WRITE_TOKENS = [
 function requireWriteToken(req, res, next) {
   const isApiPost =
     req.method === 'POST' && req.originalUrl. startsWith('/api/');
+  const isChatEndpoint = req.originalUrl.startsWith('/api/chat');
 
-  if (isApiPost && WRITE_TOKENS.length > 0) {
+  // Chat endpoint is read-only, doesn't need write token
+  if (isApiPost && !isChatEndpoint && WRITE_TOKENS.length > 0) {
     const token = req.get('x-flypost-write-token') || '';
 
     if (!token) {
       console.log(`🔒 Write-token missing for ${req.method} ${req.originalUrl}`);
       return res.status(401).json({
         success: false,
-        error: 'Unauthorized: Missing write token',
+        error:  'Unauthorized: Missing write token',
       });
     }
 
@@ -100,7 +103,7 @@ function requireWriteToken(req, res, next) {
       });
     }
 
-    console.log(`✅ Write-token validated for ${req.method} ${req.originalUrl}`);
+    console. log(`✅ Write-token validated for ${req.method} ${req.originalUrl}`);
   }
 
   next();
@@ -119,7 +122,7 @@ app.get('/v1/events/near', forward);
 app.post('/api/parse-and-publish', forward);
 app.use('/api', forward);
 
-const PORT = parseInt(process.env. PORT || '8080', 10);
+const PORT = parseInt(process.env.PORT || '8080', 10);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Proxy listening on http://0.0.0.0:${PORT}`);
 });
