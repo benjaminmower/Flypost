@@ -182,6 +182,106 @@
       border-bottom-color: #ffeaa7;
       color: #856404;
     }
+
+    /* Listing Card Styles */
+    .flypost-listing-card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin: 8px 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      border: 1px solid #e9ecef;
+      align-self: flex-start;
+      max-width: 100%;
+    }
+
+    .flypost-listing-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .flypost-listing-header .icon {
+      font-size: 20px;
+    }
+
+    .flypost-listing-header h4 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .flypost-listing-row {
+      display: flex;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .flypost-listing-row .label {
+      font-weight: 600;
+      color: #667eea;
+      min-width: 100px;
+    }
+
+    .flypost-listing-row .value {
+      color: #555;
+    }
+
+    .flypost-listing-summary {
+      font-size: 14px;
+      color: #666;
+      font-style: italic;
+      margin: 12px 0;
+      line-height: 1.5;
+    }
+
+    .flypost-listing-agent {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #eee;
+      font-size: 14px;
+      flex-wrap: wrap;
+    }
+
+    .flypost-listing-agent a {
+      color: #667eea;
+      text-decoration: none;
+    }
+
+    .flypost-listing-agent a:hover {
+      text-decoration: underline;
+    }
+
+    .flypost-schedule-note {
+      background: #fff8e6;
+      border: 1px solid #ffe066;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 8px 0;
+      font-size: 14px;
+      align-self: flex-start;
+      max-width: 100%;
+    }
+
+    .flypost-schedule-note .icon {
+      margin-right: 8px;
+    }
+
+    .flypost-area-context {
+      background: #f0f7ff;
+      border: 1px solid #bee5ff;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 8px 0;
+      font-size: 14px;
+      align-self: flex-start;
+      max-width: 100%;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -280,13 +380,158 @@
       }
     }
 
+
+
     // Add message to chat
     function addMessage(content, type = 'assistant') {
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `flypost-message ${type}`;
-      messageDiv.textContent = content;
-      messagesContainer.appendChild(messageDiv);
+      // Check if content is structured JSON with listings
+      if (type === 'assistant' && typeof content === 'object' && Array.isArray(content.listings) && content.listings.length > 0) {
+        // Render intro message
+        if (content.message) {
+          const introDiv = document.createElement('div');
+          introDiv.className = 'flypost-message assistant';
+          introDiv.textContent = content.message;
+          messagesContainer.appendChild(introDiv);
+        }
+        
+        // Render each listing as a card
+        content.listings.forEach(listing => {
+          const card = createListingCard(listing);
+          messagesContainer.appendChild(card);
+        });
+        
+        // Render schedule note if present
+        if (content.scheduleNote) {
+          const noteDiv = document.createElement('div');
+          noteDiv.className = 'flypost-schedule-note';
+          const iconSpan = document.createElement('span');
+          iconSpan.className = 'icon';
+          iconSpan.textContent = '⚠️';
+          noteDiv.appendChild(iconSpan);
+          const textNode = document.createTextNode(content.scheduleNote);
+          noteDiv.appendChild(textNode);
+          messagesContainer.appendChild(noteDiv);
+        }
+        
+        // Render area context if present
+        if (content.areaContext) {
+          const contextDiv = document.createElement('div');
+          contextDiv.className = 'flypost-area-context';
+          contextDiv.textContent = content.areaContext;
+          messagesContainer.appendChild(contextDiv);
+        }
+      } else {
+        // Fallback to plain text
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `flypost-message ${type}`;
+        messageDiv.textContent = typeof content === 'string' ? content : content.message || JSON.stringify(content);
+        messagesContainer.appendChild(messageDiv);
+      }
+      
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    // Create a listing card element
+    function createListingCard(listing) {
+      // Validate required fields with explicit null/undefined checks
+      if (listing.address == null || listing.city == null || listing.openHouse == null || 
+          listing.beds == null || listing.baths == null || listing.price == null) {
+        console.warn('Listing missing required fields:', listing);
+        return document.createComment('Invalid listing data');
+      }
+      
+      const card = document.createElement('div');
+      card.className = 'flypost-listing-card';
+      
+      // Header
+      const header = document.createElement('div');
+      header.className = 'flypost-listing-header';
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'icon';
+      iconSpan.textContent = '🏠';
+      const h4 = document.createElement('h4');
+      h4.textContent = `${listing.address}, ${listing.city}`;
+      header.appendChild(iconSpan);
+      header.appendChild(h4);
+      card.appendChild(header);
+      
+      // Open House Row
+      const openHouseRow = document.createElement('div');
+      openHouseRow.className = 'flypost-listing-row';
+      const ohLabel = document.createElement('span');
+      ohLabel.className = 'label';
+      ohLabel.textContent = 'Open House:';
+      const ohValue = document.createElement('span');
+      ohValue.className = 'value';
+      ohValue.textContent = listing.openHouse;
+      openHouseRow.appendChild(ohLabel);
+      openHouseRow.appendChild(ohValue);
+      card.appendChild(openHouseRow);
+      
+      // Details Row
+      const detailsRow = document.createElement('div');
+      detailsRow.className = 'flypost-listing-row';
+      const detailsLabel = document.createElement('span');
+      detailsLabel.className = 'label';
+      detailsLabel.textContent = 'Details:';
+      const detailsValue = document.createElement('span');
+      detailsValue.className = 'value';
+      const detailsParts = [
+        `${listing.beds} beds`,
+        `${listing.baths} baths`,
+        `Listed ${listing.price}`
+      ];
+      if (listing.sqft) {
+        detailsParts.push(`${listing.sqft} sqft`);
+      }
+      if (listing.features) {
+        detailsParts.push(listing.features);
+      }
+      detailsValue.textContent = detailsParts.join(' · ');
+      detailsRow.appendChild(detailsLabel);
+      detailsRow.appendChild(detailsValue);
+      card.appendChild(detailsRow);
+      
+      // Summary
+      if (listing.summary) {
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'flypost-listing-summary';
+        summaryDiv.textContent = listing.summary;
+        card.appendChild(summaryDiv);
+      }
+      
+      // Agent
+      if (listing.agent) {
+        const agentDiv = document.createElement('div');
+        agentDiv.className = 'flypost-listing-agent';
+        
+        const agentSpan = document.createElement('span');
+        const strongTag = document.createElement('strong');
+        strongTag.textContent = 'Agent:';
+        agentSpan.appendChild(strongTag);
+        if (listing.agent.name != null) {
+          agentSpan.appendChild(document.createTextNode(' ' + listing.agent.name));
+        }
+        agentDiv.appendChild(agentSpan);
+        
+        if (listing.agent.phone) {
+          const phoneLink = document.createElement('a');
+          phoneLink.href = `tel:${encodeURIComponent(listing.agent.phone)}`;
+          phoneLink.textContent = `📞 ${listing.agent.phone}`;
+          agentDiv.appendChild(phoneLink);
+        }
+        
+        if (listing.agent.email) {
+          const emailLink = document.createElement('a');
+          emailLink.href = `mailto:${encodeURIComponent(listing.agent.email)}`;
+          emailLink.textContent = '✉️ Email';
+          agentDiv.appendChild(emailLink);
+        }
+        
+        card.appendChild(agentDiv);
+      }
+      
+      return card;
     }
 
     // Show typing indicator
@@ -343,7 +588,12 @@
         hideTyping();
 
         if (response.ok && data.success) {
-          addMessage(data.message, 'assistant');
+          // Check if response has structured listings
+          if (data.listings && data.listings.length > 0) {
+            addMessage(data, 'assistant');
+          } else {
+            addMessage(data.message, 'assistant');
+          }
         } else {
           addMessage(data.error || 'Sorry, I encountered an error. Please try again.', 'error');
         }
