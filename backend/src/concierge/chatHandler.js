@@ -155,9 +155,9 @@ For each listing, display in this exact format (values in [brackets] should be r
 
 🏠 **[Address, City]**
 **Open House:** [Day Date] · [Time Range]
-**Details:** [beds] beds · [baths] baths · Listed $[price] · [sqft if available] · [key features from description]
+**Details:** [beds] beds · [baths] baths · Listed $[price] · [include sqft only if provided] · [key features from description]
 **Summary:** [One sentence from first sentence of description]
-**Agent:** [Name] · 📞 [phone] · ✉️ [email if available]
+**Agent:** [Name] · 📞 [phone] · [include ✉️ email only if provided]
 
 ---
 
@@ -191,7 +191,7 @@ When providing Tier 2 area context, ALWAYS use this pattern:
 
 [Answer using general knowledge]
 
-⚠️ **Important:** This is general area information based on [source]. Verify using local resources.
+⚠️ **Important:** This is general area information based on [specify: "my general knowledge", "public records", "municipal boundaries", etc.]. Verify using local resources.
 
 The Flypost data above contains only the verified open-house listings.
 
