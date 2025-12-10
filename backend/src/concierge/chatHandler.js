@@ -145,7 +145,7 @@ Provide as helpful context, always with disclosure.
 
 When users ask about events or open houses:
 1. Use the getEventsNear tool to search for events near their location
-2. Present results using the structured card format below
+2. Present results using the structured JSON format below
 3. Show only the freshest version per property using deduplication:
    - Canonical key: streetAddress + postalCode + city + region + lat/lng + brokerageId
    - Freshness priority: submissionTimestamp → storedAt → updatedAt → createdAt → startDate
@@ -154,59 +154,43 @@ When users ask about events or open houses:
 
 ## Response Format
 
-For each listing, display in this exact format (values in [brackets] should be replaced with actual data from the event):
+You MUST return a JSON object with this exact structure:
 
-🏠 **[Address, City]**
-**Open House:** [Day Date] · [Time Range]
-**Details:** [beds] beds · [baths] baths · Listed $[price][if sqft is provided: ' · [sqft] sqft'][if not: ''] · [key features from description]
-**Summary:** [One sentence from first sentence of description]
-**Agent:** [Name] · 📞 [phone][if email is provided: ' · ✉️ [email]'][if not: '']
+{
+  "message": "Brief introductory message here",
+  "listings": [
+    {
+      "address": "Street address only",
+      "city": "City name",
+      "openHouse": "Day Date · Time Range (e.g., Saturday Dec 14 · 1:00 PM - 4:00 PM)",
+      "beds": 4,
+      "baths": 3.5,
+      "price": "$2,495,000",
+      "sqft": "2,800",
+      "features": "Key features from description",
+      "summary": "One compelling sentence from property description",
+      "agent": {
+        "name": "Agent full name",
+        "phone": "310-555-0123",
+        "email": "agent@example.com"
+      }
+    }
+  ],
+  "scheduleNote": null,
+  "areaContext": null
+}
 
----
+### Field Rules:
+- **message**: Brief intro like "Here are the open houses in Manhattan Beach this weekend:"
+- **listings**: Array of listing objects. Each listing must have address, city, openHouse, beds, baths, price
+- **sqft**: Optional. Omit field if not provided in event data
+- **features**: Optional. Extract 2-3 key features from description
+- **summary**: Optional. One compelling sentence from property description
+- **agent.phone**: Optional. Omit if not in event data
+- **agent.email**: Optional. Omit if not in event data
+- **scheduleNote**: String or null. Use when no events match exact requested date: "There are no verified open houses on Saturday Dec 14 within 5 miles of Manhattan Beach. The nearest confirmed events begin Sunday Dec 15."
+- **areaContext**: String or null. Use when providing Tier 2 general knowledge with disclosure: "Manhattan Beach has highly-rated schools in the Manhattan Beach Unified School District. ⚠️ Important: This is general area information. Verify using local resources."
 
-Examples:
-
-// Example with both optional fields present
-🏠 **123 Main Street, Manhattan Beach**
-**Open House:** Saturday Dec 14 · 1:00 PM - 4:00 PM
-**Details:** 4 beds · 3 baths · Listed $2,495,000 · 2,800 sqft · Ocean views, updated kitchen
-**Summary:** Stunning coastal home with panoramic ocean views and modern finishes throughout.
-**Agent:** Jane Smith · 📞 (310) 555-0123 · ✉️ jane@example.com
-
-// Example with optional fields absent
-🏠 **456 Oak Avenue, Redondo Beach**
-**Open House:** Sunday Dec 15 · 12:00 PM - 3:00 PM
-**Details:** 3 beds · 2 baths · Listed $1,350,000 · Spacious backyard, hardwood floors
-**Summary:** Charming single-level home with a large backyard perfect for entertaining.
-**Agent:** John Doe · 📞 (310) 555-0456
-
----
-
-- If the sqft value is not provided, omit it and do not include an extra separator.
-- If the agent's email is not provided, omit it and do not include an extra separator.
-### Schedule Notes
-When no events match the exact requested date but nearby dates exist, use this format:
-
-⚠️ **Schedule Note**
-There are no verified open houses on [requested date] within [radius] of [location]. 
-The nearest confirmed events begin [actual date range].
-
-_Note: Values in [brackets] should be replaced with actual data._
-Example:
-⚠️ **Schedule Note**
-There are no verified open houses on Saturday Dec 14 within 5 miles of Manhattan Beach. 
-The nearest confirmed events begin Sunday Dec 15.
-
-### Area Context Disclosure
-When providing Tier 2 area context, ALWAYS use this pattern:
-
-[Answer using general knowledge]
-
-⚠️ **Important:** This is general area information based on [specify: "my general knowledge", "public records", "municipal boundaries", etc.]. Verify using local resources.
-
-The Flypost data above contains only the verified open-house listings.
-
-> **Note:** Replace all bracketed placeholders (e.g., [specify: ...], [Answer using general knowledge]) with actual values relevant to the context.
 ## Restrictions
 
 - NEVER reference Zillow, Redfin, Realtor.com, MLS sites, or IDX portals
@@ -216,15 +200,17 @@ The Flypost data above contains only the verified open-house listings.
 - NEVER make guarantees about school assignments, safety, or area attributes
 - NEVER provide Tier 2 (area context) without the disclosure pattern
 - Stay fair housing compliant
+- ALWAYS return valid JSON
 
 ## Location Clarification
 
-If user asks about vague locations like "near me" or "around here", ask for:
-- ZIP code, or
-- neighborhood name, or
-- city name
-
-Never guess coordinates from vague references.
+If user asks about vague locations like "near me" or "around here", return:
+{
+  "message": "To help you better, could you specify a ZIP code, neighborhood name, or city name?",
+  "listings": [],
+  "scheduleNote": null,
+  "areaContext": null
+}
 
 ## Tone
 
@@ -254,7 +240,8 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
       tools: [getEventsNearTool],
       tool_choice: 'auto',
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 2000,
+      response_format: { type: 'json_object' }
     })
 
     let responseMessage = response.choices[0].message
@@ -282,22 +269,48 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
         })
       }
 
-      // Get next response from OpenAI
+      // Get next response from OpenAI with JSON format
       response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages,
         tools: [getEventsNearTool],
         tool_choice: 'auto',
         temperature: 0.7,
-        max_tokens: 1000
+        max_tokens: 2000,
+        response_format: { type: 'json_object' }
       })
 
       responseMessage = response.choices[0].message
     }
 
+    // Parse the JSON response
+    let parsedResponse
+    try {
+      parsedResponse = JSON.parse(responseMessage.content || '{}')
+    } catch (parseError) {
+      console.warn('Failed to parse JSON response, using fallback:', parseError)
+      // Fallback to plain text
+      return {
+        success: true,
+        message: responseMessage.content || 'I apologize, but I was unable to generate a response.',
+        listings: [],
+        scheduleNote: null,
+        areaContext: null,
+        usage: {
+          promptTokens: response.usage?.prompt_tokens || 0,
+          completionTokens: response.usage?.completion_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0
+        }
+      }
+    }
+
+    // Return structured response
     return {
       success: true,
-      message: responseMessage.content || 'I apologize, but I was unable to generate a response.',
+      message: parsedResponse.message || '',
+      listings: parsedResponse.listings || [],
+      scheduleNote: parsedResponse.scheduleNote || null,
+      areaContext: parsedResponse.areaContext || null,
       usage: {
         promptTokens: response.usage?.prompt_tokens || 0,
         completionTokens: response.usage?.completion_tokens || 0,
