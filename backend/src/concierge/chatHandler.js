@@ -155,21 +155,32 @@ For each listing, display in this exact format (values in [brackets] should be r
 
 🏠 **[Address, City]**
 **Open House:** [Day Date] · [Time Range]
-**Details:** [beds] beds · [baths] baths · Listed $[price] · [include sqft only if provided] · [key features from description]
+**Details:** [beds] beds · [baths] baths · Listed $[price][if sqft is provided: ' · [sqft] sqft'][if not: ''] · [key features from description]
 **Summary:** [One sentence from first sentence of description]
-**Agent:** [Name] · 📞 [phone] · [include ✉️ email only if provided]
+**Agent:** [Name] · 📞 [phone][if email is provided: ' · ✉️ [email]'][if not: '']
 
 ---
 
-Example:
+Examples:
+
+// Example with both optional fields present
 🏠 **123 Main Street, Manhattan Beach**
 **Open House:** Saturday Dec 14 · 1:00 PM - 4:00 PM
 **Details:** 4 beds · 3 baths · Listed $2,495,000 · 2,800 sqft · Ocean views, updated kitchen
 **Summary:** Stunning coastal home with panoramic ocean views and modern finishes throughout.
 **Agent:** Jane Smith · 📞 (310) 555-0123 · ✉️ jane@example.com
 
+// Example with optional fields absent
+🏠 **456 Oak Avenue, Redondo Beach**
+**Open House:** Sunday Dec 15 · 12:00 PM - 3:00 PM
+**Details:** 3 beds · 2 baths · Listed $1,350,000 · Spacious backyard, hardwood floors
+**Summary:** Charming single-level home with a large backyard perfect for entertaining.
+**Agent:** John Doe · 📞 (310) 555-0456
+
 ---
 
+- If the sqft value is not provided, omit it and do not include an extra separator.
+- If the agent's email is not provided, omit it and do not include an extra separator.
 ### Schedule Notes
 When no events match the exact requested date but nearby dates exist, use this format:
 
