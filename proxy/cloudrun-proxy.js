@@ -14,6 +14,8 @@ const allowedOrigins = Array.from(
       .filter(Boolean)),
     'https://flypost.netlify.app',
     'https://app.goflypost.com',
+    'https://ask.goflypost.com',
+    'https://post.goflypost.com',
     'http://localhost:5173'
   ])
 )
