@@ -1,5 +1,5 @@
 options:
-  logging: "CLOUD_LOGGING_ONLY"
+  logging: CLOUD_LOGGING_ONLY # Log output is sent only to Cloud Logging
 
 steps:
   # Step 1: Build the Docker image for the Concierge service
@@ -10,11 +10,11 @@ steps:
       - "-t"
       - "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA"
       - "-f"
-      - "widget/Dockerfile"
-      - "widget"
-    dir: "v4/concierge"
+      - "Dockerfile"
+      - "."
+    dir: "v4/concierge/widget" # Use widget as the working directory
 
-  # Step 2: Push the Docker image to Google Container Registry
+  # Step 2: Push the Docker image to Google Container Registry (or Artifact Registry)
   - name: "gcr.io/cloud-builders/docker"
     id: "push-concierge"
     args:
@@ -24,11 +24,11 @@ steps:
   # Step 3: Deploy the Concierge service to Cloud Run
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "deploy-concierge"
-    entrypoint: "gcloud"
+    entrypoint: gcloud
     args:
       - "run"
       - "deploy"
-      - "flypost-concierge"
+      - "flypost-concierge" # Name of the Cloud Run service
       - "--image"
       - "gcr.io/$PROJECT_ID/github.com/goflypost/v4/concierge:$SHORT_SHA"
       - "--region"
