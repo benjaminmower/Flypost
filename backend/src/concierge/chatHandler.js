@@ -190,6 +190,7 @@ The nearest confirmed events begin [actual date range].
 
 Would you like me to watch for any new [requested date] listings that appear near [location] later this week?
 
+_Note: Values in [brackets] should be replaced with actual data._
 Example:
 ⚠️ **Schedule Note**
 There are no verified open houses on Saturday Dec 14 within 5 miles of Manhattan Beach. 
