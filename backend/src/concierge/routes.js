@@ -56,12 +56,20 @@ export function createConciergeRouter(config) {
     
     try {
       // Validate request body
-      const { message, lat, lng } = req.body || {}
+      const { message, lat, lng, brokerageId } = req.body || {}
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
           success: false,
           error: 'Missing or invalid "message" field. Please provide a non-empty string.'
+        })
+      }
+
+      // Validate brokerageId if provided
+      if (brokerageId !== undefined && typeof brokerageId !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid "brokerageId" field. Must be a string if provided.'
         })
       }
 
@@ -92,14 +100,16 @@ export function createConciergeRouter(config) {
       }
 
       // Log request (GDPR-compliant - no PII)
-      console.log(`🤖 Concierge chat request: lat=${latitude.toFixed(4)}, lng=${longitude.toFixed(4)}, msg_length=${message.length}`)
+      const logBrokerageId = brokerageId ? `, brokerageId=${brokerageId}` : ''
+      console.log(`🤖 Concierge chat request: lat=${latitude.toFixed(4)}, lng=${longitude.toFixed(4)}, msg_length=${message.length}${logBrokerageId}`)
 
       // Process chat message
       const result = await processChatMessage(
         message.trim(),
         latitude,
         longitude,
-        backendUrl
+        backendUrl,
+        brokerageId
       )
 
       const duration = Date.now() - startTime
