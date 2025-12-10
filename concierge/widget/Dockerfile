@@ -4,7 +4,7 @@ FROM node:20-alpine AS builder
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json to the container
+# Copy package. json and package-lock.json to the container
 COPY package.json package-lock.json ./
 RUN npm install --only=production
 
@@ -24,7 +24,7 @@ USER appuser
 # Set the working directory for serving files
 WORKDIR /srv
 
-# Copy the generated embeddable. html as index.html from the build stage
+# Copy the generated embeddable.html as index.html from the build stage
 COPY --from=builder /app/embeddable.html ./index.html
 
 # Install http-server to a user-accessible directory without using -g
