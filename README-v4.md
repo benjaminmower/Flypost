@@ -73,6 +73,31 @@ Events are stored in a hybrid system:
 
 To enable Firestore, set `GOOGLE_CLOUD_PROJECT` in your `.env` file. The backend will use Application Default Credentials (ADC) for authentication.
 
+## Web Concierge (Optional Feature)
+
+The Web Concierge is an **anonymous chat interface** that helps users discover nearby events through natural conversation with OpenAI-powered responses.
+
+### Key Features
+- 🤖 **AI-Powered Chat**: Uses GPT-4o-mini for natural language understanding
+- 📍 **Geolocation-Based**: Searches for events near the user's location
+- 🔒 **Privacy-First**: No PII storage, GDPR-compliant logging
+- 🛡️ **Security Hardened**: Rate limiting, CORS protection, input validation
+- 🎯 **Isolated**: Zero impact on v4 production ingestion loop
+
+### Quick Start
+
+1. Enable the feature and set your OpenAI API key:
+```bash
+export ENABLE_CONCIERGE=true
+export OPENAI_API_KEY=sk-...
+```
+
+2. Restart the backend - the chat endpoint will be available at `/api/chat`
+
+3. Open the widget at `concierge/widget/index.html` or embed it in your website
+
+See [`concierge/README.md`](concierge/README.md) for complete documentation, API reference, and deployment guide.
+
 ## Development Status
 
 This is an MVP implementation with Firestore persistence and cryptographic hashing, supporting the core parse → publish → query loop.
