@@ -38,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080 || exit 1
 
 # Start the HTTP server using npx
-CMD ["npx", "http-server", "-p", "8080"]
+CMD ["npx", "http-server", "-p", "8080", "-a", "0.0.0.0", "-c-1", "--index", "embeddable.html"]
