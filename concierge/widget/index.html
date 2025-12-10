@@ -433,9 +433,9 @@
 
     // Create a listing card element
     function createListingCard(listing) {
-      // Validate required fields
-      if (!listing.address || !listing.city || !listing.openHouse || 
-          !listing.beds || !listing.baths || !listing.price) {
+      // Validate required fields with explicit null/undefined checks
+      if (listing.address == null || listing.city == null || listing.openHouse == null || 
+          listing.beds == null || listing.baths == null || listing.price == null) {
         console.warn('Listing missing required fields:', listing);
         return document.createComment('Invalid listing data');
       }
@@ -509,7 +509,7 @@
         const strongTag = document.createElement('strong');
         strongTag.textContent = 'Agent:';
         agentSpan.appendChild(strongTag);
-        if (listing.agent.name) {
+        if (listing.agent.name != null) {
           agentSpan.appendChild(document.createTextNode(' ' + listing.agent.name));
         }
         agentDiv.appendChild(agentSpan);
