@@ -48,6 +48,34 @@
     return;
   }
 
+  // Validate apiBase URL format and enforce HTTPS in production
+  try {
+    const apiUrl = new URL(config.apiBase);
+    // Enforce HTTPS unless explicitly localhost for development
+    if (apiUrl.protocol !== 'https:' && apiUrl.hostname !== 'localhost' && apiUrl.hostname !== '127.0.0.1') {
+      console.error('Flypost Concierge: apiBase must use HTTPS in production');
+      return;
+    }
+  } catch (e) {
+    console.error('Flypost Concierge: Invalid apiBase URL');
+    return;
+  }
+
+  // Validate logo URL if provided
+  if (config.branding.logo) {
+    try {
+      const logoUrl = new URL(config.branding.logo);
+      // Only allow http(s) protocols for logo
+      if (logoUrl.protocol !== 'http:' && logoUrl.protocol !== 'https:') {
+        console.error('Flypost Concierge: Logo URL must use HTTP or HTTPS protocol');
+        config.branding.logo = null;
+      }
+    } catch (e) {
+      console.error('Flypost Concierge: Invalid logo URL');
+      config.branding.logo = null;
+    }
+  }
+
   // State
   let userLocation = null;
   let isProcessing = false;
@@ -239,26 +267,22 @@
     const messageDiv = document.createElement('div');
     messageDiv.className = `flypost-message ${type}`;
     
-    // For assistant messages, render as HTML to support markdown-like formatting
+    // Use textContent for safety, then manually add line breaks as DOM elements
     if (type === 'assistant') {
-      messageDiv.innerHTML = formatMessage(content);
+      // Split by line breaks and create text nodes with <br> elements
+      const lines = content.split('\n');
+      lines.forEach((line, index) => {
+        messageDiv.appendChild(document.createTextNode(line));
+        if (index < lines.length - 1) {
+          messageDiv.appendChild(document.createElement('br'));
+        }
+      });
     } else {
       messageDiv.textContent = content;
     }
     
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  }
-
-  /**
-   * Format message content (preserve line breaks, links, etc.)
-   */
-  function formatMessage(content) {
-    // Escape HTML first
-    const escaped = escapeHtml(content);
-    
-    // Convert line breaks
-    return escaped.replace(/\n/g, '<br>');
   }
 
   /**
