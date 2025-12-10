@@ -163,8 +163,8 @@ You MUST return a JSON object with this exact structure:
       "address": "Street address only",
       "city": "City name",
       "openHouse": "Day Date · Time Range (e.g., Saturday Dec 14 · 1:00 PM - 4:00 PM)",
-      "beds": 4,
-      "baths": 3.5,
+      "beds": 4.5, // Fractional values allowed (e.g., 2.5 for studio/den)
+      "baths": 3.5, // Fractional values allowed
       "price": "$2,495,000",
       "sqft": "2,800",
       "features": "Key features from description",
