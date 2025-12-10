@@ -17,9 +17,11 @@ RUN node build.js
 # Stage 2: Run stage – Serve the widget
 FROM node:20-alpine
 
+# Install http-server globally (as root, before switching users)
+RUN npm install -g http-server
+
 # Create a non-root user for running the application
 RUN addgroup appgroup && adduser -S appuser -G appgroup
-USER appuser
 
 # Set the working directory for serving files
 WORKDIR /srv
@@ -27,15 +29,14 @@ WORKDIR /srv
 # Copy the generated embeddable.html as index.html from the build stage
 COPY --from=builder /app/embeddable.html ./index.html
 
-# Install http-server to a user-accessible directory without using -g
-RUN npm install http-server
+# Change ownership of /srv to appuser
+RUN chown -R appuser:appgroup /srv
+
+# Switch to non-root user
+USER appuser
 
 # Expose port 8080 for Cloud Run
 EXPOSE 8080
 
-# Add a healthcheck endpoint for Cloud Run
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080 || exit 1
-
-# Start the HTTP server, serving /srv directory (not the npm install location)
-CMD ["npx", "http-server", "/srv", "-p", "8080", "-a", "0.0.0.0", "-d", "false"]
+# Start the HTTP server, serving /srv directory
+CMD ["http-server", "/srv", "-p", "8080", "-a", "0.0.0.0", "-d", "false"]
