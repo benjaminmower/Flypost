@@ -9,48 +9,33 @@
     ],
     "headers": [
       {
-        "source": "/concierge-widget.js",
+        "source": "/concierge-loader.js",
         "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=3600"
-          }
+          { "key": "Cache-Control", "value": "public, max-age=3600" }
         ]
       },
       {
-        "source": "/concierge-widget.css",
+        "source": "/manifest.json",
         "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=31536000, immutable"
-          }
+          { "key": "Cache-Control", "value": "public, max-age=60, must-revalidate" }
         ]
       },
       {
-        "source": "/vista-sir.css",
+        "source": "/concierge-widget.*.js",
         "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=31536000, immutable"
-          }
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
         ]
       },
       {
-        "source": "/bhhs-utah.css",
+        "source": "/**/*.@(css|map)",
         "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=31536000, immutable"
-          }
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
         ]
       },
       {
-        "source": "/compass.css",
+        "source": "/*",
         "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=31536000, immutable"
-          }
+          { "key": "X-Frame-Options", "value": "SAMEORIGIN" }
         ]
       }
     ]

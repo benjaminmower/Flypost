@@ -1,0 +1,47 @@
+name: Build & Deploy Concierge (content-hashed)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install widget dependencies
+        working-directory: ./concierge/widget
+        run: |
+          npm ci
+
+      - name: Build + hash widget assets
+        working-directory: ./concierge/widget
+        run: |
+          node build-and-hash.cjs
+
+      - name: Show concierge-dist contents
+        run: |
+          echo "concierge-dist files:"
+          ls -la concierge-dist || true
+          echo "manifest:"
+          cat concierge-dist/manifest.json || true
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v1
+        with:
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+          projectId: "goflypost"
