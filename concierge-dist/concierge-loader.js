@@ -16,7 +16,7 @@
           try {
             var l = document.createElement('link');
             l.rel = 'stylesheet';
-            l.href = '/' + cssPath.replace(/^/+/, '');
+            l.href = '/' + cssPath.replace(/^\/+/, '');
             l.crossOrigin = 'anonymous';
             document.head.appendChild(l);
           } catch (e) { console.error('Failed to inject css', e); }
@@ -26,7 +26,7 @@
       // inject JS
       if (manifest.js) {
         var s = document.createElement('script');
-        s.src = '/' + manifest.js.replace(/^/+/, '');
+        s.src = '/' + manifest.js.replace(/^\/+/, '');
         s.async = true;
         s.crossOrigin = 'anonymous';
         document.body.appendChild(s);
