@@ -64,18 +64,23 @@ async function main() {
   }
 
   if (!srcDir) {
-    console.error('No build output directory found. Expected one of: dist, build, public, or concierge-dist.')
+    console.error('No build output directory found. Checked: dist, build, public, ../concierge-dist, and concierge-dist in repo root.')
     process.exit(1)
   }
 
   console.log('Using source directory:', srcDir)
 
   const outDir = path.resolve(repoRoot, 'concierge-dist')
-  // Clean / recreate outDir
-  if (fs.existsSync(outDir)) {
-    fs.rmSync(outDir, { recursive: true, force: true })
+  // Clean / recreate outDir, but do NOT delete if srcDir === outDir
+  if (outDir !== srcDir) {
+    if (fs.existsSync(outDir)) {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+    ensureDir(outDir)
+  } else {
+    console.warn('Source and output directories are the same. Skipping deletion of output directory to avoid data loss.')
+    ensureDir(outDir)
   }
-  ensureDir(outDir)
 
   // Recursively copy files and hash .js/.css files
   const manifest = {
@@ -127,6 +132,7 @@ async function main() {
 
   if (!manifest.js) {
     // try to find any js in outDir and pick first
+    console.warn('No main JS file found with "concierge-widget" in name. Falling back to first JS file found.')
     const all = []
     function pick(dir) {
       for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -136,7 +142,10 @@ async function main() {
       }
     }
     pick(outDir)
-    if (all.length > 0) manifest.js = all[0]
+    if (all.length > 0) {
+      all.sort() // Sort to make selection deterministic
+      manifest.js = all[0]
+    }
   }
 
   // Ensure arrays are unique
@@ -167,7 +176,7 @@ async function main() {
           try {
             var l = document.createElement('link');
             l.rel = 'stylesheet';
-            l.href = '/' + cssPath.replace(/^\/+/, '');
+            l.href = '/' + cssPath.replace(/^\\/+/, '');
             l.crossOrigin = 'anonymous';
             document.head.appendChild(l);
           } catch (e) { console.error('Failed to inject css', e); }
@@ -177,7 +186,7 @@ async function main() {
       // inject JS
       if (manifest.js) {
         var s = document.createElement('script');
-        s.src = '/' + manifest.js.replace(/^\/+/, '');
+        s.src = '/' + manifest.js.replace(/^\\/+/, '');
         s.async = true;
         s.crossOrigin = 'anonymous';
         document.body.appendChild(s);
