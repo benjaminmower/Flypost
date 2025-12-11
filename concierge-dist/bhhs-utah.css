@@ -1,0 +1,59 @@
+/**
+ * Berkshire Hathaway HomeServices Utah Theme
+ * Professional blue and white color scheme
+ */
+
+.flypost-concierge-widget {
+  box-shadow: 0 3px 18px rgba(0, 0, 0, 0.12);
+}
+
+.flypost-concierge-header {
+  background: linear-gradient(135deg, #003da5 0%, #0051d5 100%);
+  padding: 24px;
+}
+
+.flypost-concierge-header h2 {
+  font-weight: 600;
+  font-size: 25px;
+  letter-spacing: 0.3px;
+}
+
+.flypost-concierge-header p {
+  font-size: 15px;
+}
+
+.flypost-message.user {
+  background: #003da5 !important;
+}
+
+.flypost-message.assistant {
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  border-left: 3px solid #003da5;
+}
+
+.flypost-concierge-input button {
+  background: #003da5 !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+.flypost-concierge-input button:hover:not(:disabled) {
+  background: #0051d5 !important;
+}
+
+.flypost-concierge-input input:focus {
+  border-color: #003da5 !important;
+}
+
+.flypost-typing span {
+  background: #003da5 !important;
+}
+
+.flypost-location-status {
+  background: #e8f2ff;
+  border-bottom-color: #b3d9ff;
+  color: #003da5;
+}
