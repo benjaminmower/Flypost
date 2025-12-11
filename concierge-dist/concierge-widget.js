@@ -1,7 +1,7 @@
 /**
- * Flypost Concierge Widget
+ * Flypost Concierge Widget v2
  * Embeddable chat widget with brokerage-specific branding support
- * 
+ *
  * Configuration via window.FLYPOST_CONFIG:
  * {
  *   apiBase: 'https://api.goflypost.com',
@@ -266,23 +266,116 @@
   function addMessage(content, type = 'assistant') {
     const messageDiv = document.createElement('div');
     messageDiv.className = `flypost-message ${type}`;
-    
-    // Use textContent for safety, then manually add line breaks as DOM elements
-    if (type === 'assistant') {
-      // Split by line breaks and create text nodes with <br> elements
-      const lines = content.split('\n');
+
+    // When content is the full data object with listings, render rich cards
+    if (type === 'assistant' && content && Array.isArray(content.listings)) {
+      renderAssistantWithListings(messageDiv, content);
+    } else {
+      // Fallback: render plain text (string) content
+      const text = typeof content === 'string' ? content : content?.message || '';
+      const lines = text.split('\n');
       lines.forEach((line, index) => {
         messageDiv.appendChild(document.createTextNode(line));
         if (index < lines.length - 1) {
           messageDiv.appendChild(document.createElement('br'));
         }
       });
-    } else {
-      messageDiv.textContent = content;
     }
-    
+
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  /**
+   * Render assistant message with listings cards
+   * Expects content like:
+   * {
+   *   message: "Here are some listings...",
+   *   listings: [ { address, city, price, beds, baths, ... }, ... ]
+   * }
+   */
+  function renderAssistantWithListings(container, content) {
+    const title = document.createElement('div');
+    title.className = 'flypost-assistant-intro';
+    title.textContent = content.message || 'Here are some options I found for you:';
+    container.appendChild(title);
+
+    const listWrapper = document.createElement('div');
+    listWrapper.className = 'flypost-listings-grid';
+
+    (content.listings || []).forEach((listing) => {
+      const card = document.createElement('div');
+      card.className = 'flypost-listing-card';
+
+      const address = document.createElement('div');
+      address.className = 'flypost-listing-address';
+      address.textContent = `${listing.address || ''}${listing.city ? ', ' + listing.city : ''}`;
+      card.appendChild(address);
+
+      const meta = document.createElement('div');
+      meta.className = 'flypost-listing-meta';
+      const parts = [];
+      if (listing.price) parts.push(listing.price);
+      if (listing.beds != null) parts.push(`${listing.beds} bd`);
+      if (listing.baths != null) parts.push(`${listing.baths} ba`);
+      if (listing.sqft) parts.push(`${listing.sqft} sq ft`);
+      meta.textContent = parts.join(' • ');
+      card.appendChild(meta);
+
+      if (listing.openHouse) {
+        const oh = document.createElement('div');
+        oh.className = 'flypost-listing-openhouse';
+        oh.textContent = listing.openHouse;
+        card.appendChild(oh);
+      }
+
+      if (listing.summary) {
+        const summary = document.createElement('div');
+        summary.className = 'flypost-listing-summary';
+        summary.textContent = listing.summary;
+        card.appendChild(summary);
+      }
+
+      if (listing.features) {
+        const features = document.createElement('div');
+        features.className = 'flypost-listing-features';
+        features.textContent = listing.features;
+        card.appendChild(features);
+      }
+
+      if (listing.agent && (listing.agent.name || listing.agent.phone || listing.agent.email)) {
+        const agentDiv = document.createElement('div');
+        agentDiv.className = 'flypost-listing-agent';
+
+        const strongTag = document.createElement('strong');
+        strongTag.textContent = 'Agent:';
+        agentDiv.appendChild(strongTag);
+
+        if (listing.agent.name) {
+          agentDiv.appendChild(document.createTextNode(' ' + listing.agent.name));
+        }
+
+        if (listing.agent.phone) {
+          const phoneLink = document.createElement('a');
+          phoneLink.href = `tel:${encodeURIComponent(listing.agent.phone)}`;
+          phoneLink.textContent = ` 📞 ${listing.agent.phone}`;
+          agentDiv.appendChild(phoneLink);
+        }
+
+        if (listing.agent.email) {
+          const emailLink = document.createElement('a');
+          emailLink.href = `mailto:${encodeURIComponent(listing.agent.email)}`;
+          emailLink.textContent = ' ✉️ Email';
+          agentDiv.appendChild(emailLink);
+        }
+
+        card.appendChild(agentDiv);
+      }
+
+      listWrapper.appendChild(card);
+    });
+
+    container.appendChild(listWrapper);
   }
 
   /**
@@ -352,7 +445,12 @@
       hideTyping();
 
       if (response.ok && data.success) {
-        addMessage(data.message, 'assistant');
+        // Prefer structured listings when present
+        if (data.listings && data.listings.length > 0) {
+          addMessage(data, 'assistant');
+        } else {
+          addMessage(data.message, 'assistant');
+        }
       } else {
         addMessage(data.error || 'Sorry, I encountered an error. Please try again.', 'error');
       }
