@@ -87,6 +87,8 @@ curl -X POST http://localhost:3001/api/chat \
   }'
 ```
 
+**Note:** In practice, the `content` field for assistant messages should be the complete JSON response as a properly escaped JSON string. The `[...]` is used here for brevity. See the JavaScript example at the end of this document for proper formatting.
+
 **Response:**
 The AI will understand "tomorrow" in context of the previous query about Manhattan Beach and provide relevant results.
 

@@ -273,6 +273,9 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
     systemPrompt += `\n\n## Brokerage Context\n\nYou are helping a user discover events from ${brokerageId}. Focus on events associated with this brokerage when available.`
   }
 
+  // Configuration constants
+  const MAX_HISTORY_MESSAGES = 10  // Limit history to control token usage
+
   // Build messages array with conversation history
   const messages = [
     {
@@ -281,10 +284,10 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
     }
   ]
 
-  // Add conversation history if provided
-  if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
-    // Limit history to last 10 messages to control token usage
-    const recentHistory = conversationHistory.slice(-10)
+  // Add conversation history if provided (parameter defaults to empty array)
+  if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+    // Limit history to control token usage
+    const recentHistory = conversationHistory.slice(-MAX_HISTORY_MESSAGES)
     messages.push(...recentHistory)
   }
 
