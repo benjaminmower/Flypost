@@ -14,12 +14,12 @@
   overflow: hidden;
 }
 
-/* Header */
+/* Header (neutral base; themes override) */
 .flypost-concierge-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 20px;
-  text-align: center;
+  background: #111827;
+  color: #f9fafb;
+  padding: 16px 20px;
+  text-align: left;
 }
 
 .flypost-concierge-header .flypost-logo {
@@ -59,9 +59,10 @@
   color: #856404;
 }
 
-/* Messages Container */
+/* Messages Container (more flexible heights) */
 .flypost-concierge-messages {
-  height: 400px;
+  min-height: 200px;
+  max-height: 360px;
   overflow-y: auto;
   padding: 20px;
   background: #f8f9fa;
@@ -198,14 +199,11 @@
   }
 }
 
-/* Responsive Design */
+/* Responsive Design (no forced full-screen) */
 @media (max-width: 768px) {
   .flypost-concierge-widget {
     max-width: 100%;
     border-radius: 0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
   }
   
   .flypost-concierge-messages {
