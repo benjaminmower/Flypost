@@ -14,6 +14,7 @@ const allowedOrigins = {
   'https://app.goflypost.com': ['GET'],
   'http://localhost:5173': ['GET', 'POST'],
   'https://www.goflypost.com': ['GET', 'POST'],
+  'https://api.goflypost.com': ['GET', ['POST'].
 };
 
 // CORS middleware
