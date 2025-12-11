@@ -54,15 +54,21 @@ const getEventsNearTool = {
  * 
  * @param {Object} args - Tool arguments
  * @param {string} backendUrl - Backend URL for API calls
+ * @param {string|undefined} brokerageId - Optional brokerage ID for filtering
  * @returns {Promise<Object>} Events data
  */
-async function executeGetEventsNear(args, backendUrl) {
+async function executeGetEventsNear(args, backendUrl, brokerageId) {
   const { lat, lng, radius = 10 } = args
   
   const params = new URLSearchParams()
   params.append('lat', lat.toString())
   params.append('lng', lng.toString())
   params.append('radius', radius.toString())
+  
+  // Add brokerageId if provided
+  if (brokerageId) {
+    params.append('brokerageId', brokerageId)
+  }
 
   const url = `${backendUrl}/v1/events/near?${params.toString()}`
   
@@ -114,13 +120,14 @@ async function executeGetEventsNear(args, backendUrl) {
  * @param {number} lat - User's latitude
  * @param {number} lng - User's longitude
  * @param {string} backendUrl - Backend URL for API calls
+ * @param {string|undefined} brokerageId - Optional brokerage ID for filtering
  * @returns {Promise<Object>} Chat response
  */
-export async function processChatMessage(message, lat, lng, backendUrl) {
+export async function processChatMessage(message, lat, lng, backendUrl, brokerageId) {
   const openai = getOpenAIClient()
   
   // System prompt for the concierge
-  const systemPrompt = `You are a knowledgeable Web Concierge for Flypost, a real-time local events platform. 
+  let systemPrompt = `You are a knowledgeable Web Concierge for Flypost, a real-time local events platform. 
 Your role is to help users discover nearby events, open houses, garage sales, and local activities.
 
 ## Data Sources: Two-Tier Model
@@ -221,6 +228,11 @@ If user asks about vague locations like "near me" or "around here", return:
 
 The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng ${Number(lng).toFixed(2)}`
 
+  // Add brokerage-specific context if brokerageId is provided
+  if (brokerageId) {
+    systemPrompt += `\n\n## Brokerage Context\n\nYou are helping a user discover events from ${brokerageId}. Focus on events associated with this brokerage when available.`
+  }
+
   const messages = [
     {
       role: 'system',
@@ -256,7 +268,7 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
 
         let result
         if (functionName === 'getEventsNear') {
-          result = await executeGetEventsNear(functionArgs, backendUrl)
+          result = await executeGetEventsNear(functionArgs, backendUrl, brokerageId)
         } else {
           result = { error: `Unknown tool: ${functionName}` }
         }

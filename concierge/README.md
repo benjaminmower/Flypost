@@ -9,9 +9,16 @@ The Web Concierge feature provides:
 - **Anonymous chat interface** for event discovery
 - **OpenAI-powered responses** using GPT-4o-mini
 - **Geolocation-based search** for nearby events
+- **Brokerage-specific branding and filtering** (see [BROKERAGE_INTEGRATION.md](./BROKERAGE_INTEGRATION.md))
 - **Complete isolation** from v4 production ingestion loop
 - **GDPR compliance** with no PII storage
 - **Rate limiting and security** hardening
+
+## Quick Links
+
+- **[Brokerage Integration Guide](./BROKERAGE_INTEGRATION.md)** - How to embed the widget with custom branding
+- **[Usage Examples](./USAGE.md)** - API usage and testing examples
+- **[Implementation Summary](./IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
 
 ## Architecture
 
@@ -53,16 +60,28 @@ The Web Concierge feature provides:
 v4/
 ├── backend/
 │   └── src/
-│       ├── server.js           # Main server with feature flag
+│       ├── server.js                    # Main server with feature flag
 │       └── concierge/
-│           ├── chatHandler.js  # OpenAI integration
-│           └── routes.js       # Express routes
+│           ├── chatHandler.js           # OpenAI integration
+│           └── routes.js                # Express routes
 └── concierge/
-    ├── README.md               # This file
+    ├── README.md                        # This file
+    ├── BROKERAGE_INTEGRATION.md         # Brokerage widget guide
+    ├── USAGE.md                         # Usage examples
+    ├── themes/                          # Brokerage-specific CSS themes
+    │   ├── vista-sir.css
+    │   ├── compass.css
+    │   └── bhhs-utah.css
     └── widget/
-        ├── index.html          # Standalone widget
-        ├── build.js            # Build script
-        └── package.json        # Widget metadata
+        ├── concierge-widget.js          # Embeddable widget script
+        ├── concierge-widget.css         # Base widget styles
+        ├── index.html                   # Standalone demo
+        ├── build.js                     # Build script
+        ├── package.json                 # Widget metadata
+        └── examples/                    # Integration examples
+            ├── vista-sir-example.html
+            ├── compass-example.html
+            └── bhhs-utah-example.html
 ```
 
 ## Setup
