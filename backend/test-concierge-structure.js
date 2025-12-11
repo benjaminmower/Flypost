@@ -155,7 +155,6 @@ test('chatHandler.js: Location clarification includes suggestedFollowUps', () =>
   const lines = content.split('\n')
   let inLocationSection = false
   let foundFollowUps = false
-  let sectionContent = []
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -164,12 +163,12 @@ test('chatHandler.js: Location clarification includes suggestedFollowUps', () =>
       continue
     }
     if (inLocationSection) {
-      sectionContent.push(line)
       if (line.includes('suggestedFollowUps')) {
         foundFollowUps = true
+        break
       }
-      // Check for next section (not just any ##, but one that's not inside JSON)
-      if (line.trim().startsWith('## ') && line.trim() !== '##') {
+      // Check for next section header (## followed by space and text)
+      if (line.trim().match(/^## [A-Z]/)) {
         break
       }
     }
