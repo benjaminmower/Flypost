@@ -9,6 +9,10 @@ The Web Concierge feature provides:
 - **Anonymous chat interface** for event discovery
 - **OpenAI-powered responses** using GPT-4o-mini
 - **Geolocation-based search** for nearby events
+- **Enhanced structured listing output** with comprehensive property details
+- **Interactive follow-up suggestions** for conversational continuity
+- **Conversation history support** for contextual multi-turn interactions
+- **Dynamic date filtering** (today, tomorrow, this weekend, etc.)
 - **Brokerage-specific branding and filtering** (see [BROKERAGE_INTEGRATION.md](./BROKERAGE_INTEGRATION.md))
 - **Complete isolation** from v4 production ingestion loop
 - **GDPR compliance** with no PII storage
@@ -160,7 +164,9 @@ Chat with the concierge to discover nearby events.
 {
   "message": "What events are happening near me?",
   "lat": 34.0195,
-  "lng": -118.4912
+  "lng": -118.4912,
+  "brokerageId": "optional-brokerage-id",
+  "conversationHistory": []
 }
 ```
 
@@ -168,13 +174,73 @@ Chat with the concierge to discover nearby events.
 ```json
 {
   "success": true,
-  "message": "I found 3 events near you: ...",
+  "message": "Here are the open houses in your area this weekend:",
+  "listings": [
+    {
+      "address": "123 Main St",
+      "city": "Santa Monica",
+      "state": "CA",
+      "zipCode": "90401",
+      "openHouse": "Saturday Dec 14 · 1:00 PM - 4:00 PM",
+      "beds": 3,
+      "baths": 2.5,
+      "price": "$1,495,000",
+      "sqft": "2,100",
+      "distance": "0.5 miles",
+      "features": "Ocean views, updated kitchen, hardwood floors",
+      "summary": "Stunning coastal home with panoramic ocean views.",
+      "agent": {
+        "name": "Jane Smith",
+        "phone": "310-555-0123",
+        "email": "jane@example.com",
+        "brokerage": "Vista Sotheby's International Realty"
+      }
+    }
+  ],
+  "scheduleNote": null,
+  "areaContext": null,
+  "suggestedFollowUps": [
+    "Can you tell me more about the property at 123 Main St?",
+    "Are there any open houses tomorrow?",
+    "What about events in neighboring cities?"
+  ],
   "timestamp": "2024-01-01T12:00:00.000Z"
 }
 ```
 
 **Rate Limits:**
 - 20 requests per 15 minutes per IP
+
+**Enhanced Features:**
+
+1. **Structured Listing Output**
+   - Complete property details (beds, baths, price, sqft)
+   - Location data (address, city, state, ZIP code)
+   - Distance from user location
+   - Agent contact information with brokerage
+   - Property features and compelling summary
+
+2. **Interactive Follow-Ups**
+   - AI-generated suggested questions based on results
+   - Contextual follow-ups that adapt to the conversation
+   - 2-4 relevant suggestions per response
+
+3. **Conversation History**
+   - Multi-turn conversations with context
+   - Pass previous messages in `conversationHistory` array
+   - AI references prior questions and results
+   - History limited to last 10 messages for efficiency
+
+4. **Dynamic Date Filtering**
+   - Natural language date understanding
+   - "this weekend", "today", "tomorrow", "next week"
+   - Automatic date calculation based on current time
+   - Schedule notes when no events match exact dates
+
+5. **Tier 1/Tier 2 Data Model**
+   - **Tier 1**: Verified listing data from Flypost events
+   - **Tier 2**: General area context with disclosure warnings
+   - Clear separation between factual and contextual information
 
 ### GET /api/chat/health
 
