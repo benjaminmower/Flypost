@@ -288,7 +288,18 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
   if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
     // Limit history to control token usage
     const recentHistory = conversationHistory.slice(-MAX_HISTORY_MESSAGES)
-    messages.push(...recentHistory)
+    // Validate each message object before adding
+    const validHistory = recentHistory.filter(
+      msg =>
+        msg &&
+        typeof msg === 'object' &&
+        typeof msg.role === 'string' &&
+        typeof msg.content === 'string'
+    )
+    if (validHistory.length < recentHistory.length) {
+      console.warn('Some conversation history messages were malformed and have been ignored.')
+    }
+    messages.push(...validHistory)
   }
 
   // Add current user message
