@@ -6,3 +6,4 @@ node_modules
 dist/
 .env
 concierge/widget/embeddable.html
+.DS_Store
