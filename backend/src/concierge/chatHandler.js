@@ -121,9 +121,10 @@ async function executeGetEventsNear(args, backendUrl, brokerageId) {
  * @param {number} lng - User's longitude
  * @param {string} backendUrl - Backend URL for API calls
  * @param {string|undefined} brokerageId - Optional brokerage ID for filtering
+ * @param {Array|undefined} conversationHistory - Optional conversation history for context
  * @returns {Promise<Object>} Chat response
  */
-export async function processChatMessage(message, lat, lng, backendUrl, brokerageId) {
+export async function processChatMessage(message, lat, lng, backendUrl, brokerageId, conversationHistory = []) {
   const openai = getOpenAIClient()
   
   // System prompt for the concierge
@@ -169,6 +170,8 @@ You MUST return a JSON object with this exact structure:
     {
       "address": "Street address only",
       "city": "City name",
+      "state": "State abbreviation (e.g., CA, NY)",
+      "zipCode": "ZIP code if available",
       "openHouse": "Day Date · Time Range (e.g., Saturday Dec 14 · 1:00 PM - 4:00 PM)",
       "beds": 4.5, // Fractional values allowed (e.g., 2.5 for studio/den)
       "baths": 3.5, // Fractional values allowed
@@ -176,27 +179,58 @@ You MUST return a JSON object with this exact structure:
       "sqft": "2,800",
       "features": "Key features from description",
       "summary": "One compelling sentence from property description",
+      "distance": "0.5 miles", // Distance from user location if available
       "agent": {
         "name": "Agent full name",
         "phone": "310-555-0123",
-        "email": "agent@example.com"
+        "email": "agent@example.com",
+        "brokerage": "Brokerage name if available"
       }
     }
   ],
   "scheduleNote": null,
-  "areaContext": null
+  "areaContext": null,
+  "suggestedFollowUps": [
+    "Can you show me more details about the property at [address]?",
+    "Are there any open houses tomorrow?",
+    "What about events in [nearby area]?"
+  ]
 }
 
 ### Field Rules:
 - **message**: Brief intro like "Here are the open houses in Manhattan Beach this weekend:"
 - **listings**: Array of listing objects. Each listing must have address, city, openHouse, beds, baths, price
+- **state**: Optional. State abbreviation if available
+- **zipCode**: Optional. Omit if not in event data
 - **sqft**: Optional. Omit field if not provided in event data
 - **features**: Optional. Extract 2-3 key features from description
 - **summary**: Optional. One compelling sentence from property description
+- **distance**: Optional. Distance from user location if calculable
 - **agent.phone**: Optional. Omit if not in event data
 - **agent.email**: Optional. Omit if not in event data
+- **agent.brokerage**: Optional. Brokerage name if available
 - **scheduleNote**: String or null. Use when no events match exact requested date: "There are no verified open houses on Saturday Dec 14 within 5 miles of Manhattan Beach. The nearest confirmed events begin Sunday Dec 15."
 - **areaContext**: String or null. Use when providing Tier 2 general knowledge with disclosure: "Manhattan Beach has highly-rated schools in the Manhattan Beach Unified School District. ⚠️ Important: This is general area information. Verify using local resources."
+- **suggestedFollowUps**: Array of 2-4 contextual follow-up questions the user might ask. Make them specific to the results shown.
+
+## Date & Time Filtering
+
+When users ask about "this weekend", "today", "tomorrow", etc.:
+- Calculate specific dates based on current date/time
+- Filter events to match the requested timeframe
+- Use scheduleNote to inform about alternative dates if no matches
+- Examples:
+  - "this weekend" = Saturday and Sunday of current week
+  - "today" = current date only
+  - "next week" = Monday through Sunday of following week
+
+## Follow-Up Conversations
+
+If this is a follow-up query (conversation history provided):
+1. Reference previous results when relevant
+2. Build on the context of prior questions
+3. Provide continuity in the conversation
+4. Adjust suggestedFollowUps based on conversation flow
 
 ## Restrictions
 
@@ -208,6 +242,7 @@ You MUST return a JSON object with this exact structure:
 - NEVER provide Tier 2 (area context) without the disclosure pattern
 - Stay fair housing compliant
 - ALWAYS return valid JSON
+- ALWAYS include suggestedFollowUps (2-4 questions) in every response
 
 ## Location Clarification
 
@@ -216,7 +251,12 @@ If user asks about vague locations like "near me" or "around here", return:
   "message": "To help you better, could you specify a ZIP code, neighborhood name, or city name?",
   "listings": [],
   "scheduleNote": null,
-  "areaContext": null
+  "areaContext": null,
+  "suggestedFollowUps": [
+    "Show me open houses in [specific city/neighborhood]",
+    "What's happening within 5 miles of [ZIP code]?",
+    "Are there events in [nearby area]?"
+  ]
 }
 
 ## Tone
@@ -233,16 +273,26 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
     systemPrompt += `\n\n## Brokerage Context\n\nYou are helping a user discover events from ${brokerageId}. Focus on events associated with this brokerage when available.`
   }
 
+  // Build messages array with conversation history
   const messages = [
     {
       role: 'system',
       content: systemPrompt
-    },
-    {
-      role: 'user',
-      content: message
     }
   ]
+
+  // Add conversation history if provided
+  if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+    // Limit history to last 10 messages to control token usage
+    const recentHistory = conversationHistory.slice(-10)
+    messages.push(...recentHistory)
+  }
+
+  // Add current user message
+  messages.push({
+    role: 'user',
+    content: message
+  })
 
   try {
     // Initial call to OpenAI - no JSON format during tool calls
@@ -305,6 +355,7 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
         listings: [],
         scheduleNote: null,
         areaContext: null,
+        suggestedFollowUps: [],
         usage: {
           promptTokens: response.usage?.prompt_tokens || 0,
           completionTokens: response.usage?.completion_tokens || 0,
@@ -324,6 +375,7 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
         listings: [],
         scheduleNote: null,
         areaContext: null,
+        suggestedFollowUps: [],
         usage: {
           promptTokens: response.usage?.prompt_tokens || 0,
           completionTokens: response.usage?.completion_tokens || 0,
@@ -339,6 +391,7 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
       listings: Array.isArray(parsedResponse.listings) ? parsedResponse.listings : [],
       scheduleNote: parsedResponse.scheduleNote || null,
       areaContext: parsedResponse.areaContext || null,
+      suggestedFollowUps: Array.isArray(parsedResponse.suggestedFollowUps) ? parsedResponse.suggestedFollowUps : [],
       usage: {
         promptTokens: response.usage?.prompt_tokens || 0,
         completionTokens: response.usage?.completion_tokens || 0,
