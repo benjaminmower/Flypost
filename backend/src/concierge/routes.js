@@ -41,13 +41,19 @@ export function createConciergeRouter(config) {
    * {
    *   "message": "What events are happening near me?",
    *   "lat": 34.0195,
-   *   "lng": -118.4912
+   *   "lng": -118.4912,
+   *   "brokerageId": "vista-sir",  // Optional
+   *   "conversationHistory": []     // Optional: array of previous messages
    * }
    * 
    * Response:
    * {
    *   "success": true,
    *   "message": "Here are the events I found near you...",
+   *   "listings": [...],
+   *   "scheduleNote": null,
+   *   "areaContext": null,
+   *   "suggestedFollowUps": ["...", "..."],
    *   "timestamp": "2024-01-01T12:00:00.000Z"
    * }
    */
@@ -56,7 +62,7 @@ export function createConciergeRouter(config) {
     
     try {
       // Validate request body
-      const { message, lat, lng, brokerageId } = req.body || {}
+      const { message, lat, lng, brokerageId, conversationHistory } = req.body || {}
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
@@ -70,6 +76,14 @@ export function createConciergeRouter(config) {
         return res.status(400).json({
           success: false,
           error: 'Invalid "brokerageId" field. Must be a string if provided.'
+        })
+      }
+
+      // Validate conversationHistory if provided
+      if (conversationHistory !== undefined && !Array.isArray(conversationHistory)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid "conversationHistory" field. Must be an array if provided.'
         })
       }
 
@@ -101,7 +115,8 @@ export function createConciergeRouter(config) {
 
       // Log request (GDPR-compliant - no PII)
       const logBrokerageId = brokerageId ? `, brokerageId=${brokerageId}` : ''
-      console.log(`🤖 Concierge chat request: lat=${latitude.toFixed(4)}, lng=${longitude.toFixed(4)}, msg_length=${message.length}${logBrokerageId}`)
+      const logHistory = conversationHistory ? `, history_msgs=${conversationHistory.length}` : ''
+      console.log(`🤖 Concierge chat request: lat=${latitude.toFixed(4)}, lng=${longitude.toFixed(4)}, msg_length=${message.length}${logBrokerageId}${logHistory}`)
 
       // Process chat message
       const result = await processChatMessage(
@@ -109,7 +124,8 @@ export function createConciergeRouter(config) {
         latitude,
         longitude,
         backendUrl,
-        brokerageId
+        brokerageId,
+        conversationHistory
       )
 
       const duration = Date.now() - startTime
@@ -122,6 +138,7 @@ export function createConciergeRouter(config) {
           listings: result.listings || [],
           scheduleNote: result.scheduleNote || null,
           areaContext: result.areaContext || null,
+          suggestedFollowUps: result.suggestedFollowUps || [],
           timestamp: new Date().toISOString()
         })
       } else {
