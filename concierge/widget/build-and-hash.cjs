@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * build-and-hash.js
+ * build-and-hash.cjs
  *
  * 1) Runs the widget build if a build script exists (optional).
  * 2) Finds build output (dist | build | public | existing concierge-dist).
@@ -167,7 +167,7 @@ async function main() {
           try {
             var l = document.createElement('link');
             l.rel = 'stylesheet';
-            l.href = '/' + cssPath.replace(/^[\\/]+/, '');
+            l.href = '/' + cssPath.replace(/^\/+/, '');
             l.crossOrigin = 'anonymous';
             document.head.appendChild(l);
           } catch (e) { console.error('Failed to inject css', e); }
@@ -177,7 +177,7 @@ async function main() {
       // inject JS
       if (manifest.js) {
         var s = document.createElement('script');
-        s.src = '/' + manifest.js.replace(/^[\\/]+/, '');
+        s.src = '/' + manifest.js.replace(/^\/+/, '');
         s.async = true;
         s.crossOrigin = 'anonymous';
         document.body.appendChild(s);
