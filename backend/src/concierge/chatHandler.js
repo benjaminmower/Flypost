@@ -6,6 +6,14 @@
  */
 
 import OpenAI from 'openai'
+import { marked } from 'marked'
+
+// Configure marked for backend Markdown rendering
+marked.setOptions({
+  gfm: true,
+  breaks: true,
+  headerIds: false,
+})
 
 /**
  * Initialize OpenAI client
@@ -217,12 +225,12 @@ When users ask about itineraries, routes, or comparisons:
    - Format comparison as a markdown table with these exact columns:
      | Address | Price | Beds | Baths | Sq Ft | Open Times | Distance | Notes |
    - Example comparison output:
-     ```markdown
+     \`\`\`markdown
      | Address             | Price   | Beds | Baths | Sq Ft    | Open Times       | Distance | Notes               |
      |---------------------|---------|------|-------|----------|------------------|----------|---------------------|
      | 1007 S Prospect Ave| $2.5M   | 4    | 3     | 3,875 sqft | 1:00-4:00 PM    | 1.5 mi   | Warm modern design. |
      | 425 Vía El Chico   | $2.1M   | 3    | 3     | Not provided| 1:00-4:00 PM   | 1.7 mi   | Mediterranean style.|
-     ```
+     \`\`\`
 
 ## Data Sources: Two-Tier Model
 
