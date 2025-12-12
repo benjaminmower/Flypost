@@ -135,10 +135,6 @@ export function createConciergeRouter(config) {
         return res.json({
           success: true,
           message: result.message,
-          listings: result.listings || [],
-          scheduleNote: result.scheduleNote || null,
-          areaContext: result.areaContext || null,
-          suggestedFollowUps: result.suggestedFollowUps || [],
           timestamp: new Date().toISOString()
         })
       } else {
