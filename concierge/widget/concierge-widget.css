@@ -409,6 +409,43 @@
   box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
 }
 
+/* Quick Action Buttons */
+.flypost-quick-actions {
+  align-self: center;
+  width: 90%;
+  margin: 12px 0;
+  padding: 12px;
+  background: #fff9e6;
+  border-radius: 12px;
+  border: 1px solid #ffe066;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.flypost-quick-action-button {
+  padding: 10px 16px;
+  background: white;
+  border: 2px solid #f59e0b;
+  border-radius: 8px;
+  color: #f59e0b;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.flypost-quick-action-button:hover {
+  background: #f59e0b;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .flypost-concierge-widget {

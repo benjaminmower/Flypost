@@ -82,6 +82,7 @@
   // State
   let userLocation = null;
   let isProcessing = false;
+  let isSending = false; // Prevent double sends from keydown + submit
   let messagesContainer = null;
   let userInput = null;
   let sendButton = null;
@@ -385,11 +386,14 @@
    * Setup event listeners
    */
   function setupEventListeners() {
-    sendButton.addEventListener('click', sendMessage);
-    userInput.addEventListener('keypress', (e) => {
+    // Use click event for send button
+    sendButton.addEventListener('click', handleSend);
+    
+    // Use keydown instead of keypress to catch Enter before form submission
+    userInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        sendMessage();
+        handleSend();
       }
     });
     
@@ -629,27 +633,170 @@
     });
   }
 
+  // Regex pattern for extracting property addresses from markdown headers
+  // Matches: "### 🏠 Open House at 1007 S Prospect Ave" or "### 🏠 1007 S Prospect Ave"
+  const PROPERTY_ADDRESS_REGEX = /^###\s+🏠\s+(?:Open House at\s+)?(.+)$/gm;
+
   /**
-   * Send message to backend with streaming support
+   * Extract property addresses from assistant message text
+   * Looks for patterns like "### 🏠 Open House at [Address]"
    */
-  async function sendMessage() {
-    const message = userInput.value.trim();
-    
-    if (!message || isProcessing || !userLocation) {
+  function extractAddressesFromAssistantText(text) {
+    const addresses = [];
+    let match;
+    // Reset regex lastIndex for reusability
+    PROPERTY_ADDRESS_REGEX.lastIndex = 0;
+    while ((match = PROPERTY_ADDRESS_REGEX.exec(text)) !== null) {
+      addresses.push(match[1].trim());
+    }
+    return addresses;
+  }
+
+  /**
+   * Display quick action buttons after property listings
+   * Shows buttons like "Compare these two", "Plan 1-hour route", etc.
+   */
+  function displayQuickActions(addresses) {
+    // Remove any existing quick actions
+    const existingActions = messagesContainer.querySelectorAll('.flypost-quick-actions');
+    existingActions.forEach(el => el.remove());
+
+    if (!addresses || addresses.length === 0) {
       return;
     }
 
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'flypost-quick-actions';
+
+    // Compare button - show if 2 or more properties
+    if (addresses.length >= 2) {
+      const compareButton = document.createElement('button');
+      compareButton.className = 'flypost-quick-action-button';
+      compareButton.innerHTML = '🔄 Compare these two';
+      compareButton.onclick = () => {
+        handleQuickAction('compare_last_two', addresses.slice(0, 2));
+      };
+      actionsDiv.appendChild(compareButton);
+    }
+
+    // Route planning button - show if 2 or more properties
+    if (addresses.length >= 2) {
+      const routeButton = document.createElement('button');
+      routeButton.className = 'flypost-quick-action-button';
+      routeButton.innerHTML = '🗺️ Plan 1-hour route';
+      routeButton.onclick = () => {
+        handleQuickAction('plan_route', addresses);
+      };
+      actionsDiv.appendChild(routeButton);
+    }
+
+    // Walkable button - show if any properties
+    if (addresses.length >= 1) {
+      const walkableButton = document.createElement('button');
+      walkableButton.className = 'flypost-quick-action-button';
+      walkableButton.innerHTML = '🚶 Walkable to Pier';
+      walkableButton.onclick = () => {
+        handleQuickAction('walkable_to_pier', addresses);
+      };
+      actionsDiv.appendChild(walkableButton);
+    }
+
+    messagesContainer.appendChild(actionsDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  /**
+   * Handle quick action button clicks
+   * Constructs appropriate message and sends to backend
+   */
+  function handleQuickAction(action, addresses) {
+    let messageText = '';
+    
+    switch (action) {
+      case 'compare_last_two':
+        messageText = `Compare these properties: ${addresses[0]} and ${addresses[1]}`;
+        break;
+      case 'plan_route':
+        messageText = `Plan a 1-hour route to visit these open houses: ${addresses.join(', ')}`;
+        break;
+      case 'walkable_to_pier':
+        messageText = `Which of these properties are walkable to the pier?`;
+        break;
+      default:
+        messageText = action;
+    }
+
+    // Display the message in the input for transparency, then send
+    userInput.value = messageText;
+    // Use setTimeout to ensure the input is visually updated before sending
+    setTimeout(() => handleSend(), 50);
+  }
+
+  /**
+   * Handle send action with double-send prevention
+   * This wrapper prevents multiple submissions from both keydown and submit events
+   */
+  async function handleSend() {
+    // Prevent double sends from rapid clicks or Enter key + button click
+    if (isSending) {
+      return;
+    }
+
+    // Capture input value immediately
+    const raw = userInput.value || '';
+    const message = raw.trim();
+    
+    // Return early if empty
+    if (!message) {
+      return;
+    }
+
+    // Check if location is available
+    if (!userLocation) {
+      return;
+    }
+
+    // Clear input immediately to prevent concatenation issues
+    userInput.value = '';
+    
+    // Set sending flag
+    isSending = true;
+    setSendDisabled(true);
+
+    try {
+      await sendMessage(message);
+    } finally {
+      // Always reset the flag
+      isSending = false;
+      setSendDisabled(false);
+      userInput.focus();
+    }
+  }
+
+  /**
+   * Set send button disabled state
+   */
+  function setSendDisabled(disabled) {
+    if (sendButton) {
+      sendButton.disabled = disabled;
+    }
+    if (userInput) {
+      userInput.disabled = disabled;
+    }
+  }
+
+  /**
+   * Send message to backend with streaming support
+   */
+  async function sendMessage(message) {
     // Add timestamp if needed
     addTimestampIfNeeded();
 
     // Add user message to chat with animation
     addAnimatedMessage(message, 'user');
-    userInput.value = '';
     
-    // Disable input while processing
+    // Disable input while processing (redundant but kept for safety)
     isProcessing = true;
-    userInput.disabled = true;
-    sendButton.disabled = true;
     showTyping();
 
     try {
@@ -730,6 +877,12 @@
         // Save to localStorage
         saveConversationHistory();
 
+        // Extract addresses and display quick actions
+        const addresses = extractAddressesFromAssistantText(fullContent);
+        if (addresses.length > 0) {
+          displayQuickActions(addresses);
+        }
+
       } catch (streamError) {
         console.log('Streaming failed, falling back to regular endpoint:', streamError.message);
         
@@ -767,6 +920,12 @@
           if (data.suggestedFollowUps && data.suggestedFollowUps.length > 0) {
             displaySuggestedFollowUps(data.suggestedFollowUps);
           }
+
+          // Extract addresses and display quick actions
+          const addresses = extractAddressesFromAssistantText(data.message);
+          if (addresses.length > 0) {
+            displayQuickActions(addresses);
+          }
         } else {
           addAnimatedMessage(data.error || 'Sorry, I encountered an error. Please try again.', 'error');
         }
@@ -785,11 +944,8 @@
       
       addAnimatedMessage(errorMessage, 'error');
     } finally {
-      // Re-enable input
+      // Re-enable input (cleanup handled by handleSend)
       isProcessing = false;
-      userInput.disabled = false;
-      sendButton.disabled = false;
-      userInput.focus();
     }
   }
 
