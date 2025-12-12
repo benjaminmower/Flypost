@@ -150,7 +150,7 @@ Here are [N] properties available this weekend:
 
 ### 🏠 123 Main Street, City
 
-- **Open House**: Saturday, Dec 14 · 1:00-4:00 PM
+- **Open House**: Saturday, Dec 14, 2024 · 1:00-4:00 PM
 - **Price**: $1,250,000
 - **Beds/Baths**: 3 bed · 2.5 bath
 - **Square Feet**: 2,100 sqft

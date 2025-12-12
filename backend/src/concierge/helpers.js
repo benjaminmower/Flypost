@@ -46,7 +46,7 @@ function toRad(degrees) {
  * 
  * @param {number} distanceMiles - Distance in miles
  * @param {string} mode - Travel mode: 'walking' or 'driving'
- * @returns {string} Formatted time estimate (e.g., "5 min", "1 hr 15 min")
+ * @returns {Object} Time estimate with formatted string and numeric minutes
  */
 export function estimateTravelTime(distanceMiles, mode = 'driving') {
   let minutes;
@@ -57,13 +57,54 @@ export function estimateTravelTime(distanceMiles, mode = 'driving') {
     minutes = Math.round((distanceMiles / DRIVING_SPEED_MPH) * 60);
   }
   
+  let formatted;
   if (minutes < 60) {
-    return `${minutes} min`;
+    formatted = `${minutes} min`;
   } else {
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
-    return remainingMinutes > 0 ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
+    formatted = remainingMinutes > 0 ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
   }
+  
+  return {
+    formatted,
+    minutes
+  };
+}
+
+/**
+ * Parse travel time string to minutes
+ * Handles formats like "5 min", "1 hr", "1 hr 15 min"
+ * 
+ * @param {string|Object} timeStr - Time string or time object with minutes property
+ * @returns {number} Total minutes
+ */
+function parseTravelTimeToMinutes(timeStr) {
+  // If it's already an object with minutes, return that
+  if (typeof timeStr === 'object' && timeStr.minutes !== undefined) {
+    return timeStr.minutes;
+  }
+  
+  // Parse string format
+  if (typeof timeStr !== 'string') {
+    return 0;
+  }
+  
+  let totalMinutes = 0;
+  
+  // Match hours: "1 hr" or "2 hr"
+  const hourMatch = timeStr.match(/(\d+)\s*hr/);
+  if (hourMatch) {
+    totalMinutes += parseInt(hourMatch[1]) * 60;
+  }
+  
+  // Match minutes: "15 min" or "5 min"
+  const minMatch = timeStr.match(/(\d+)\s*min/);
+  if (minMatch) {
+    totalMinutes += parseInt(minMatch[1]);
+  }
+  
+  return totalMinutes;
 }
 
 /**
@@ -91,11 +132,16 @@ export function generateItinerary(events, userLat, userLng, maxDurationMinutes =
     
     if (eventLat && eventLng) {
       const distance = calculateDistance(userLat, userLng, eventLat, eventLng);
+      const walkingTime = estimateTravelTime(distance, 'walking');
+      const drivingTime = estimateTravelTime(distance, 'driving');
+      
       return {
         ...event,
         distanceFromUser: distance,
-        travelTimeWalking: estimateTravelTime(distance, 'walking'),
-        travelTimeDriving: estimateTravelTime(distance, 'driving')
+        travelTimeWalking: walkingTime.formatted,
+        travelTimeWalkingMinutes: walkingTime.minutes,
+        travelTimeDriving: drivingTime.formatted,
+        travelTimeDrivingMinutes: drivingTime.minutes
       };
     }
     return null;
@@ -109,7 +155,8 @@ export function generateItinerary(events, userLat, userLng, maxDurationMinutes =
   let totalTime = 0;
   
   for (const event of eventsWithDistance) {
-    const travelMinutes = parseInt(event.travelTimeDriving.split(' ')[0]);
+    // Use the numeric minutes value for accurate calculation
+    const travelMinutes = event.travelTimeDrivingMinutes || 0;
     const eventTime = AVERAGE_EVENT_DURATION_MINUTES;
     const segmentTime = travelMinutes + eventTime;
     
@@ -269,12 +316,17 @@ export function annotateWithDistance(events, userLat, userLng) {
     
     if (eventLat && eventLng) {
       const distance = calculateDistance(userLat, userLng, eventLat, eventLng);
+      const walkingTime = estimateTravelTime(distance, 'walking');
+      const drivingTime = estimateTravelTime(distance, 'driving');
+      
       return {
         ...event,
         distanceFromUser: distance,
         distanceDisplay: `${distance.toFixed(1)} miles`,
-        travelTimeWalking: estimateTravelTime(distance, 'walking'),
-        travelTimeDriving: estimateTravelTime(distance, 'driving')
+        travelTimeWalking: walkingTime.formatted,
+        travelTimeWalkingMinutes: walkingTime.minutes,
+        travelTimeDriving: drivingTime.formatted,
+        travelTimeDrivingMinutes: drivingTime.minutes
       };
     }
     

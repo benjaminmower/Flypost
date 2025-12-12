@@ -74,14 +74,15 @@ function testEstimateTravelTime() {
     
     // 5 miles at 25 mph = 12 minutes
     // 1 mile at 3 mph = 20 minutes
-    if (drivingTime.includes('12') && walkingTime.includes('20')) {
+    if (drivingTime.formatted.includes('12') && walkingTime.formatted.includes('20') &&
+        drivingTime.minutes === 12 && walkingTime.minutes === 20) {
       console.log('✅ Travel time estimation works')
-      console.log(`   5 miles driving: ${drivingTime}`)
-      console.log(`   1 mile walking: ${walkingTime}`)
+      console.log(`   5 miles driving: ${drivingTime.formatted} (${drivingTime.minutes} min)`)
+      console.log(`   1 mile walking: ${walkingTime.formatted} (${walkingTime.minutes} min)`)
       return true
     } else {
       console.log('❌ Travel time estimation incorrect')
-      console.log(`   Got driving: ${drivingTime}, walking: ${walkingTime}`)
+      console.log(`   Got driving: ${drivingTime.formatted}, walking: ${walkingTime.formatted}`)
       return false
     }
   } catch (error) {
