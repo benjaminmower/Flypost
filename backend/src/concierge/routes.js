@@ -69,7 +69,7 @@ export function createConciergeRouter(config) {
     
     try {
       // Validate request body
-      const { message, lat, lng, brokerageId, conversationHistory } = req.body || {}
+      const { message, lat, lng, brokerageId, conversationHistory, history } = req.body || {}
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
@@ -94,30 +94,50 @@ export function createConciergeRouter(config) {
         })
       }
 
-      // Validate coordinates - required for location-based search
-      const latitude = typeof lat === 'number' ? lat : parseFloat(lat)
-      const longitude = typeof lng === 'number' ? lng : parseFloat(lng)
-
-      if (isNaN(latitude) || isNaN(longitude)) {
+      // Validate history if provided
+      if (history !== undefined && !Array.isArray(history)) {
         return res.status(400).json({
           success: false,
-          error: 'Missing or invalid coordinates. Please provide valid "lat" and "lng" values.'
+          error: 'Invalid "history" field. Must be an array if provided.'
         })
       }
 
-      // Validate coordinate ranges
-      if (latitude < -90 || latitude > 90) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid latitude. Must be between -90 and 90 degrees.'
-        })
+      // Parse coordinates - now optional (allow undefined for location clarification)
+      let latitude = undefined
+      let longitude = undefined
+
+      if (lat !== undefined && lat !== null) {
+        latitude = typeof lat === 'number' ? lat : parseFloat(lat)
+        if (isNaN(latitude)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid latitude. Must be a valid number.'
+          })
+        }
+        // Validate coordinate range only if provided
+        if (latitude < -90 || latitude > 90) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid latitude. Must be between -90 and 90 degrees.'
+          })
+        }
       }
 
-      if (longitude < -180 || longitude > 180) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid longitude. Must be between -180 and 180 degrees.'
-        })
+      if (lng !== undefined && lng !== null) {
+        longitude = typeof lng === 'number' ? lng : parseFloat(lng)
+        if (isNaN(longitude)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid longitude. Must be a valid number.'
+          })
+        }
+        // Validate coordinate range only if provided
+        if (longitude < -180 || longitude > 180) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid longitude. Must be between -180 and 180 degrees.'
+          })
+        }
       }
 
       // Log request (GDPR-compliant - no PII)

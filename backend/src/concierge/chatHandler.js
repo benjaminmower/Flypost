@@ -27,6 +27,11 @@ function getOpenAIClient() {
 }
 
 /**
+ * Conversion constants
+ */
+const MILES_TO_KM = 1.60934
+
+/**
  * Define the getEventsNear tool for OpenAI function calling
  */
 const getEventsNearTool = {
@@ -70,7 +75,7 @@ async function executeGetEventsNear(args, backendUrl, brokerageId) {
   
   // Convert miles to kilometers for backend API (backend expects kilometers)
   const radiusMiles = Math.max(0, Number(radius))
-  const radiusKm = radiusMiles * 1.60934
+  const radiusKm = radiusMiles * MILES_TO_KM
   
   const params = new URLSearchParams()
   params.append('lat', lat.toString())
