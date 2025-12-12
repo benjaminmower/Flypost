@@ -167,6 +167,130 @@ export function createConciergeRouter(config) {
   })
 
   /**
+   * POST /api/chat/stream
+   * 
+   * Streaming chat endpoint for Web Concierge (Server-Sent Events)
+   * Provides progressive token streaming like ChatGPT
+   * 
+   * Request body: Same as /api/chat
+   * {
+   *   "message": "What events are happening near me?",
+   *   "lat": 34.0195,
+   *   "lng": -118.4912,
+   *   "brokerageId": "vista-sir",  // Optional
+   *   "conversationHistory": []     // Optional: array of previous messages
+   * }
+   * 
+   * Response: SSE stream
+   * data: {"type": "token", "content": "Hello"}
+   * data: {"type": "token", "content": " world"}
+   * data: {"type": "done"}
+   */
+  router.post('/chat/stream', chatLimiter, async (req, res) => {
+    const startTime = Date.now()
+    
+    try {
+      // Validate request body
+      const { message, lat, lng, brokerageId, conversationHistory } = req.body || {}
+
+      if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing or invalid "message" field. Please provide a non-empty string.'
+        })
+      }
+
+      // Validate brokerageId if provided
+      if (brokerageId !== undefined && typeof brokerageId !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid "brokerageId" field. Must be a string if provided.'
+        })
+      }
+
+      // Validate conversationHistory if provided
+      if (conversationHistory !== undefined && !Array.isArray(conversationHistory)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid "conversationHistory" field. Must be an array if provided.'
+        })
+      }
+
+      // Validate coordinates - required for location-based search
+      const latitude = typeof lat === 'number' ? lat : parseFloat(lat)
+      const longitude = typeof lng === 'number' ? lng : parseFloat(lng)
+
+      if (isNaN(latitude) || isNaN(longitude)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing or invalid coordinates. Please provide valid "lat" and "lng" values.'
+        })
+      }
+
+      // Validate coordinate ranges
+      if (latitude < -90 || latitude > 90) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid latitude. Must be between -90 and 90 degrees.'
+        })
+      }
+
+      if (longitude < -180 || longitude > 180) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid longitude. Must be between -180 and 180 degrees.'
+        })
+      }
+
+      // Log request (GDPR-compliant - no PII)
+      const logBrokerageId = brokerageId ? `, brokerageId=${brokerageId}` : ''
+      const logHistory = conversationHistory ? `, history_msgs=${conversationHistory.length}` : ''
+      console.log(`🤖 Concierge streaming request: lat=${latitude.toFixed(4)}, lng=${longitude.toFixed(4)}, msg_length=${message.length}${logBrokerageId}${logHistory}`)
+
+      // Set up SSE headers
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.setHeader('X-Accel-Buffering', 'no') // Disable nginx buffering
+
+      // Send initial connection event
+      res.write('data: {"type":"connected"}\n\n')
+
+      // Process chat message with streaming callback
+      await processChatMessage(
+        message.trim(),
+        latitude,
+        longitude,
+        backendUrl,
+        brokerageId,
+        conversationHistory,
+        (token) => {
+          // Send each token as SSE event
+          const data = JSON.stringify({ type: 'token', content: token })
+          res.write(`data: ${data}\n\n`)
+        }
+      )
+
+      // Send completion event
+      const duration = Date.now() - startTime
+      res.write(`data: ${JSON.stringify({ type: 'done', duration })}\n\n`)
+      console.log(`✅ Concierge streaming completed (${duration}ms)`)
+      res.end()
+    } catch (error) {
+      const duration = Date.now() - startTime
+      console.error(`❌ Concierge streaming error (${duration}ms):`, error)
+      
+      // Send error event
+      const errorData = JSON.stringify({ 
+        type: 'error', 
+        message: 'An unexpected error occurred. Please try again.' 
+      })
+      res.write(`data: ${errorData}\n\n`)
+      res.end()
+    }
+  })
+
+  /**
    * GET /api/chat/health
    * 
    * Health check for concierge service
