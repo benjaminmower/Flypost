@@ -83,6 +83,87 @@
   let userInput = null;
   let sendButton = null;
   let locationStatus = null;
+  let conversationHistory = [];
+
+  // LocalStorage key for conversation memory (scoped to brokerageId)
+  const STORAGE_KEY = config.brokerageId 
+    ? `flypost_conversation_${config.brokerageId}`
+    : 'flypost_conversation_default';
+
+  /**
+   * Load conversation history from localStorage
+   */
+  function loadConversationHistory() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        conversationHistory = JSON.parse(stored);
+        console.log(`📝 Loaded ${conversationHistory.length} messages from memory`);
+      }
+    } catch (error) {
+      console.warn('Failed to load conversation history:', error);
+      conversationHistory = [];
+    }
+  }
+
+  /**
+   * Save conversation history to localStorage
+   */
+  function saveConversationHistory() {
+    try {
+      // Limit to last 10 messages to control storage size
+      const trimmedHistory = conversationHistory.slice(-10);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmedHistory));
+    } catch (error) {
+      console.warn('Failed to save conversation history:', error);
+    }
+  }
+
+  /**
+   * Clear conversation history
+   */
+  function clearConversationHistory() {
+    conversationHistory = [];
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      console.warn('Failed to clear conversation history:', error);
+    }
+  }
+
+  /**
+   * Initialize marked.js for Markdown rendering
+   */
+  function initializeMarked() {
+    // Check if marked is already loaded
+    if (typeof marked !== 'undefined') {
+      // Configure marked for safe rendering
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+        headerIds: false,
+        mangle: false
+      });
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Render Markdown to HTML safely
+   */
+  function renderMarkdown(text) {
+    if (typeof marked !== 'undefined') {
+      try {
+        return marked.parse(text);
+      } catch (error) {
+        console.warn('Markdown parsing error:', error);
+        return escapeHtml(text).replace(/\n/g, '<br>');
+      }
+    }
+    // Fallback: simple text with line breaks
+    return escapeHtml(text).replace(/\n/g, '<br>');
+  }
 
   /**
    * Create widget HTML structure
@@ -137,6 +218,12 @@
 
     // Setup event listeners
     setupEventListeners();
+
+    // Initialize Markdown rendering
+    initializeMarked();
+
+    // Load conversation history from localStorage
+    loadConversationHistory();
 
     // Get user location
     getUserLocation();
@@ -267,17 +354,14 @@
     const messageDiv = document.createElement('div');
     messageDiv.className = `flypost-message ${type}`;
     
-    // Use textContent for safety, then manually add line breaks as DOM elements
     if (type === 'assistant') {
-      // Split by line breaks and create text nodes with <br> elements
-      const lines = content.split('\n');
-      lines.forEach((line, index) => {
-        messageDiv.appendChild(document.createTextNode(line));
-        if (index < lines.length - 1) {
-          messageDiv.appendChild(document.createElement('br'));
-        }
-      });
+      // Render Markdown for assistant messages
+      messageDiv.innerHTML = renderMarkdown(content);
+    } else if (type === 'user') {
+      // Plain text for user messages
+      messageDiv.textContent = content;
     } else {
+      // System/error messages
       messageDiv.textContent = content;
     }
     
@@ -331,7 +415,8 @@
       const requestBody = {
         message: message,
         lat: userLocation.lat,
-        lng: userLocation.lng
+        lng: userLocation.lng,
+        conversationHistory: conversationHistory
       };
 
       // Add brokerageId if configured
@@ -352,7 +437,26 @@
       hideTyping();
 
       if (response.ok && data.success) {
+        // Add message to chat
         addMessage(data.message, 'assistant');
+        
+        // Update conversation history
+        conversationHistory.push({
+          role: 'user',
+          content: message
+        });
+        conversationHistory.push({
+          role: 'assistant',
+          content: data.message
+        });
+        
+        // Save to localStorage
+        saveConversationHistory();
+        
+        // Display suggested follow-ups if available
+        if (data.suggestedFollowUps && data.suggestedFollowUps.length > 0) {
+          displaySuggestedFollowUps(data.suggestedFollowUps);
+        }
       } else {
         addMessage(data.error || 'Sorry, I encountered an error. Please try again.', 'error');
       }
@@ -376,6 +480,33 @@
       sendButton.disabled = false;
       userInput.focus();
     }
+  }
+
+  /**
+   * Display suggested follow-up questions
+   */
+  function displaySuggestedFollowUps(suggestions) {
+    const suggestionsDiv = document.createElement('div');
+    suggestionsDiv.className = 'flypost-suggestions';
+    
+    const title = document.createElement('div');
+    title.className = 'flypost-suggestions-title';
+    title.textContent = 'Suggested questions:';
+    suggestionsDiv.appendChild(title);
+    
+    suggestions.forEach(suggestion => {
+      const button = document.createElement('button');
+      button.className = 'flypost-suggestion-button';
+      button.textContent = suggestion;
+      button.onclick = () => {
+        userInput.value = suggestion;
+        sendMessage();
+      };
+      suggestionsDiv.appendChild(button);
+    });
+    
+    messagesContainer.appendChild(suggestionsDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
   /**
