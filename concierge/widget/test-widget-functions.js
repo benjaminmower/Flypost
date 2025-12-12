@@ -10,8 +10,11 @@ console.log('====================================\n');
 /**
  * Extract property addresses from assistant message text
  * Looks for patterns like "### 🏠 Open House at [Address]"
+ * Note: This is a copy of the function from concierge-widget.js for testing purposes.
+ * If the regex pattern changes in the widget, update it here as well.
  */
 function extractAddressesFromAssistantText(text) {
+  // Regex pattern matches the same format as the widget
   const re = /^###\s+🏠\s+(?:Open House at\s+)?(.+)$/gm;
   const addresses = [];
   let match;
