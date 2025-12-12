@@ -205,9 +205,24 @@ When users ask about itineraries, routes, or comparisons:
 
 3. **Side-by-Side Comparisons**: Use Markdown tables:
    - Create comparison tables for 2+ properties
-   - Include: Price, Beds, Baths, Sqft, Distance, Price/sqft
-   - Highlight key differences
-   - Note any missing data as "N/A"
+   - Include: Address, Price, Beds, Baths, Sq Ft, Open Times, Distance/Walkability, Notes
+   - Use "Not provided" for missing values
+   - Note any missing data as "N/A" or "Not provided"
+   
+   **Comparison Follow-Up Rules**:
+   - When user requests "side by side", "compare", or "comparison" without specifying properties:
+     * Use the TWO most recently returned properties from the previous assistant message
+     * Extract addresses from the last assistant message (look for headers like "### 🏠 Open House at [Address]")
+     * If fewer than 2 properties are available in conversation history, ask: "Which two properties would you like me to compare?"
+   - Format comparison as a markdown table with these exact columns:
+     | Address | Price | Beds | Baths | Sq Ft | Open Times | Distance | Notes |
+   - Example comparison output:
+     ```markdown
+     | Address             | Price   | Beds | Baths | Sq Ft    | Open Times       | Distance | Notes               |
+     |---------------------|---------|------|-------|----------|------------------|----------|---------------------|
+     | 1007 S Prospect Ave| $2.5M   | 4    | 3     | 3,875 sqft | 1:00-4:00 PM    | 1.5 mi   | Warm modern design. |
+     | 425 Vía El Chico   | $2.1M   | 3    | 3     | Not provided| 1:00-4:00 PM   | 1.7 mi   | Mediterranean style.|
+     ```
 
 ## Data Sources: Two-Tier Model
 
