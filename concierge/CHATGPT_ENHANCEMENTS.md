@@ -291,7 +291,10 @@ Static HTML demo showing:
 
 - No security issues introduced
 - Input validation maintained
-- XSS protection via marked.js escaping
+- XSS protection via custom HTML sanitization:
+  - Strips script tags and event handlers
+  - Validates localStorage data structure
+  - Sanitizes all Markdown-rendered content
 - localStorage scoped per brokerage
 
 ### Dependencies

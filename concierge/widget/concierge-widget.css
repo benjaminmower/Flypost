@@ -43,6 +43,30 @@
   opacity: 0.9;
 }
 
+/* Clear History Button */
+.flypost-clear-history-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.flypost-clear-history-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.flypost-concierge-header {
+  position: relative;
+}
+
 /* Location Status */
 .flypost-location-status {
   padding: 12px 20px;
