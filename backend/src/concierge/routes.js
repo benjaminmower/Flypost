@@ -40,10 +40,11 @@ export function createConciergeRouter(config) {
    * Request body:
    * {
    *   "message": "What events are happening near me?",
-   *   "lat": 34.0195,
-   *   "lng": -118.4912,
+   *   "lat": 34.0195,              // Optional: latitude
+   *   "lng": -118.4912,            // Optional: longitude
    *   "brokerageId": "vista-sir",  // Optional
-   *   "conversationHistory": []     // Optional: array of previous messages
+   *   "conversationHistory": [],   // Optional: array of previous messages
+   *   "history": []                // Optional: array of {role, content} for follow-ups
    * }
    * 
    * Response:
@@ -54,12 +55,14 @@ export function createConciergeRouter(config) {
    *   "scheduleNote": null,  // Deprecated: kept for backward compatibility
    *   "areaContext": null,  // Deprecated: kept for backward compatibility
    *   "suggestedFollowUps": [],  // Deprecated: kept for backward compatibility
+   *   "details": null,  // Optional: expanded listing details when requested
    *   "timestamp": "2024-01-01T12:00:00.000Z"
    * }
    * 
    * Note: The response now returns Markdown-formatted content in the "message" field.
    * The structured fields (listings, scheduleNote, etc.) are deprecated but included
    * as empty values for backward compatibility with older widget versions.
+   * Coordinates are optional; if missing, model will ask for location clarification.
    */
   router.post('/chat', chatLimiter, async (req, res) => {
     const startTime = Date.now()
@@ -120,16 +123,20 @@ export function createConciergeRouter(config) {
       // Log request (GDPR-compliant - no PII)
       const logBrokerageId = brokerageId ? `, brokerageId=${brokerageId}` : ''
       const logHistory = conversationHistory ? `, history_msgs=${conversationHistory.length}` : ''
-      console.log(`🤖 Concierge chat request: lat=${latitude.toFixed(4)}, lng=${longitude.toFixed(4)}, msg_length=${message.length}${logBrokerageId}${logHistory}`)
+      const logContextHistory = history ? `, context_history=${history.length}` : ''
+      const latStr = latitude !== undefined ? latitude.toFixed(4) : 'n/a'
+      const lngStr = longitude !== undefined ? longitude.toFixed(4) : 'n/a'
+      console.log(`🤖 Concierge chat request: lat=${latStr}, lng=${lngStr}, msg_length=${message.length}${logBrokerageId}${logHistory}${logContextHistory}`)
 
-      // Process chat message
+      // Process chat message (use history if provided, otherwise conversationHistory)
+      const contextHistory = history || conversationHistory
       const result = await processChatMessage(
         message.trim(),
         latitude,
         longitude,
         backendUrl,
         brokerageId,
-        conversationHistory
+        contextHistory
       )
 
       const duration = Date.now() - startTime
@@ -144,6 +151,7 @@ export function createConciergeRouter(config) {
           scheduleNote: null,
           areaContext: null,
           suggestedFollowUps: [],
+          details: result.details || null,
           timestamp: new Date().toISOString()
         })
       } else {
@@ -175,10 +183,11 @@ export function createConciergeRouter(config) {
    * Request body: Same as /api/chat
    * {
    *   "message": "What events are happening near me?",
-   *   "lat": 34.0195,
-   *   "lng": -118.4912,
+   *   "lat": 34.0195,              // Optional: latitude
+   *   "lng": -118.4912,            // Optional: longitude
    *   "brokerageId": "vista-sir",  // Optional
-   *   "conversationHistory": []     // Optional: array of previous messages
+   *   "conversationHistory": [],   // Optional: array of previous messages
+   *   "history": []                // Optional: array of {role, content} for follow-ups
    * }
    * 
    * Response: SSE stream
@@ -191,7 +200,7 @@ export function createConciergeRouter(config) {
     
     try {
       // Validate request body
-      const { message, lat, lng, brokerageId, conversationHistory } = req.body || {}
+      const { message, lat, lng, brokerageId, conversationHistory, history } = req.body || {}
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
@@ -216,36 +225,59 @@ export function createConciergeRouter(config) {
         })
       }
 
-      // Validate coordinates - required for location-based search
-      const latitude = typeof lat === 'number' ? lat : parseFloat(lat)
-      const longitude = typeof lng === 'number' ? lng : parseFloat(lng)
-
-      if (isNaN(latitude) || isNaN(longitude)) {
+      // Validate history if provided
+      if (history !== undefined && !Array.isArray(history)) {
         return res.status(400).json({
           success: false,
-          error: 'Missing or invalid coordinates. Please provide valid "lat" and "lng" values.'
+          error: 'Invalid "history" field. Must be an array if provided.'
         })
       }
 
-      // Validate coordinate ranges
-      if (latitude < -90 || latitude > 90) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid latitude. Must be between -90 and 90 degrees.'
-        })
+      // Parse coordinates - now optional (allow undefined for location clarification)
+      let latitude = undefined
+      let longitude = undefined
+
+      if (lat !== undefined && lat !== null) {
+        latitude = typeof lat === 'number' ? lat : parseFloat(lat)
+        if (isNaN(latitude)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid latitude. Must be a valid number.'
+          })
+        }
+        // Validate coordinate range only if provided
+        if (latitude < -90 || latitude > 90) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid latitude. Must be between -90 and 90 degrees.'
+          })
+        }
       }
 
-      if (longitude < -180 || longitude > 180) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid longitude. Must be between -180 and 180 degrees.'
-        })
+      if (lng !== undefined && lng !== null) {
+        longitude = typeof lng === 'number' ? lng : parseFloat(lng)
+        if (isNaN(longitude)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid longitude. Must be a valid number.'
+          })
+        }
+        // Validate coordinate range only if provided
+        if (longitude < -180 || longitude > 180) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid longitude. Must be between -180 and 180 degrees.'
+          })
+        }
       }
 
       // Log request (GDPR-compliant - no PII)
       const logBrokerageId = brokerageId ? `, brokerageId=${brokerageId}` : ''
       const logHistory = conversationHistory ? `, history_msgs=${conversationHistory.length}` : ''
-      console.log(`🤖 Concierge streaming request: lat=${latitude.toFixed(4)}, lng=${longitude.toFixed(4)}, msg_length=${message.length}${logBrokerageId}${logHistory}`)
+      const logContextHistory = history ? `, context_history=${history.length}` : ''
+      const latStr = latitude !== undefined ? latitude.toFixed(4) : 'n/a'
+      const lngStr = longitude !== undefined ? longitude.toFixed(4) : 'n/a'
+      console.log(`🤖 Concierge streaming request: lat=${latStr}, lng=${lngStr}, msg_length=${message.length}${logBrokerageId}${logHistory}${logContextHistory}`)
 
       // Set up SSE headers
       res.setHeader('Content-Type', 'text/event-stream')
@@ -256,14 +288,15 @@ export function createConciergeRouter(config) {
       // Send initial connection event
       res.write('data: {"type":"connected"}\n\n')
 
-      // Process chat message with streaming callback
+      // Process chat message with streaming callback (use history if provided, otherwise conversationHistory)
+      const contextHistory = history || conversationHistory
       await processChatMessage(
         message.trim(),
         latitude,
         longitude,
         backendUrl,
         brokerageId,
-        conversationHistory,
+        contextHistory,
         (token) => {
           // Send each token as SSE event
           const data = JSON.stringify({ type: 'token', content: token })

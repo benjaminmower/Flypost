@@ -47,8 +47,8 @@ const getEventsNearTool = {
         },
         radius: {
           type: 'number',
-          description: 'Search radius in kilometers',
-          default: 10
+          description: 'Search radius in miles',
+          default: 5
         }
       },
       required: ['lat', 'lng'],
@@ -66,12 +66,16 @@ const getEventsNearTool = {
  * @returns {Promise<Object>} Events data
  */
 async function executeGetEventsNear(args, backendUrl, brokerageId) {
-  const { lat, lng, radius = 10 } = args
+  const { lat, lng, radius = 5 } = args
+  
+  // Convert miles to kilometers for backend API (backend expects kilometers)
+  const radiusMiles = Math.max(0, Number(radius))
+  const radiusKm = radiusMiles * 1.60934
   
   const params = new URLSearchParams()
   params.append('lat', lat.toString())
   params.append('lng', lng.toString())
-  params.append('radius', radius.toString())
+  params.append('radius', radiusKm.toString())
   
   // Add brokerageId if provided
   if (brokerageId) {
@@ -125,20 +129,31 @@ async function executeGetEventsNear(args, backendUrl, brokerageId) {
  * Process a chat message with OpenAI and tool integration with streaming support
  * 
  * @param {string} message - User's message
- * @param {number} lat - User's latitude
- * @param {number} lng - User's longitude
+ * @param {number|undefined} lat - User's latitude (optional)
+ * @param {number|undefined} lng - User's longitude (optional)
  * @param {string} backendUrl - Backend URL for API calls
  * @param {string|undefined} brokerageId - Optional brokerage ID for filtering
- * @param {Array|undefined} conversationHistory - Optional conversation history for context
+ * @param {Array|undefined} conversationHistory - Optional conversation history for context (array of {role, content})
  * @param {Function|undefined} onToken - Optional callback for streaming tokens
  * @returns {Promise<Object>} Chat response or async generator if streaming
  */
 export async function processChatMessage(message, lat, lng, backendUrl, brokerageId, conversationHistory = [], onToken = null) {
   const openai = getOpenAIClient()
   
+  // Determine if coordinates are available
+  const hasCoords = lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)
+  const locString = hasCoords ? `lat ${Number(lat).toFixed(2)}, lng ${Number(lng).toFixed(2)}` : 'unknown'
+  
   // System prompt for the concierge
   let systemPrompt = `You are a knowledgeable Web Concierge for Flypost, a real-time local events platform. 
 Your role is to help users discover nearby events, open houses, garage sales, and local activities using rich, Markdown-formatted responses.
+
+## Location Clarification Rule
+
+When user location is unknown (no coordinates provided):
+- Ask the user to provide their ZIP code, neighborhood, or city name
+- Explain that location information helps find nearby events
+- Be conversational and helpful
 
 ## Response Format: Markdown-First
 
@@ -290,6 +305,24 @@ If this is a follow-up query (conversation history provided):
 3. Provide continuity in the conversation
 4. Adjust follow-up suggestions based on conversation flow
 
+## Detail Reveal Rules ("Tell me more")
+
+When asked:
+- "Tell me more"
+- "Show details"
+- "Expand this"
+- "Tell me more about #2" (or any specific property reference)
+
+The Concierge must:
+1. Identify the referenced event from conversation history (by index like "#2", address, or agent name)
+2. If the event has a `description` field:
+   - Provide a short summary first
+   - Then display the entire description verbatim in a quoted block
+   - Never modify or alter the verbatim description
+3. If no description exists:
+   - State: "I can only share the information included in the Flypost event."
+4. Never invent or hallucinate listing attributes not present in the event data
+
 ## Restrictions - NEVER Do These
 
 - ❌ Reference Zillow, Redfin, Realtor.com, MLS sites, or IDX portals
@@ -312,7 +345,7 @@ If this is a follow-up query (conversation history provided):
 - **Conversational**: Friendly but never salesy
 - **Organized**: Uses clear Markdown structure
 
-The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng ${Number(lng).toFixed(2)}`
+The user's current location is approximately: ${locString}`
 
   // Add brokerage-specific context if brokerageId is provided
   if (brokerageId) {
