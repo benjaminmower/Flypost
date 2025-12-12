@@ -43,6 +43,30 @@
   opacity: 0.9;
 }
 
+/* Clear History Button */
+.flypost-clear-history-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.flypost-clear-history-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.flypost-concierge-header {
+  position: relative;
+}
+
 /* Location Status */
 .flypost-location-status {
   padding: 12px 20px;
@@ -199,6 +223,142 @@
   }
 }
 
+/* Markdown Content Styling */
+.flypost-message.assistant h1,
+.flypost-message.assistant h2,
+.flypost-message.assistant h3,
+.flypost-message.assistant h4 {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.flypost-message.assistant h1 { font-size: 1.5em; }
+.flypost-message.assistant h2 { font-size: 1.3em; }
+.flypost-message.assistant h3 { font-size: 1.1em; }
+.flypost-message.assistant h4 { font-size: 1em; }
+
+.flypost-message.assistant ul,
+.flypost-message.assistant ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.flypost-message.assistant li {
+  margin: 0.25em 0;
+}
+
+.flypost-message.assistant p {
+  margin: 0.5em 0;
+}
+
+.flypost-message.assistant table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: 0.9em;
+}
+
+.flypost-message.assistant th,
+.flypost-message.assistant td {
+  padding: 0.5em;
+  border: 1px solid #dee2e6;
+  text-align: left;
+}
+
+.flypost-message.assistant th {
+  background: #f8f9fa;
+  font-weight: 600;
+}
+
+.flypost-message.assistant tr:nth-child(even) {
+  background: #f8f9fa;
+}
+
+.flypost-message.assistant code {
+  background: #f4f4f4;
+  padding: 0.15em 0.3em;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.flypost-message.assistant pre {
+  background: #f4f4f4;
+  padding: 0.75em;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.flypost-message.assistant pre code {
+  background: none;
+  padding: 0;
+}
+
+.flypost-message.assistant blockquote {
+  border-left: 3px solid #667eea;
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  color: #6c757d;
+}
+
+.flypost-message.assistant hr {
+  border: none;
+  border-top: 1px solid #dee2e6;
+  margin: 0.75em 0;
+}
+
+.flypost-message.assistant a {
+  color: #667eea;
+  text-decoration: none;
+}
+
+.flypost-message.assistant a:hover {
+  text-decoration: underline;
+}
+
+/* Suggested Follow-ups */
+.flypost-suggestions {
+  align-self: center;
+  width: 90%;
+  margin: 8px 0;
+  padding: 12px;
+  background: #f0f4ff;
+  border-radius: 12px;
+  border: 1px solid #d0e0ff;
+}
+
+.flypost-suggestions-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 8px;
+}
+
+.flypost-suggestion-button {
+  display: block;
+  width: 100%;
+  margin: 6px 0;
+  padding: 10px 14px;
+  background: white;
+  border: 1px solid #667eea;
+  border-radius: 8px;
+  color: #667eea;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.flypost-suggestion-button:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .flypost-concierge-widget {
@@ -212,5 +372,14 @@
   .flypost-concierge-messages {
     flex: 1;
     height: auto;
+  }
+
+  .flypost-message.assistant table {
+    font-size: 0.8em;
+  }
+
+  .flypost-message.assistant th,
+  .flypost-message.assistant td {
+    padding: 0.35em;
   }
 }
