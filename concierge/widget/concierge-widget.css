@@ -106,6 +106,30 @@
   word-wrap: break-word;
 }
 
+/* Message animations */
+.flypost-message-animated {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+.flypost-message-animated.flypost-message-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Streaming message cursor effect */
+.flypost-message-streaming::after {
+  content: '▋';
+  animation: flypost-cursor-blink 1s infinite;
+  margin-left: 2px;
+}
+
+@keyframes flypost-cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
 .flypost-message.user {
   align-self: flex-end;
   background: #667eea;
@@ -138,6 +162,17 @@
   color: #c33;
   border: 1px solid #fcc;
   max-width: 90%;
+}
+
+/* Timestamp grouping */
+.flypost-timestamp {
+  align-self: center;
+  font-size: 11px;
+  color: #8899aa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 16px 0 8px 0;
+  font-weight: 600;
 }
 
 /* Input Area */
@@ -184,14 +219,26 @@
   cursor: not-allowed;
 }
 
-/* Typing Indicator */
+/* Typing Indicator - Enhanced "thinking" animation */
 .flypost-typing {
-  padding: 8px 16px;
+  padding: 12px 20px;
   background: white;
   border-radius: 16px;
   align-self: flex-start;
-  max-width: 100px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  animation: flypost-typing-pulse 2s ease-in-out infinite;
+}
+
+@keyframes flypost-typing-pulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+  50% {
+    box-shadow: 0 2px 12px rgba(102, 126, 234, 0.2);
+  }
 }
 
 .flypost-typing span {
@@ -200,8 +247,11 @@
   height: 8px;
   border-radius: 50%;
   background: #667eea;
-  margin: 0 2px;
-  animation: flypost-typing 1.4s infinite;
+  animation: flypost-typing-bounce 1.4s ease-in-out infinite;
+}
+
+.flypost-typing span:nth-child(1) {
+  animation-delay: 0s;
 }
 
 .flypost-typing span:nth-child(2) {
@@ -212,13 +262,13 @@
   animation-delay: 0.4s;
 }
 
-@keyframes flypost-typing {
+@keyframes flypost-typing-bounce {
   0%, 60%, 100% {
-    transform: translateY(0);
-    opacity: 0.3;
+    transform: translateY(0) scale(1);
+    opacity: 0.4;
   }
   30% {
-    transform: translateY(-10px);
+    transform: translateY(-12px) scale(1.1);
     opacity: 1;
   }
 }

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Concierge Streaming UI Test</title>
+  <link rel="stylesheet" href="concierge-widget.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+      margin: 0;
+    }
+    #flypost-concierge-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .test-controls {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    }
+    .test-controls h2 {
+      margin: 0 0 15px 0;
+      color: #333;
+    }
+    .test-controls button {
+      padding: 10px 20px;
+      margin: 5px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .test-controls button:hover {
+      background: #5568d3;
+    }
+    .test-controls p {
+      margin: 10px 0 5px 0;
+      color: #666;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-controls">
+    <h2>🧪 Streaming UI Feature Tests</h2>
+    <p>These tests demonstrate the new ChatGPT-like features without backend calls:</p>
+    
+    <button onclick="testAnimatedUserMessage()">Test Animated User Message</button>
+    <button onclick="testAnimatedAssistantMessage()">Test Animated Assistant Message</button>
+    <button onclick="testStreamingEffect()">Test Streaming Effect</button>
+    <button onclick="testTimestampGrouping()">Test Timestamp Grouping</button>
+    <button onclick="testTypingIndicator()">Test Enhanced Typing Indicator</button>
+    <button onclick="clearMessages()">Clear Messages</button>
+  </div>
+
+  <div id="flypost-concierge-container"></div>
+
+  <!-- Load marked.js for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@11.2.0/marked.min.js"></script>
+  
+  <!-- Widget configuration -->
+  <script>
+    window.FLYPOST_CONFIG = {
+      apiBase: 'http://localhost:3001',
+      brokerageId: 'test-streaming',
+      branding: {
+        name: 'Streaming Test Widget',
+        primaryColor: '#667eea',
+        accentColor: '#764ba2',
+        logo: null,
+        headerText: 'Testing Streaming Features'
+      }
+    };
+  </script>
+
+  <!-- Load widget -->
+  <script src="concierge-widget.js"></script>
+
+  <!-- Test functions -->
+  <script>
+    function waitForWidget() {
+      return new Promise((resolve) => {
+        const check = () => {
+          if (document.getElementById('flypost-messages')) {
+            resolve();
+          } else {
+            setTimeout(check, 100);
+          }
+        };
+        check();
+      });
+    }
+
+    async function testAnimatedUserMessage() {
+      await waitForWidget();
+      const messagesContainer = document.getElementById('flypost-messages');
+      
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'flypost-message user flypost-message-animated';
+      messageDiv.textContent = 'This is an animated user message! 🎨';
+      
+      messagesContainer.appendChild(messageDiv);
+      
+      setTimeout(() => {
+        messageDiv.classList.add('flypost-message-show');
+      }, 10);
+      
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    async function testAnimatedAssistantMessage() {
+      await waitForWidget();
+      const messagesContainer = document.getElementById('flypost-messages');
+      
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'flypost-message assistant flypost-message-animated';
+      
+      // Use marked if available, otherwise use simple HTML
+      if (typeof marked !== 'undefined') {
+        messageDiv.innerHTML = marked.parse('## Animated Response\n\nThis message has a **fade-in** and *slide-up* animation! ✨\n\n- Feature 1\n- Feature 2\n- Feature 3');
+      } else {
+        messageDiv.innerHTML = '<h2>Animated Response</h2><p>This message has a <strong>fade-in</strong> and <em>slide-up</em> animation! ✨</p><ul><li>Feature 1</li><li>Feature 2</li><li>Feature 3</li></ul>';
+      }
+      
+      messagesContainer.appendChild(messageDiv);
+      
+      setTimeout(() => {
+        messageDiv.classList.add('flypost-message-show');
+      }, 10);
+      
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    async function testStreamingEffect() {
+      await waitForWidget();
+      const messagesContainer = document.getElementById('flypost-messages');
+      
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'flypost-message assistant flypost-message-animated flypost-message-streaming';
+      messageDiv.innerHTML = '';
+      
+      messagesContainer.appendChild(messageDiv);
+      
+      setTimeout(() => {
+        messageDiv.classList.add('flypost-message-show');
+      }, 10);
+      
+      const fullText = '## Streaming Demo\n\nThis text is being rendered **progressively** like in ChatGPT! Watch the blinking cursor as tokens arrive...\n\n### Benefits\n\n1. Better perceived performance\n2. More engaging user experience\n3. Progressive information reveal';
+      
+      let currentText = '';
+      let index = 0;
+      
+      const streamInterval = setInterval(() => {
+        if (index < fullText.length) {
+          currentText += fullText[index];
+          // Use marked if available, otherwise use simple formatting
+          if (typeof marked !== 'undefined') {
+            messageDiv.innerHTML = marked.parse(currentText);
+          } else {
+            messageDiv.textContent = currentText;
+          }
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          index++;
+        } else {
+          messageDiv.classList.remove('flypost-message-streaming');
+          clearInterval(streamInterval);
+        }
+      }, 30);
+    }
+
+    async function testTimestampGrouping() {
+      await waitForWidget();
+      const messagesContainer = document.getElementById('flypost-messages');
+      
+      // Add "Today" timestamp
+      const todayDiv = document.createElement('div');
+      todayDiv.className = 'flypost-timestamp';
+      todayDiv.setAttribute('data-date', new Date().toDateString());
+      todayDiv.textContent = 'Today';
+      messagesContainer.appendChild(todayDiv);
+      
+      // Add a message
+      const msg1 = document.createElement('div');
+      msg1.className = 'flypost-message assistant flypost-message-animated';
+      if (typeof marked !== 'undefined') {
+        msg1.innerHTML = marked.parse('This message shows up under **Today** timestamp! 📅');
+      } else {
+        msg1.innerHTML = 'This message shows up under <strong>Today</strong> timestamp! 📅';
+      }
+      messagesContainer.appendChild(msg1);
+      setTimeout(() => msg1.classList.add('flypost-message-show'), 10);
+      
+      // Add another message after a delay
+      setTimeout(() => {
+        const msg2 = document.createElement('div');
+        msg2.className = 'flypost-message assistant flypost-message-animated';
+        msg2.textContent = 'Multiple messages group under the same timestamp.';
+        messagesContainer.appendChild(msg2);
+        setTimeout(() => msg2.classList.add('flypost-message-show'), 10);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }, 500);
+      
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    async function testTypingIndicator() {
+      await waitForWidget();
+      const messagesContainer = document.getElementById('flypost-messages');
+      
+      const typingDiv = document.createElement('div');
+      typingDiv.className = 'flypost-typing';
+      typingDiv.id = 'test-typing-indicator';
+      typingDiv.innerHTML = '<span></span><span></span><span></span>';
+      messagesContainer.appendChild(typingDiv);
+      
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        typingDiv.remove();
+      }, 3000);
+    }
+
+    async function clearMessages() {
+      await waitForWidget();
+      const messagesContainer = document.getElementById('flypost-messages');
+      
+      // Keep only the system welcome message
+      const messages = messagesContainer.querySelectorAll('.flypost-message:not(.system), .flypost-timestamp, .flypost-typing');
+      messages.forEach(msg => msg.remove());
+    }
+  </script>
+</body>
+</html>
