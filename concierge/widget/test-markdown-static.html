@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flypost Concierge - Markdown Display</title>
+  <link rel="stylesheet" href="concierge-widget.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 20px;
+      background: #f0f2f5;
+    }
+    .demo-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .demo-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .demo-header h1 {
+      color: #333;
+      margin: 0;
+    }
+    .demo-header p {
+      color: #666;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <div class="demo-header">
+      <h1>🗓️ Flypost Concierge Widget</h1>
+      <p>Markdown Rendering Demo (Static HTML)</p>
+    </div>
+    
+    <div class="flypost-concierge-widget">
+      <div class="flypost-concierge-header">
+        <h2>Discover Local Open Houses</h2>
+        <p>Demo Realty</p>
+      </div>
+      
+      <div class="flypost-location-status">
+        📍 Using demo location (Santa Monica, CA)
+      </div>
+      
+      <div class="flypost-concierge-messages">
+        <div class="flypost-message system">
+          Welcome! This demo shows Markdown-formatted responses.
+        </div>
+        
+        <div class="flypost-message user">
+          Show me open houses this weekend
+        </div>
+        
+        <!-- Markdown-rendered response (simulated) -->
+        <div class="flypost-message assistant">
+          <h2>Open Houses This Weekend</h2>
+          <p>Here are <strong>3 beautiful properties</strong> available in Santa Monica:</p>
+          
+          <h3>🏠 Property 1: 123 Ocean Avenue</h3>
+          <ul>
+            <li><strong>Open House</strong>: Saturday, Dec 14 · 1:00-4:00 PM</li>
+            <li><strong>Price</strong>: $2,495,000</li>
+            <li><strong>Details</strong>: 4 beds · 3.5 baths · 2,800 sqft</li>
+            <li><strong>Distance</strong>: 0.5 miles (~2 min drive, ~10 min walk)</li>
+          </ul>
+          <p><em>Stunning coastal home with panoramic ocean views and modern finishes.</em></p>
+          <p><strong>Key Features</strong>:</p>
+          <ul>
+            <li>Ocean views from every room</li>
+            <li>Chef's kitchen with top appliances</li>
+            <li>Private rooftop deck</li>
+          </ul>
+          <p><strong>Agent</strong>: Sarah Johnson · 📞 (310) 555-0123 · Coastal Realty</p>
+          
+          <hr>
+          
+          <h3>🏠 Property 2: 456 Main Street</h3>
+          <ul>
+            <li><strong>Open House</strong>: Saturday, Dec 14 · 2:00-5:00 PM</li>
+            <li><strong>Price</strong>: $1,850,000</li>
+            <li><strong>Details</strong>: 3 beds · 2.5 baths · 2,200 sqft</li>
+            <li><strong>Distance</strong>: 1.2 miles (~5 min drive, ~24 min walk)</li>
+          </ul>
+          <p><em>Charming California bungalow with backyard oasis.</em></p>
+          <p><strong>Key Features</strong>:</p>
+          <ul>
+            <li>Updated throughout</li>
+            <li>Beautiful landscaping</li>
+            <li>Two-car garage</li>
+          </ul>
+          <p><strong>Agent</strong>: Michael Chen · 📞 (310) 555-0456 · Demo Realty</p>
+          
+          <hr>
+          
+          <h2>📊 Property Comparison</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Property</th>
+                <th>Price</th>
+                <th>Beds</th>
+                <th>Baths</th>
+                <th>Sqft</th>
+                <th>Price/Sqft</th>
+                <th>Distance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>123 Ocean Ave</td>
+                <td>$2.49M</td>
+                <td>4</td>
+                <td>3.5</td>
+                <td>2,800</td>
+                <td>$891</td>
+                <td>0.5 mi</td>
+              </tr>
+              <tr>
+                <td>456 Main St</td>
+                <td>$1.85M</td>
+                <td>3</td>
+                <td>2.5</td>
+                <td>2,200</td>
+                <td>$841</td>
+                <td>1.2 mi</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>⚠️ <strong>Travel Time Note</strong>: Estimates based on typical driving (~25 mph urban) and walking (~3 mph) speeds. Actual times vary with traffic and route conditions.</p>
+          
+          <h2>💡 What would you like to know?</h2>
+          <ul>
+            <li>Tell me more about 123 Ocean Avenue</li>
+            <li>Are there any open houses on Sunday?</li>
+            <li>Show me properties under $2M</li>
+            <li>What neighborhoods should I explore?</li>
+          </ul>
+        </div>
+        
+        <!-- Suggested follow-ups -->
+        <div class="flypost-suggestions">
+          <div class="flypost-suggestions-title">Suggested questions:</div>
+          <button class="flypost-suggestion-button">Tell me more about 123 Ocean Avenue</button>
+          <button class="flypost-suggestion-button">Are there any open houses on Sunday?</button>
+          <button class="flypost-suggestion-button">Show me properties under $2M</button>
+        </div>
+      </div>
+      
+      <div class="flypost-concierge-input">
+        <input type="text" placeholder="What events are happening near me?" />
+        <button>Send</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
