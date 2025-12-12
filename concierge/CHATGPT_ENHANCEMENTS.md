@@ -296,7 +296,7 @@ Static HTML demo showing:
 
 ### Dependencies
 
-**New Dependency**: marked.js v11.1.1 (CDN)
+**New Dependency**: marked.js v11.2.0 (CDN)
 - Industry-standard Markdown parser
 - Actively maintained
 - No npm dependencies required
