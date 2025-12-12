@@ -204,26 +204,30 @@
   /**
    * Render Markdown to HTML safely
    * Sanitizes output to prevent XSS attacks by stripping raw HTML
+   * Includes auto-link detection for plain URLs
    */
   function renderMarkdown(text) {
     if (typeof marked !== 'undefined') {
       try {
-        // Parse Markdown with HTML disabled
+        // Parse Markdown with HTML disabled and GFM for auto-linking
         const parsed = marked.parse(text, { 
           breaks: true,
-          gfm: true,
+          gfm: true, // GitHub Flavored Markdown - enables auto-linking
           headerIds: false,
-          mangle: false
+          mangle: false,
+          // Enable auto-linking of URLs
+          pedantic: false
         });
         // Additional sanitization: remove any remaining script tags or event handlers
         return sanitizeHtml(parsed);
       } catch (error) {
         console.warn('Markdown parsing error:', error);
-        return escapeHtml(text).replace(/\n/g, '<br>');
+        // Fallback with auto-link detection
+        return linkifyText(escapeHtml(text)).replace(/\n/g, '<br>');
       }
     }
-    // Fallback: simple text with line breaks
-    return escapeHtml(text).replace(/\n/g, '<br>');
+    // Fallback: simple text with line breaks and auto-linking
+    return linkifyText(escapeHtml(text)).replace(/\n/g, '<br>');
   }
 
   /**
