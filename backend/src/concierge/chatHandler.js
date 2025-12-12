@@ -443,9 +443,6 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
     // Explicitly handle empty/null response content
     if (!responseMessage.content || responseMessage.content.trim() === '') {
       const errorMsg = "I apologize, but I couldn't generate a response. Please try rephrasing your question."
-      if (onToken) {
-        onToken(errorMsg)
-      }
       return {
         success: true,
         message: errorMsg,
@@ -458,11 +455,8 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
     }
     
     // Return Markdown-formatted response
-    // If streaming, send the content token by token
-    if (onToken) {
-      onToken(responseMessage.content)
-    }
-    
+    // Note: onToken callback is only used during streaming in the tool call loop above
+    // For final non-streaming responses, we return the full content
     return {
       success: true,
       message: responseMessage.content,
