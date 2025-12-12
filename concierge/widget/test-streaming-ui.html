@@ -123,7 +123,13 @@
       
       const messageDiv = document.createElement('div');
       messageDiv.className = 'flypost-message assistant flypost-message-animated';
-      messageDiv.innerHTML = marked.parse('## Animated Response\n\nThis message has a **fade-in** and *slide-up* animation! ✨\n\n- Feature 1\n- Feature 2\n- Feature 3');
+      
+      // Use marked if available, otherwise use simple HTML
+      if (typeof marked !== 'undefined') {
+        messageDiv.innerHTML = marked.parse('## Animated Response\n\nThis message has a **fade-in** and *slide-up* animation! ✨\n\n- Feature 1\n- Feature 2\n- Feature 3');
+      } else {
+        messageDiv.innerHTML = '<h2>Animated Response</h2><p>This message has a <strong>fade-in</strong> and <em>slide-up</em> animation! ✨</p><ul><li>Feature 1</li><li>Feature 2</li><li>Feature 3</li></ul>';
+      }
       
       messagesContainer.appendChild(messageDiv);
       
@@ -156,7 +162,12 @@
       const streamInterval = setInterval(() => {
         if (index < fullText.length) {
           currentText += fullText[index];
-          messageDiv.innerHTML = marked.parse(currentText);
+          // Use marked if available, otherwise use simple formatting
+          if (typeof marked !== 'undefined') {
+            messageDiv.innerHTML = marked.parse(currentText);
+          } else {
+            messageDiv.textContent = currentText;
+          }
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
           index++;
         } else {
@@ -180,7 +191,11 @@
       // Add a message
       const msg1 = document.createElement('div');
       msg1.className = 'flypost-message assistant flypost-message-animated';
-      msg1.innerHTML = marked.parse('This message shows up under **Today** timestamp! 📅');
+      if (typeof marked !== 'undefined') {
+        msg1.innerHTML = marked.parse('This message shows up under **Today** timestamp! 📅');
+      } else {
+        msg1.innerHTML = 'This message shows up under <strong>Today</strong> timestamp! 📅';
+      }
       messagesContainer.appendChild(msg1);
       setTimeout(() => msg1.classList.add('flypost-message-show'), 10);
       
@@ -188,7 +203,7 @@
       setTimeout(() => {
         const msg2 = document.createElement('div');
         msg2.className = 'flypost-message assistant flypost-message-animated';
-        msg2.innerHTML = marked.parse('Multiple messages group under the same timestamp.');
+        msg2.textContent = 'Multiple messages group under the same timestamp.';
         messagesContainer.appendChild(msg2);
         setTimeout(() => msg2.classList.add('flypost-message-show'), 10);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;

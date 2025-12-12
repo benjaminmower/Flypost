@@ -555,21 +555,24 @@
     
     // Determine label
     let label = 'Today';
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
     
-    if (today === yesterday.toDateString()) {
-      label = 'Yesterday';
-    } else if (!lastTimestamp) {
-      // First message, use "Today"
-      label = 'Today';
-    } else {
-      // Format date
-      label = now.toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric' 
-      });
+    // If there's a previous timestamp, determine the relationship
+    if (lastTimestamp) {
+      const lastDate = lastTimestamp.getAttribute('data-date');
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      if (lastDate === yesterday.toDateString()) {
+        // Previous timestamp was yesterday, so current must be today
+        label = 'Today';
+      } else {
+        // Format current date
+        label = now.toLocaleDateString('en-US', { 
+          weekday: 'short', 
+          month: 'short', 
+          day: 'numeric' 
+        });
+      }
     }
     
     const timestampDiv = document.createElement('div');
@@ -682,28 +685,33 @@
         const streamingMessage = createStreamingMessage();
         let fullContent = '';
 
-        // Read the stream
+        // Read the stream with proper multi-byte character handling
         const reader = response.body.getReader();
-        const decoder = new TextDecoder();
+        const decoder = new TextDecoder('utf-8', { stream: true });
 
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
+          const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n');
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
-              const data = JSON.parse(line.substring(6));
+              try {
+                const data = JSON.parse(line.substring(6));
 
-              if (data.type === 'token') {
-                fullContent += data.content;
-                updateStreamingMessage(streamingMessage, fullContent);
-              } else if (data.type === 'done') {
-                completeStreamingMessage(streamingMessage);
-              } else if (data.type === 'error') {
-                throw new Error(data.message);
+                if (data.type === 'token') {
+                  fullContent += data.content;
+                  updateStreamingMessage(streamingMessage, fullContent);
+                } else if (data.type === 'done') {
+                  completeStreamingMessage(streamingMessage);
+                } else if (data.type === 'error') {
+                  throw new Error(data.message);
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse SSE data:', line, parseError);
+                // Continue processing other lines
               }
             }
           }
