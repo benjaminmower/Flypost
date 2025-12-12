@@ -315,7 +315,7 @@ When asked:
 
 The Concierge must:
 1. Identify the referenced event from conversation history (by index like "#2", address, or agent name)
-2. If the event has a `description` field:
+2. If the event has a description field:
    - Provide a short summary first
    - Then display the entire description verbatim in a quoted block
    - Never modify or alter the verbatim description
