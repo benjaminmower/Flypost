@@ -78,12 +78,8 @@ jobs:
         run: |
           set -e
           mkdir -p public
-          # Copy widget JavaScript
-          if [ -f "concierge/widget/embeddable.html" ]; then
-            cp concierge/widget/embeddable.html public/concierge-widget.js
-          else
-            cp "$WIDGET_JS" public/concierge-widget.js
-          fi
+          # Copy widget JavaScript (use source file, build doesn't produce a JS artifact)
+          cp "$WIDGET_JS" public/concierge-widget.js
           # Copy widget CSS
           cp "$WIDGET_CSS" public/concierge-widget.css
           ls -lah public
