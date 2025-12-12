@@ -60,8 +60,8 @@ jobs:
         run: |
           set -e
           mkdir -p public
-          if [ -f "dist/concierge-widget.js" ]; then
-            cp dist/concierge-widget.js public/concierge-widget.js
+          if [ -f "concierge/widget/embeddable.html" ]; then
+            cp concierge/widget/embeddable.html public/concierge-widget.js
           else
             cp "$WIDGET_PATH" public/concierge-widget.js
           fi
