@@ -31,18 +31,22 @@ jobs:
           workload_identity_provider: "projects/498798854474/locations/global/workloadIdentityPools/github-actions/providers/github"
           service_account: "github-actions-deployer@goflypost.iam.gserviceaccount.com"
 
+      - name: Detect package manager
+        id: detect-pm
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            echo "manager=pnpm" >> $GITHUB_OUTPUT
+          elif [ -f yarn.lock ]; then
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+          else
+            echo "manager=npm" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies (if package.json exists)
-        if: ${{ hashFiles('package.json') != '' }}
-        run: npm ci
-
-      - name: Build (runs only if build script exists)
-        run: npm run build --if-present
+          cache: ${{ steps.detect-pm.outputs.manager }}
 
       - name: Install widget dependencies
         run: npm ci
@@ -51,27 +55,37 @@ jobs:
       - name: Build concierge-widget
         run: npm run build
         working-directory: concierge/widget
-      - name: Locate concierge-widget.js
+
+      - name: Locate concierge-widget files
         shell: bash
         run: |
           set -e
-          WIDGET_PATH="$(git ls-files | grep -E '/?concierge-widget\.js$' | head -n1)"
-          if [ -z "$WIDGET_PATH" ]; then
+          WIDGET_JS="$(git ls-files | grep -E 'concierge-widget\.js$' | head -n1)"
+          WIDGET_CSS="$(git ls-files | grep -E 'concierge-widget\.css$' | head -n1)"
+          if [ -z "$WIDGET_JS" ]; then
             echo "concierge-widget.js not found. Ensure the file is committed."
             exit 1
           fi
-          echo "WIDGET_PATH=$WIDGET_PATH" >> "$GITHUB_ENV"
+          if [ -z "$WIDGET_CSS" ]; then
+            echo "concierge-widget.css not found. Ensure the file is committed."
+            exit 1
+          fi
+          echo "WIDGET_JS=$WIDGET_JS" >> "$GITHUB_ENV"
+          echo "WIDGET_CSS=$WIDGET_CSS" >> "$GITHUB_ENV"
 
       - name: Prepare hosting files
         shell: bash
         run: |
           set -e
           mkdir -p public
+          # Copy widget JavaScript
           if [ -f "concierge/widget/embeddable.html" ]; then
             cp concierge/widget/embeddable.html public/concierge-widget.js
           else
-            cp "$WIDGET_PATH" public/concierge-widget.js
+            cp "$WIDGET_JS" public/concierge-widget.js
           fi
+          # Copy widget CSS
+          cp "$WIDGET_CSS" public/concierge-widget.css
           ls -lah public
 
       - name: Install Firebase CLI
