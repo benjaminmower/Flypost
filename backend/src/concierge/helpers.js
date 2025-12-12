@@ -5,6 +5,11 @@
  * intelligent itineraries and property comparisons.
  */
 
+// Constants for travel speed estimates
+const WALKING_SPEED_MPH = 3;  // Average walking speed
+const DRIVING_SPEED_MPH = 25; // Average urban driving speed (with traffic)
+const AVERAGE_EVENT_DURATION_MINUTES = 30; // Typical open house duration
+
 /**
  * Calculate approximate walking distance based on lat/lng coordinates
  * Uses the Haversine formula for distance calculation
@@ -47,11 +52,9 @@ export function estimateTravelTime(distanceMiles, mode = 'driving') {
   let minutes;
   
   if (mode === 'walking') {
-    // Average walking speed: 3 mph
-    minutes = Math.round((distanceMiles / 3) * 60);
+    minutes = Math.round((distanceMiles / WALKING_SPEED_MPH) * 60);
   } else {
-    // Average driving speed in urban areas: 25 mph (accounting for traffic)
-    minutes = Math.round((distanceMiles / 25) * 60);
+    minutes = Math.round((distanceMiles / DRIVING_SPEED_MPH) * 60);
   }
   
   if (minutes < 60) {
@@ -104,11 +107,10 @@ export function generateItinerary(events, userLat, userLng, maxDurationMinutes =
   // Build itinerary within time constraint
   const itinerary = [];
   let totalTime = 0;
-  const averageEventDuration = 30; // Assume 30 min per open house
   
   for (const event of eventsWithDistance) {
     const travelMinutes = parseInt(event.travelTimeDriving.split(' ')[0]);
-    const eventTime = averageEventDuration;
+    const eventTime = AVERAGE_EVENT_DURATION_MINUTES;
     const segmentTime = travelMinutes + eventTime;
     
     if (totalTime + segmentTime <= maxDurationMinutes) {

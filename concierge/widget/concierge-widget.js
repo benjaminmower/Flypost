@@ -76,6 +76,9 @@
     }
   }
 
+  // Constants
+  const MAX_CONVERSATION_HISTORY = 10; // Limit history to control storage and token usage
+
   // State
   let userLocation = null;
   let isProcessing = false;
@@ -111,8 +114,8 @@
    */
   function saveConversationHistory() {
     try {
-      // Limit to last 10 messages to control storage size
-      const trimmedHistory = conversationHistory.slice(-10);
+      // Limit to most recent messages to control storage size
+      const trimmedHistory = conversationHistory.slice(-MAX_CONVERSATION_HISTORY);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmedHistory));
     } catch (error) {
       console.warn('Failed to save conversation history:', error);

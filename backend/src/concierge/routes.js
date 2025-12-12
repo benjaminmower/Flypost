@@ -49,13 +49,17 @@ export function createConciergeRouter(config) {
    * Response:
    * {
    *   "success": true,
-   *   "message": "Here are the events I found near you...",
-   *   "listings": [...],
-   *   "scheduleNote": null,
-   *   "areaContext": null,
-   *   "suggestedFollowUps": ["...", "..."],
+   *   "message": "Markdown-formatted response with headings, lists, tables, etc.",
+   *   "listings": [],  // Deprecated: kept for backward compatibility
+   *   "scheduleNote": null,  // Deprecated: kept for backward compatibility
+   *   "areaContext": null,  // Deprecated: kept for backward compatibility
+   *   "suggestedFollowUps": [],  // Deprecated: kept for backward compatibility
    *   "timestamp": "2024-01-01T12:00:00.000Z"
    * }
+   * 
+   * Note: The response now returns Markdown-formatted content in the "message" field.
+   * The structured fields (listings, scheduleNote, etc.) are deprecated but included
+   * as empty values for backward compatibility with older widget versions.
    */
   router.post('/chat', chatLimiter, async (req, res) => {
     const startTime = Date.now()
@@ -135,6 +139,11 @@ export function createConciergeRouter(config) {
         return res.json({
           success: true,
           message: result.message,
+          // Include empty arrays for backward compatibility with older clients
+          listings: [],
+          scheduleNote: null,
+          areaContext: null,
+          suggestedFollowUps: [],
           timestamp: new Date().toISOString()
         })
       } else {
