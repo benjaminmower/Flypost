@@ -1,0 +1,74 @@
+name: Build and deploy concierge-widget to Firebase Hosting (OIDC)
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/concierge-widget.js"
+      - "package.json"
+      - "package-lock.json"
+      - "pnpm-lock.yaml"
+      - "yarn.lock"
+      - "firebase.json"
+      - ".firebaserc"
+      - ".github/workflows/firebase-hosting.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # required for OIDC
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/498798854474/locations/global/workloadIdentityPools/github-actions/providers/github"
+          service_account: "github-actions-deployer@goflypost.iam.gserviceaccount.com"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies (if package.json exists)
+        if: ${{ hashFiles('package.json') != '' }}
+        run: npm ci
+
+      - name: Build (runs only if build script exists)
+        run: npm run build --if-present
+
+      - name: Locate concierge-widget.js
+        shell: bash
+        run: |
+          set -e
+          WIDGET_PATH="$(git ls-files | grep -E '/?concierge-widget\.js$' | head -n1)"
+          if [ -z "$WIDGET_PATH" ]; then
+            echo "concierge-widget.js not found. Ensure the file is committed."
+            exit 1
+          fi
+          echo "WIDGET_PATH=$WIDGET_PATH" >> "$GITHUB_ENV"
+
+      - name: Prepare hosting files
+        shell: bash
+        run: |
+          set -e
+          mkdir -p public
+          if [ -f "dist/concierge-widget.js" ]; then
+            cp dist/concierge-widget.js public/concierge-widget.js
+          else
+            cp "$WIDGET_PATH" public/concierge-widget.js
+          fi
+          ls -lah public
+
+      - name: Install Firebase CLI
+        run: npm i -g firebase-tools
+
+      - name: Deploy to Firebase Hosting (OIDC)
+        run: firebase deploy --only hosting --project goflypost --non-interactive
