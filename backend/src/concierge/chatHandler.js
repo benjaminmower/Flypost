@@ -114,7 +114,7 @@ async function executeGetEventsNear(args, backendUrl, brokerageId) {
 }
 
 /**
- * Process a chat message with OpenAI and tool integration
+ * Process a chat message with OpenAI and tool integration with streaming support
  * 
  * @param {string} message - User's message
  * @param {number} lat - User's latitude
@@ -122,9 +122,10 @@ async function executeGetEventsNear(args, backendUrl, brokerageId) {
  * @param {string} backendUrl - Backend URL for API calls
  * @param {string|undefined} brokerageId - Optional brokerage ID for filtering
  * @param {Array|undefined} conversationHistory - Optional conversation history for context
- * @returns {Promise<Object>} Chat response
+ * @param {Function|undefined} onToken - Optional callback for streaming tokens
+ * @returns {Promise<Object>} Chat response or async generator if streaming
  */
-export async function processChatMessage(message, lat, lng, backendUrl, brokerageId, conversationHistory = []) {
+export async function processChatMessage(message, lat, lng, backendUrl, brokerageId, conversationHistory = [], onToken = null) {
   const openai = getOpenAIClient()
   
   // System prompt for the concierge
@@ -367,24 +368,84 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
       }
 
       // Get next response from OpenAI - Markdown format (no JSON constraint)
-      response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages,
-        tools: [getEventsNearTool],
-        tool_choice: 'auto',
-        temperature: 0.7,
-        max_tokens: 2000
-      })
+      // Use streaming if onToken callback is provided
+      if (onToken) {
+        // Streaming mode
+        const stream = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages,
+          tools: [getEventsNearTool],
+          tool_choice: 'auto',
+          temperature: 0.7,
+          max_tokens: 2000,
+          stream: true
+        })
 
-      responseMessage = response.choices[0].message
+        let fullContent = ''
+        let hasToolCalls = false
+
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta
+          
+          if (delta?.tool_calls) {
+            hasToolCalls = true
+            break // Need to handle tool calls, exit streaming
+          }
+          
+          if (delta?.content) {
+            fullContent += delta.content
+            onToken(delta.content)
+          }
+        }
+
+        if (hasToolCalls) {
+          // Re-fetch without streaming to handle tool calls
+          response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages,
+            tools: [getEventsNearTool],
+            tool_choice: 'auto',
+            temperature: 0.7,
+            max_tokens: 2000
+          })
+          responseMessage = response.choices[0].message
+        } else {
+          // No more tool calls, return streamed content
+          if (!fullContent || fullContent.trim() === '') {
+            onToken("I apologize, but I couldn't generate a response. Please try rephrasing your question.")
+            return {
+              success: true,
+              message: "I apologize, but I couldn't generate a response. Please try rephrasing your question."
+            }
+          }
+          
+          return {
+            success: true,
+            message: fullContent
+          }
+        }
+      } else {
+        // Non-streaming mode
+        response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages,
+          tools: [getEventsNearTool],
+          tool_choice: 'auto',
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+
+        responseMessage = response.choices[0].message
+      }
     }
 
     // Handle Markdown response
     // Explicitly handle empty/null response content
     if (!responseMessage.content || responseMessage.content.trim() === '') {
+      const errorMsg = "I apologize, but I couldn't generate a response. Please try rephrasing your question."
       return {
         success: true,
-        message: "I apologize, but I couldn't generate a response. Please try rephrasing your question.",
+        message: errorMsg,
         usage: {
           promptTokens: response.usage?.prompt_tokens || 0,
           completionTokens: response.usage?.completion_tokens || 0,
@@ -394,6 +455,8 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
     }
     
     // Return Markdown-formatted response
+    // Note: onToken callback is only used during streaming in the tool call loop above
+    // For final non-streaming responses, we return the full content
     return {
       success: true,
       message: responseMessage.content,
@@ -405,9 +468,13 @@ The user's current location is approximately: lat ${Number(lat).toFixed(2)}, lng
     }
   } catch (error) {
     console.error('OpenAI chat error:', error)
+    const errorMsg = 'I apologize, but I encountered an error processing your request. Please try again.'
+    if (onToken) {
+      onToken(errorMsg)
+    }
     return {
       success: false,
-      message: 'I apologize, but I encountered an error processing your request. Please try again.',
+      message: errorMsg,
       error: error.message
     }
   }

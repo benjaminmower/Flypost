@@ -204,26 +204,30 @@
   /**
    * Render Markdown to HTML safely
    * Sanitizes output to prevent XSS attacks by stripping raw HTML
+   * Includes auto-link detection for plain URLs
    */
   function renderMarkdown(text) {
     if (typeof marked !== 'undefined') {
       try {
-        // Parse Markdown with HTML disabled
+        // Parse Markdown with HTML disabled and GFM for auto-linking
         const parsed = marked.parse(text, { 
           breaks: true,
-          gfm: true,
+          gfm: true, // GitHub Flavored Markdown - enables auto-linking
           headerIds: false,
-          mangle: false
+          mangle: false,
+          // Enable auto-linking of URLs
+          pedantic: false
         });
         // Additional sanitization: remove any remaining script tags or event handlers
         return sanitizeHtml(parsed);
       } catch (error) {
         console.warn('Markdown parsing error:', error);
-        return escapeHtml(text).replace(/\n/g, '<br>');
+        // Fallback with auto-link detection
+        return linkifyText(escapeHtml(text)).replace(/\n/g, '<br>');
       }
     }
-    // Fallback: simple text with line breaks
-    return escapeHtml(text).replace(/\n/g, '<br>');
+    // Fallback: simple text with line breaks and auto-linking
+    return linkifyText(escapeHtml(text)).replace(/\n/g, '<br>');
   }
 
   /**
@@ -505,7 +509,128 @@
   }
 
   /**
-   * Send message to backend
+   * Add animated message bubble to chat
+   */
+  function addAnimatedMessage(content, type = 'assistant') {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `flypost-message ${type} flypost-message-animated`;
+    
+    if (type === 'assistant') {
+      // Render Markdown for assistant messages
+      messageDiv.innerHTML = renderMarkdown(content);
+    } else if (type === 'user') {
+      // Plain text for user messages
+      messageDiv.textContent = content;
+    } else {
+      // System/error messages
+      messageDiv.textContent = content;
+    }
+    
+    messagesContainer.appendChild(messageDiv);
+    
+    // Trigger animation
+    setTimeout(() => {
+      messageDiv.classList.add('flypost-message-show');
+    }, 10);
+    
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    return messageDiv;
+  }
+
+  /**
+   * Add timestamp group if needed
+   */
+  function addTimestampIfNeeded() {
+    const now = new Date();
+    const today = now.toDateString();
+    
+    // Check if we need to add a timestamp
+    const lastTimestamp = messagesContainer.querySelector('.flypost-timestamp:last-of-type');
+    if (lastTimestamp) {
+      const lastDate = lastTimestamp.getAttribute('data-date');
+      if (lastDate === today) {
+        return; // Same day, no need for new timestamp
+      }
+    }
+    
+    // Determine label
+    let label = 'Today';
+    
+    // If there's a previous timestamp, determine the relationship
+    if (lastTimestamp) {
+      const lastDate = lastTimestamp.getAttribute('data-date');
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      if (lastDate === yesterday.toDateString()) {
+        // Previous timestamp was yesterday, so current must be today
+        label = 'Today';
+      } else {
+        // Format current date
+        label = now.toLocaleDateString('en-US', { 
+          weekday: 'short', 
+          month: 'short', 
+          day: 'numeric' 
+        });
+      }
+    }
+    
+    const timestampDiv = document.createElement('div');
+    timestampDiv.className = 'flypost-timestamp';
+    timestampDiv.setAttribute('data-date', today);
+    timestampDiv.textContent = label;
+    messagesContainer.appendChild(timestampDiv);
+  }
+
+  /**
+   * Create streaming message placeholder
+   */
+  function createStreamingMessage() {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'flypost-message assistant flypost-message-animated flypost-message-streaming';
+    messageDiv.innerHTML = '';
+    messagesContainer.appendChild(messageDiv);
+    
+    // Trigger animation
+    setTimeout(() => {
+      messageDiv.classList.add('flypost-message-show');
+    }, 10);
+    
+    return messageDiv;
+  }
+
+  /**
+   * Update streaming message with new token
+   */
+  function updateStreamingMessage(messageDiv, content) {
+    messageDiv.innerHTML = renderMarkdown(content);
+    
+    // Auto-scroll if user is near bottom
+    const isNearBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < 100;
+    if (isNearBottom) {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+  }
+
+  /**
+   * Complete streaming message
+   */
+  function completeStreamingMessage(messageDiv) {
+    messageDiv.classList.remove('flypost-message-streaming');
+  }
+
+  /**
+   * Auto-detect and linkify URLs in text
+   */
+  function linkifyText(text) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return text.replace(urlRegex, (url) => {
+      return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
+    });
+  }
+
+  /**
+   * Send message to backend with streaming support
    */
   async function sendMessage() {
     const message = userInput.value.trim();
@@ -514,8 +639,11 @@
       return;
     }
 
-    // Add user message to chat
-    addMessage(message, 'user');
+    // Add timestamp if needed
+    addTimestampIfNeeded();
+
+    // Add user message to chat with animation
+    addAnimatedMessage(message, 'user');
     userInput.value = '';
     
     // Disable input while processing
@@ -537,22 +665,58 @@
         requestBody.brokerageId = config.brokerageId;
       }
 
-      const response = await fetch(`${config.apiBase}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
+      // Try streaming endpoint first
+      try {
+        const response = await fetch(`${config.apiBase}/api/chat/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        });
 
-      const data = await response.json();
-      
-      hideTyping();
+        if (!response.ok) {
+          throw new Error('Streaming not available, falling back to regular endpoint');
+        }
 
-      if (response.ok && data.success) {
-        // Add message to chat
-        addMessage(data.message, 'assistant');
-        
+        hideTyping();
+
+        // Create streaming message placeholder
+        const streamingMessage = createStreamingMessage();
+        let fullContent = '';
+
+        // Read the stream with proper multi-byte character handling
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8', { stream: true });
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.substring(6));
+
+                if (data.type === 'token') {
+                  fullContent += data.content;
+                  updateStreamingMessage(streamingMessage, fullContent);
+                } else if (data.type === 'done') {
+                  completeStreamingMessage(streamingMessage);
+                } else if (data.type === 'error') {
+                  throw new Error(data.message);
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse SSE data:', line, parseError);
+                // Continue processing other lines
+              }
+            }
+          }
+        }
+
         // Update conversation history
         conversationHistory.push({
           role: 'user',
@@ -560,18 +724,52 @@
         });
         conversationHistory.push({
           role: 'assistant',
-          content: data.message
+          content: fullContent
         });
         
         // Save to localStorage
         saveConversationHistory();
+
+      } catch (streamError) {
+        console.log('Streaming failed, falling back to regular endpoint:', streamError.message);
         
-        // Display suggested follow-ups if available
-        if (data.suggestedFollowUps && data.suggestedFollowUps.length > 0) {
-          displaySuggestedFollowUps(data.suggestedFollowUps);
+        // Fallback to regular endpoint
+        const response = await fetch(`${config.apiBase}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        const data = await response.json();
+        
+        hideTyping();
+
+        if (response.ok && data.success) {
+          // Add message to chat with animation
+          addAnimatedMessage(data.message, 'assistant');
+          
+          // Update conversation history
+          conversationHistory.push({
+            role: 'user',
+            content: message
+          });
+          conversationHistory.push({
+            role: 'assistant',
+            content: data.message
+          });
+          
+          // Save to localStorage
+          saveConversationHistory();
+          
+          // Display suggested follow-ups if available
+          if (data.suggestedFollowUps && data.suggestedFollowUps.length > 0) {
+            displaySuggestedFollowUps(data.suggestedFollowUps);
+          }
+        } else {
+          addAnimatedMessage(data.error || 'Sorry, I encountered an error. Please try again.', 'error');
         }
-      } else {
-        addMessage(data.error || 'Sorry, I encountered an error. Please try again.', 'error');
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -585,7 +783,7 @@
         errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
       }
       
-      addMessage(errorMessage, 'error');
+      addAnimatedMessage(errorMessage, 'error');
     } finally {
       // Re-enable input
       isProcessing = false;
