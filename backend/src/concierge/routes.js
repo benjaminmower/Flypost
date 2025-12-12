@@ -166,8 +166,8 @@ export function createConciergeRouter(config) {
         return res.json({
           success: true,
           message: result.message,
-          // Include empty arrays for backward compatibility with older clients
-          listings: [],
+          // Return structured listings to support "#2" follow-up references
+          listings: result.listings || [],
           scheduleNote: null,
           areaContext: null,
           suggestedFollowUps: [],
