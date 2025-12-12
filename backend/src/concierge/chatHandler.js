@@ -393,12 +393,20 @@ The user's current location is approximately: ${locString}`
   })
 
   try {
+    // Only expose the tool when coordinates are available
+    // If no coords, model can only ask for location clarification
+    const tools = hasCoords ? [getEventsNearTool] : []
+    const toolChoice = hasCoords ? 'auto' : undefined
+    
+    // Track events returned from tool calls for structured response
+    let collectedEvents = []
+    
     // Initial call to OpenAI - no JSON format during tool calls
     let response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages,
-      tools: [getEventsNearTool],
-      tool_choice: 'auto',
+      tools: tools.length > 0 ? tools : undefined,
+      tool_choice: toolChoice,
       temperature: 0.7,
       max_tokens: 2000
     })
@@ -417,6 +425,10 @@ The user's current location is approximately: ${locString}`
         let result
         if (functionName === 'getEventsNear') {
           result = await executeGetEventsNear(functionArgs, backendUrl, brokerageId)
+          // Collect events for structured response (to support "#2" references)
+          if (result.success && result.events) {
+            collectedEvents = result.events
+          }
         } else {
           result = { error: `Unknown tool: ${functionName}` }
         }
@@ -435,8 +447,8 @@ The user's current location is approximately: ${locString}`
         const stream = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages,
-          tools: [getEventsNearTool],
-          tool_choice: 'auto',
+          tools: tools.length > 0 ? tools : undefined,
+          tool_choice: toolChoice,
           temperature: 0.7,
           max_tokens: 2000,
           stream: true
@@ -464,8 +476,8 @@ The user's current location is approximately: ${locString}`
           response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages,
-            tools: [getEventsNearTool],
-            tool_choice: 'auto',
+            tools: tools.length > 0 ? tools : undefined,
+            tool_choice: toolChoice,
             temperature: 0.7,
             max_tokens: 2000
           })
@@ -476,13 +488,15 @@ The user's current location is approximately: ${locString}`
             onToken("I apologize, but I couldn't generate a response. Please try rephrasing your question.")
             return {
               success: true,
-              message: "I apologize, but I couldn't generate a response. Please try rephrasing your question."
+              message: "I apologize, but I couldn't generate a response. Please try rephrasing your question.",
+              listings: collectedEvents
             }
           }
           
           return {
             success: true,
-            message: fullContent
+            message: fullContent,
+            listings: collectedEvents
           }
         }
       } else {
@@ -490,8 +504,8 @@ The user's current location is approximately: ${locString}`
         response = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages,
-          tools: [getEventsNearTool],
-          tool_choice: 'auto',
+          tools: tools.length > 0 ? tools : undefined,
+          tool_choice: toolChoice,
           temperature: 0.7,
           max_tokens: 2000
         })
@@ -507,6 +521,7 @@ The user's current location is approximately: ${locString}`
       return {
         success: true,
         message: errorMsg,
+        listings: collectedEvents,
         usage: {
           promptTokens: response.usage?.prompt_tokens || 0,
           completionTokens: response.usage?.completion_tokens || 0,
@@ -515,12 +530,13 @@ The user's current location is approximately: ${locString}`
       }
     }
     
-    // Return Markdown-formatted response
+    // Return Markdown-formatted response with structured events
     // Note: onToken callback is only used during streaming in the tool call loop above
     // For final non-streaming responses, we return the full content
     return {
       success: true,
       message: responseMessage.content,
+      listings: collectedEvents,
       usage: {
         promptTokens: response.usage?.prompt_tokens || 0,
         completionTokens: response.usage?.completion_tokens || 0,
