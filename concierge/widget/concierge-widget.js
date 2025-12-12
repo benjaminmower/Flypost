@@ -633,15 +633,20 @@
     });
   }
 
+  // Regex pattern for extracting property addresses from markdown headers
+  // Matches: "### 🏠 Open House at 1007 S Prospect Ave" or "### 🏠 1007 S Prospect Ave"
+  const PROPERTY_ADDRESS_REGEX = /^###\s+🏠\s+(?:Open House at\s+)?(.+)$/gm;
+
   /**
    * Extract property addresses from assistant message text
    * Looks for patterns like "### 🏠 Open House at [Address]"
    */
   function extractAddressesFromAssistantText(text) {
-    const re = /^###\s+🏠\s+(?:Open House at\s+)?(.+)$/gm;
     const addresses = [];
     let match;
-    while ((match = re.exec(text)) !== null) {
+    // Reset regex lastIndex for reusability
+    PROPERTY_ADDRESS_REGEX.lastIndex = 0;
+    while ((match = PROPERTY_ADDRESS_REGEX.exec(text)) !== null) {
       addresses.push(match[1].trim());
     }
     return addresses;
@@ -702,7 +707,7 @@
 
   /**
    * Handle quick action button clicks
-   * Constructs appropriate message with metadata and sends to backend
+   * Constructs appropriate message and sends to backend
    */
   function handleQuickAction(action, addresses) {
     let messageText = '';
@@ -721,9 +726,10 @@
         messageText = action;
     }
 
-    // Set input value and trigger send
+    // Display the message in the input for transparency, then send
     userInput.value = messageText;
-    handleSend();
+    // Use setTimeout to ensure the input is visually updated before sending
+    setTimeout(() => handleSend(), 50);
   }
 
   /**
@@ -737,8 +743,7 @@
     }
 
     // Capture input value immediately
-    const inputEl = userInput;
-    const raw = inputEl.value || '';
+    const raw = userInput.value || '';
     const message = raw.trim();
     
     // Return early if empty
@@ -752,7 +757,7 @@
     }
 
     // Clear input immediately to prevent concatenation issues
-    inputEl.value = '';
+    userInput.value = '';
     
     // Set sending flag
     isSending = true;
@@ -764,7 +769,7 @@
       // Always reset the flag
       isSending = false;
       setSendDisabled(false);
-      inputEl.focus();
+      userInput.focus();
     }
   }
 
