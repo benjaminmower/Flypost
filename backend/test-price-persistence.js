@@ -161,6 +161,8 @@ if (validation3.success) {
 console.log('\nTest 4: Price extraction priority logic (simulated)')
 
 // Helper function to simulate price extraction (matches chatHandler logic)
+// NOTE: This is intentionally duplicated rather than imported from chatHandler.js
+// to test the expected behavior independently and ensure the implementation matches spec
 function extractPriceInfo(event) {
   // Priority 1: flypost.listPrice
   if (event.flypost?.listPrice && typeof event.flypost.listPrice === 'number') {

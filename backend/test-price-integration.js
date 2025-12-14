@@ -72,6 +72,8 @@ function simulateParserOutput(textWithPrice) {
 }
 
 // Simulate concierge price extraction (from chatHandler.js)
+// NOTE: This is intentionally duplicated to test expected behavior independently
+// rather than importing actual implementation, following best practices for unit testing
 function simulateConciergeExtraction(event) {
   // Priority 1: flypost.listPrice
   if (event.flypost?.listPrice && typeof event.flypost.listPrice === 'number') {
