@@ -32,16 +32,7 @@
       "post": {
         "summary": "Parse a natural-language event and publish it",
         "operationId": "parseAndPublishEvent",
-        "description": "Parses an event description, validates it, computes a hash, assigns a brokerageId, and stores it. Tenancy: brokerageId is typically injected by the proxy via the x-flypost-brokerage-id header; body.brokerageId is accepted as a fallback. Precedence: header overrides body.",
-        "parameters": [
-          {
-            "name": "x-flypost-brokerage-id",
-            "in": "header",
-            "required": false,
-            "description": "Brokerage tenant identifier injected by the proxy. If provided, it overrides body.brokerageId.",
-            "schema": { "type": "string" }
-          }
-        ],
+        "description": "Parses an event description, validates it, computes a hash, assigns a brokerageId, and stores it. Tenancy: brokerageId is typically injected by the proxy via x-flypost-brokerage-id; body.brokerageId is accepted as a fallback. Precedence: injected header overrides body.",
         "requestBody": {
           "required": true,
           "content": {
@@ -83,20 +74,13 @@
       "get": {
         "summary": "Get events near a coordinate",
         "operationId": "getEventsNear",
-        "description": "Retrieves events near a latitude/longitude within a radius. If brokerageId is provided, results are filtered by brokerage. If omitted, results may be constrained by deployment/proxy tenancy and cross-brokerage results are not guaranteed.",
+        "description": "Retrieves events near a latitude/longitude within a radius. If brokerageId is provided, results are filtered by brokerage. If omitted, results may be constrained by deployment/proxy tenancy.",
         "parameters": [
           {
             "name": "brokerageId",
             "in": "query",
             "required": false,
             "description": "Optional brokerage tenant identifier (e.g., 'vista-sir'). If provided, server filters results.",
-            "schema": { "type": "string" }
-          },
-          {
-            "name": "x-flypost-brokerage-id",
-            "in": "header",
-            "required": false,
-            "description": "Optional brokerage tenant identifier injected by the proxy. If present, server may use it as the default tenancy when brokerageId query param is omitted.",
             "schema": { "type": "string" }
           },
           {
@@ -160,7 +144,7 @@
       "WriteTokenAuth": {
         "type": "apiKey",
         "in": "header",
-        "name": "X-Flypost-Write-Token",
+        "name": "x-flypost-write-token",
         "description": "Required write token for POST requests."
       }
     },
@@ -188,7 +172,7 @@
           "naturalLanguageInput": { "type": "string" },
           "brokerageId": {
             "type": "string",
-            "description": "Brokerage tenant identifier. Optional when using the proxy, which typically injects x-flypost-brokerage-id."
+            "description": "Brokerage tenant identifier. Optional when using the proxy."
           },
           "userContext": {
             "type": "object",
@@ -222,10 +206,7 @@
                 "items": { "$ref": "#/components/schemas/FlypostEvent" }
               },
               "total": { "type": "integer" },
-              "query": {
-                "type": "object",
-                "additionalProperties": true
-              },
+              "query": { "type": "object", "additionalProperties": true },
               "brokerageId": { "type": "string" },
               "source": { "type": "string" },
               "note": { "type": "string" }
@@ -254,15 +235,8 @@
           "description": { "type": "string" },
           "startDate": { "type": "string", "format": "date-time" },
           "endDate": { "type": ["string", "null"], "format": "date-time" },
-          "location": {
-            "type": "object",
-            "description": "Schema.org Place + PostalAddress.",
-            "additionalProperties": true
-          },
-          "organizer": {
-            "type": "object",
-            "additionalProperties": true
-          },
+          "location": { "type": "object", "additionalProperties": true },
+          "organizer": { "type": "object", "additionalProperties": true },
           "brokerageId": { "type": "string" },
           "offers": {
             "type": "object",
@@ -283,23 +257,12 @@
               "brokerageId": { "type": "string" },
               "category": { "type": "string" },
               "submissionTimestamp": { "type": "string", "format": "date-time" },
-              "listPrice": {
-                "type": "number",
-                "description": "Canonical list price for the property (not admission price)."
-              },
-              "listPriceCurrency": {
-                "type": "string",
-                "description": "Currency for listPrice (e.g., USD).",
-                "default": "USD"
-              },
-              "listPriceDisplay": {
-                "type": "string",
-                "description": "Human-friendly formatted list price (e.g., $11,975,000)."
-              },
+              "listPrice": { "type": "number" },
+              "listPriceCurrency": { "type": "string", "default": "USD" },
+              "listPriceDisplay": { "type": "string" },
               "priceConfidence": {
                 "type": "string",
-                "enum": ["verified", "inferred"],
-                "description": "Whether price is verified from structured agent input or inferred from text."
+                "enum": ["verified", "inferred"]
               }
             }
           },
@@ -309,9 +272,7 @@
             "additionalProperties": true,
             "properties": {
               "algorithm": { "type": "string" },
-              "value": { "type": "string" },
-              "encoding": { "type": "string" },
-              "canonicalVersion": { "type": "integer" }
+              "value": { "type": "string" }
             }
           },
           "storedAt": { "type": "string", "format": "date-time" }
