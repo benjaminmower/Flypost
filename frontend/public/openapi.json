@@ -32,7 +32,7 @@
       "post": {
         "summary": "Parse a natural-language event and publish it",
         "operationId": "parseAndPublishEvent",
-        "description": "Parses an event description, validates it, computes a hash, assigns a brokerageId, and stores it. **Price Requirement**: A list price is required for all published events. Include the price in your event description (e.g., 'List Price: $1,250,000' or '$2.5 million'). Supported formats: $1,250,000 | $1250000 | $2.5M | $2.5 million. Returns 400 if price is missing. Note: Category-specific gating will be added in a future update. Tenancy: brokerageId is typically injected by the proxy via x-flypost-brokerage-id; body.brokerageId is accepted as a fallback. Precedence: injected header overrides body.",
+        "description": "Parses an event description using AI, validates it against the schema, computes a hash, and stores it.\n\n**Price Requirement**: A list price is required for all published events. Include the price in your description (e.g., 'List Price: $1,250,000' or '$2.5 million'). Supported formats: $1,250,000 | $1250000 | $2.5M | $2.5 million. Returns 400 if price is missing. Category-specific gating will be added in a future update.\n\n**Tenancy**: brokerageId is typically injected by the proxy via x-flypost-brokerage-id header; body.brokerageId is accepted as a fallback. Header takes precedence over body.",
         "requestBody": {
           "required": true,
           "content": {
