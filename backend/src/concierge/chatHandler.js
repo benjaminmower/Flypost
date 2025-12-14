@@ -32,6 +32,99 @@ function getOpenAIClient() {
 const MILES_TO_KM = 1.60934
 
 /**
+ * Extract price information from an event in priority order
+ * Priority: flypost.listPrice* > offers.price > description parse (with low confidence)
+ * 
+ * @param {Object} event - Event object
+ * @returns {Object|null} Price information with { value, display, currency, confidence }
+ */
+function extractPriceInfo(event) {
+  // Priority 1: flypost.listPrice (source of truth)
+  if (event.flypost?.listPrice && typeof event.flypost.listPrice === 'number') {
+    return {
+      value: event.flypost.listPrice,
+      display: event.flypost.listPriceDisplay || `$${event.flypost.listPrice.toLocaleString()}`,
+      currency: event.flypost.listPriceCurrency || 'USD',
+      confidence: 'verified',
+      source: 'flypost.listPrice'
+    }
+  }
+
+  // Priority 2: offers.price (Schema.org normalized)
+  if (event.offers?.price && typeof event.offers.price === 'number') {
+    return {
+      value: event.offers.price,
+      display: `$${event.offers.price.toLocaleString()}`,
+      currency: event.offers.priceCurrency || 'USD',
+      confidence: 'verified',
+      source: 'offers.price'
+    }
+  }
+
+  // Priority 3: Parse from description (last resort, mark as inferred)
+  if (event.description && typeof event.description === 'string') {
+    // Try million notation first (more specific pattern)
+    const millionMatch = event.description.match(/\$\s?([\d,]+(?:\.\d+)?)\s*(?:million|mil|m)\b/i)
+    if (millionMatch) {
+      let priceStr = millionMatch[1].replace(/,/g, '')
+      let value = parseFloat(priceStr) * 1000000
+      
+      if (!isNaN(value) && value > 0) {
+        return {
+          value: value,
+          display: millionMatch[0],
+          currency: 'USD',
+          confidence: 'inferred',
+          source: 'description'
+        }
+      }
+    }
+
+    // Then try standard price notation
+    const priceMatch = event.description.match(/\$\s?([\d,]+(?:\.\d{2})?)(?!\s*(?:million|mil|m)\b)/i)
+    if (priceMatch) {
+      let priceStr = priceMatch[1].replace(/,/g, '')
+      let value = parseFloat(priceStr)
+      
+      if (!isNaN(value) && value > 0) {
+        return {
+          value: value,
+          display: priceMatch[0],
+          currency: 'USD',
+          confidence: 'inferred',
+          source: 'description'
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Enrich events with normalized price information
+ * 
+ * @param {Array} events - Array of event objects
+ * @returns {Array} Events with price information added
+ */
+function enrichEventsWithPrice(events) {
+  if (!events || !Array.isArray(events)) {
+    return events
+  }
+
+  return events.map(event => {
+    const priceInfo = extractPriceInfo(event)
+    if (priceInfo) {
+      return {
+        ...event,
+        _priceInfo: priceInfo
+      }
+    }
+    return event
+  })
+}
+
+/**
  * Define the getEventsNear tool for OpenAI function calling
  */
 const getEventsNearTool = {
@@ -263,6 +356,16 @@ Present as authoritative facts. Never invent or infer.
 - Listed amenities
 - **Coordinates** for distance calculations
 
+**Price Extraction Priority**:
+When presenting price information, use this priority order:
+1. **flypost.listPriceDisplay** or **flypost.listPrice** (primary source of truth)
+2. **offers.price** with **offers.priceCurrency** (Schema.org normalized format)
+3. Parse from **description** field ONLY if above fields are missing AND price is clearly stated
+   - If parsing from description, add disclaimer: "⚠️ Price information parsed from listing text - verify with agent"
+4. If no price found in any field, state: "Price not provided" or "Contact agent for pricing"
+- NEVER invent or estimate prices
+- ALWAYS present exact values from the data
+
 ### Tier 2: Area Context (from general knowledge)
 Provide as helpful context, always with disclosure.
 - School districts and general information
@@ -425,8 +528,9 @@ The user's current location is approximately: ${locString}`
         let result
         if (functionName === 'getEventsNear') {
           result = await executeGetEventsNear(functionArgs, backendUrl, brokerageId)
-          // Collect events for structured response (to support "#2" references)
+          // Enrich events with normalized price information
           if (result.success && result.events) {
+            result.events = enrichEventsWithPrice(result.events)
             collectedEvents = result.events
           }
         } else {
