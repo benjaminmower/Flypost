@@ -77,6 +77,25 @@
           "type": "string",
           "format": "date-time",
           "description": "The UTC timestamp when the event data was submitted to Flypost."
+        },
+        "listPrice": {
+          "type": "number",
+          "description": "The numeric list price for the event or item (e.g., property price, rental rate). Optional.",
+          "minimum": 0
+        },
+        "listPriceCurrency": {
+          "type": "string",
+          "description": "The currency code for the list price (ISO 4217 format). Defaults to USD.",
+          "default": "USD",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "listPriceDisplay": {
+          "type": "string",
+          "description": "Human-readable display string for the list price (e.g., '$1,250,000'). Optional."
+        },
+        "priceType": {
+          "type": "string",
+          "description": "The type of price being listed (e.g., 'LIST_PRICE', 'RENTAL_RATE'). Optional."
         }
       },
       "additionalProperties": true
@@ -235,6 +254,29 @@
         "minLength": 1
       },
       "uniqueItems": true
+    },
+    "offers": {
+      "type": "object",
+      "description": "Schema.org Offer object for normalized price information. Optional.",
+      "properties": {
+        "@type": {
+          "type": "string",
+          "const": "Offer",
+          "description": "The Schema.org type for the offer."
+        },
+        "price": {
+          "type": "number",
+          "description": "The numeric price value.",
+          "minimum": 0
+        },
+        "priceCurrency": {
+          "type": "string",
+          "description": "The currency code for the price (ISO 4217 format).",
+          "pattern": "^[A-Z]{3}$",
+          "default": "USD"
+        }
+      },
+      "additionalProperties": false
     },
     "hash": {
       "type": "object",

@@ -76,11 +76,20 @@ PARSING RULES:
    - organizer.licenseId: Real estate license number if mentioned
    - organizer.mlsNumber: MLS listing number if mentioned
 
-5. OPTIONAL FIELDS:
+5. PRICE INFORMATION (OPTIONAL):
+   - If a price is mentioned in the text (e.g., list price, rental rate, cost):
+     * flypost.listPrice: Numeric value only (e.g., 1250000 for $1,250,000)
+     * flypost.listPriceCurrency: Currency code (default "USD")
+     * flypost.listPriceDisplay: Formatted display string (e.g., "$1,250,000")
+     * flypost.priceType: Type of price (e.g., "LIST_PRICE" for sale, "RENTAL_RATE" for rent)
+   - Only include price fields if price information is clearly stated in the text
+   - Do NOT invent or estimate prices
+
+6. OPTIONAL FIELDS:
    - keywords: Array of relevant tags if you can infer them from content
    - Only include optional fields if you have valid data
 
-6. FLYPOST METADATA:
+7. FLYPOST METADATA:
    - Generate flypost.eventId: "evt_" + random alphanumeric
    - Set flypost.submissionTimestamp to current UTC ISO string
    - Set flypost.realTimeData: true
@@ -265,6 +274,24 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
     } catch (err) {
       delete parsedEvent.endDate // Remove invalid endDate
     }
+  }
+
+  // Normalize and derive price information
+  // If flypost.listPrice exists, ensure offers object is created/updated
+  if (parsedEvent.flypost && typeof parsedEvent.flypost.listPrice === 'number' && parsedEvent.flypost.listPrice > 0) {
+    // Ensure default currency if not specified
+    if (!parsedEvent.flypost.listPriceCurrency) {
+      parsedEvent.flypost.listPriceCurrency = 'USD'
+    }
+
+    // Create offers object from flypost.listPrice (Schema.org export layer)
+    parsedEvent.offers = {
+      '@type': 'Offer',
+      price: parsedEvent.flypost.listPrice,
+      priceCurrency: parsedEvent.flypost.listPriceCurrency
+    }
+
+    console.log(`💰 Price normalized: ${parsedEvent.flypost.listPriceDisplay || parsedEvent.flypost.listPrice} ${parsedEvent.flypost.listPriceCurrency}`)
   }
 
   return parsedEvent
