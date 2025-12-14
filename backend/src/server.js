@@ -15,6 +15,7 @@ import { storeEvent, getEventsNear, getStorageStats, clearEvents } from './stora
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
 import { computeCanonicalKey } from './utils/canonicalKey.js'
+import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.js'
 
 dotenv.config()
 
@@ -212,6 +213,31 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
 
+    // 1.2) DETERMINISTIC PRICE EXTRACTION & ENRICHMENT
+    // If LLM didn't extract price, try deterministic extraction from input text
+    if (!hasValidListPrice(parsedEvent)) {
+      const extractedPrice = extractPriceFromText(naturalLanguageInput)
+      if (extractedPrice) {
+        console.log(`💰 Deterministic price extraction: ${extractedPrice.listPriceDisplay} → ${extractedPrice.listPrice}`)
+        
+        // Inject extracted price into parsed event
+        parsedEvent.flypost = {
+          ...parsedEvent.flypost,
+          listPrice: extractedPrice.listPrice,
+          listPriceDisplay: extractedPrice.listPriceDisplay,
+          listPriceCurrency: extractedPrice.listPriceCurrency,
+          priceType: extractedPrice.priceType
+        }
+        
+        // Derive offers object from listPrice (same logic as parser normalization)
+        parsedEvent.offers = {
+          '@type': 'Offer',
+          price: extractedPrice.listPrice,
+          priceCurrency: extractedPrice.listPriceCurrency
+        }
+      }
+    }
+
     // 1.5) NORMALIZE & KEYING (NEW)
     // Compute the canonical key immediately so it travels with the event
     const canonicalKey = computeCanonicalKey(parsedEvent, brokerageId)
@@ -260,6 +286,18 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     }
 
     const validatedEvent = validation.data
+
+    // 2.5) ENFORCE PRICE REQUIREMENT
+    // After parsing, extraction, and normalization, enforce that a valid list price exists
+    if (!hasValidListPrice(validatedEvent)) {
+      console.error('❌ Price validation failed: No valid list price found')
+      return res.status(400).json({
+        success: false,
+        error: 'List price is required for published events',
+        message: 'Please include the list price in your event description (e.g., "List Price: $1,250,000" or "$2.5 million").',
+        hint: 'Supported formats: $1,250,000 | $1250000 | $2.5M | $2.5 million'
+      })
+    }
 
     // 3) Compute hash over the validated event (no brokerageId)
     const eventHash = computeEventHash(validatedEvent)
