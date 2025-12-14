@@ -24,7 +24,8 @@ export function extractPriceFromText(text) {
 
   // Pattern 1: Million notation - $X.X million/mil/M
   // Examples: $2.5 million, $2.5M, $2.5 mil, $11.975 million
-  const millionMatch = text.match(/\$\s?([\d,]+(?:\.\d+)?)\s*(?:million|mil|M)\b/i)
+  // Note: M can be directly after number, but "million" and "mil" need space
+  const millionMatch = text.match(/\$\s?([\d,]+(?:\.\d+)?)\s*(?:M\b|(?:\s+(?:million|mil)\b))/i)
   if (millionMatch) {
     const priceStr = millionMatch[1].replace(/,/g, '')
     const value = parseFloat(priceStr) * 1000000

@@ -9,6 +9,7 @@ import {
   isFirestoreEnabled,
   findEventByCanonicalKey // <--- Import this new function
 } from './firestoreClient.js'
+import { hasValidListPrice } from './utils/priceExtractor.js'
 
 // In-memory event store
 let eventStore = new Map()
@@ -48,16 +49,8 @@ export async function storeEvent(eventData) {
         }
         
         // 3. Carry forward price if new event lacks it but existing has it
-        const newHasPrice = !!(
-          finalEvent.flypost?.listPrice &&
-          typeof finalEvent.flypost.listPrice === 'number' &&
-          finalEvent.flypost.listPrice > 0
-        )
-        const existingHasPrice = !!(
-          existing.flypost?.listPrice &&
-          typeof existing.flypost.listPrice === 'number' &&
-          existing.flypost.listPrice > 0
-        )
+        const newHasPrice = hasValidListPrice(finalEvent)
+        const existingHasPrice = hasValidListPrice(existing)
         
         if (!newHasPrice && existingHasPrice) {
           console.log(`💰 Carrying forward price from existing event: ${existing.flypost.listPriceDisplay || existing.flypost.listPrice}`)
