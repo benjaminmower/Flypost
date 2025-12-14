@@ -47,6 +47,39 @@ export async function storeEvent(eventData) {
           updatedAt: new Date()
         }
         
+        // 3. Carry forward price if new event lacks it but existing has it
+        const newHasPrice = !!(
+          finalEvent.flypost?.listPrice &&
+          typeof finalEvent.flypost.listPrice === 'number' &&
+          finalEvent.flypost.listPrice > 0
+        )
+        const existingHasPrice = !!(
+          existing.flypost?.listPrice &&
+          typeof existing.flypost.listPrice === 'number' &&
+          existing.flypost.listPrice > 0
+        )
+        
+        if (!newHasPrice && existingHasPrice) {
+          console.log(`💰 Carrying forward price from existing event: ${existing.flypost.listPriceDisplay || existing.flypost.listPrice}`)
+          
+          // Carry forward all price fields
+          finalEvent.flypost.listPrice = existing.flypost.listPrice
+          if (existing.flypost.listPriceDisplay) {
+            finalEvent.flypost.listPriceDisplay = existing.flypost.listPriceDisplay
+          }
+          if (existing.flypost.listPriceCurrency) {
+            finalEvent.flypost.listPriceCurrency = existing.flypost.listPriceCurrency
+          }
+          if (existing.flypost.priceType) {
+            finalEvent.flypost.priceType = existing.flypost.priceType
+          }
+          
+          // Carry forward offers object if present
+          if (existing.offers) {
+            finalEvent.offers = existing.offers
+          }
+        }
+        
         // Note: Hash will be recomputed for the updated event data
         // The hash.canonicalVersion field is a constant (1) indicating the hash algorithm version,
         // not an incrementing counter
