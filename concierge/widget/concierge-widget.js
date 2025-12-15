@@ -800,17 +800,19 @@
     showTyping();
 
     try {
-      const requestBody = {
-        message: message,
-        lat: userLocation.lat,
-        lng: userLocation.lng,
-        conversationHistory: conversationHistory
-      };
+  const requestBody = {
+    message: message,
+    lat: userLocation.lat,
+    lng: userLocation.lng,
+    conversationHistory: conversationHistory
+      .filter(m => m.role === 'user')
+      .slice(-4)
+  };
 
-      // Add brokerageId if configured
-      if (config.brokerageId) {
-        requestBody.brokerageId = config.brokerageId;
-      }
+  // Add brokerageId if configured
+  if (config.brokerageId) {
+    requestBody.brokerageId = config.brokerageId;
+  }
 
       // Try streaming endpoint first
       try {
