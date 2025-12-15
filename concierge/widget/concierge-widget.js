@@ -291,7 +291,7 @@
         
         <div id="flypost-messages" class="flypost-concierge-messages">
           <div class="flypost-message system">
-            Welcome! Ask me about events, open houses, or activities near you.
+            Welcome! Ask me about open houses near you.
           </div>
         </div>
         
@@ -299,7 +299,7 @@
           <input 
             type="text" 
             id="flypost-user-input" 
-            placeholder="What events are happening near me?"
+            placeholder="What open houses are happening near me?"
             disabled
           />
           <button id="flypost-send-button" disabled>Send</button>
