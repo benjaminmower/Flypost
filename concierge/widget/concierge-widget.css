@@ -1,472 +1,218 @@
-/**
- * Flypost Concierge Widget - Base Styles
- * Can be customized with brokerage-specific theme CSS files
- */
+/* =====================================================
+   Flypost Concierge Widget — Dark System Base
+   Matches Flypost #060810 design language
+===================================================== */
 
-/* Widget Container */
+/* -------------------------------
+   Theme Tokens (default)
+-------------------------------- */
 .flypost-concierge-widget {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  max-width: 100%;
-  margin: 0;
-  background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  --fp-bg: #060810;
+  --fp-bg-alt: #0b1020;
+  --fp-card: #111827;
+  --fp-text: #F7F7F7;
+  --fp-muted: rgba(247, 247, 247, 0.7);
+  --fp-border: rgba(148, 163, 184, 0.3);
+  --fp-accent: #D82E7E;
+
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Helvetica Neue", Arial, sans-serif;
+
+  background: var(--fp-bg);
+  color: var(--fp-text);
+  border: 1px solid var(--fp-border);
+  border-radius: 20px;
   overflow: hidden;
 }
 
-/* Header */
+/* -------------------------------
+   Header
+-------------------------------- */
 .flypost-concierge-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 20px;
-  text-align: center;
-}
-
-.flypost-concierge-header .flypost-logo {
-  max-width: 200px;
-  max-height: 60px;
-  margin-bottom: 12px;
-  display: block;
-  margin-left: auto;
-  margin-right: auto;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--fp-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--fp-bg);
 }
 
 .flypost-concierge-header h2 {
-  margin: 0 0 8px 0;
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0;
+  color: var(--fp-text);
 }
 
 .flypost-concierge-header p {
-  margin: 0;
-  font-size: 14px;
-  opacity: 0.9;
+  display: none;
 }
 
-/* Clear History Button */
-.flypost-clear-history-button {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.flypost-clear-history-button:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-.flypost-concierge-header {
-  position: relative;
-}
-
-/* Location Status */
+/* -------------------------------
+   Location Status
+-------------------------------- */
 .flypost-location-status {
-  padding: 12px 20px;
-  background: #e7f3ff;
-  border-bottom: 1px solid #bee5ff;
-  font-size: 13px;
-  color: #004085;
-  text-align: center;
+  padding: 6px 16px;
+  font-size: 12px;
+  background: var(--fp-bg-alt);
+  color: var(--fp-muted);
+  border-bottom: 1px solid var(--fp-border);
 }
 
 .flypost-location-status.error {
-  background: #fff3cd;
-  border-bottom-color: #ffeaa7;
-  color: #856404;
+  background: #111827;
+  color: #fecaca;
+  border-bottom-color: #7f1d1d;
 }
 
-/* Messages Container */
+/* -------------------------------
+   Messages Canvas
+-------------------------------- */
 .flypost-concierge-messages {
-  min-height: 200px;
-  max-height: 360px;
+  background: var(--fp-bg);
+  padding: 18px;
+  min-height: 260px;
+  max-height: 420px;
   overflow-y: auto;
-  padding: 20px;
-  background: #f8f9fa;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-/* Individual Messages */
+/* -------------------------------
+   Message Blocks
+-------------------------------- */
 .flypost-message {
-  max-width: 80%;
-  padding: 12px 16px;
-  border-radius: 16px;
-  line-height: 1.5;
-  font-size: 15px;
+  font-size: 14px;
+  line-height: 1.55;
   white-space: pre-wrap;
-  word-wrap: break-word;
 }
 
-/* Message animations */
-.flypost-message-animated {
-  opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-}
-
-.flypost-message-animated.flypost-message-show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Streaming message cursor effect */
-.flypost-message-streaming::after {
-  content: '▋';
-  animation: flypost-cursor-blink 1s infinite;
-  margin-left: 2px;
-}
-
-@keyframes flypost-cursor-blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
-
-.flypost-message.user {
-  align-self: flex-end;
-  background: #667eea;
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-
-.flypost-message.assistant {
-  align-self: flex-start;
-  background: white;
-  color: #333;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border-bottom-left-radius: 4px;
-}
-
+/* System */
 .flypost-message.system {
-  align-self: center;
-  background: #e9ecef;
-  color: #6c757d;
-  font-size: 13px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  max-width: 90%;
-  text-align: center;
-}
-
-.flypost-message.error {
-  align-self: center;
-  background: #fee;
-  color: #c33;
-  border: 1px solid #fcc;
-  max-width: 90%;
-}
-
-/* Timestamp grouping */
-.flypost-timestamp {
-  align-self: center;
-  font-size: 11px;
-  color: #8899aa;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 16px 0 8px 0;
-  font-weight: 600;
-}
-
-/* Input Area */
-.flypost-concierge-input {
-  padding: 16px;
-  border-top: 1px solid #e9ecef;
-  background: white;
-  display: flex;
-  gap: 8px;
-}
-
-.flypost-concierge-input input {
-  flex: 1;
-  padding: 12px 16px;
-  border: 1px solid #dee2e6;
-  border-radius: 24px;
-  font-size: 15px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.flypost-concierge-input input:focus {
-  border-color: #667eea;
-}
-
-.flypost-concierge-input button {
-  padding: 12px 24px;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 24px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.flypost-concierge-input button:hover:not(:disabled) {
-  background: #5568d3;
-}
-
-.flypost-concierge-input button:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-/* Typing Indicator - Enhanced "thinking" animation */
-.flypost-typing {
-  padding: 12px 20px;
-  background: white;
-  border-radius: 16px;
-  align-self: flex-start;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  animation: flypost-typing-pulse 2s ease-in-out infinite;
-}
-
-@keyframes flypost-typing-pulse {
-  0%, 100% {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  }
-  50% {
-    box-shadow: 0 2px 12px rgba(102, 126, 234, 0.2);
-  }
-}
-
-.flypost-typing span {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #667eea;
-  animation: flypost-typing-bounce 1.4s ease-in-out infinite;
-}
-
-.flypost-typing span:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.flypost-typing span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.flypost-typing span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes flypost-typing-bounce {
-  0%, 60%, 100% {
-    transform: translateY(0) scale(1);
-    opacity: 0.4;
-  }
-  30% {
-    transform: translateY(-12px) scale(1.1);
-    opacity: 1;
-  }
-}
-
-/* Markdown Content Styling */
-.flypost-message.assistant h1,
-.flypost-message.assistant h2,
-.flypost-message.assistant h3,
-.flypost-message.assistant h4 {
-  margin-top: 0.5em;
-  margin-bottom: 0.5em;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.flypost-message.assistant h1 { font-size: 1.5em; }
-.flypost-message.assistant h2 { font-size: 1.3em; }
-.flypost-message.assistant h3 { font-size: 1.1em; }
-.flypost-message.assistant h4 { font-size: 1em; }
-
-.flypost-message.assistant ul,
-.flypost-message.assistant ol {
-  margin: 0.5em 0;
-  padding-left: 1.5em;
-}
-
-.flypost-message.assistant li {
-  margin: 0.25em 0;
-}
-
-.flypost-message.assistant p {
-  margin: 0.5em 0;
-}
-
-.flypost-message.assistant table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0.75em 0;
-  font-size: 0.9em;
-}
-
-.flypost-message.assistant th,
-.flypost-message.assistant td {
-  padding: 0.5em;
-  border: 1px solid #dee2e6;
-  text-align: left;
-}
-
-.flypost-message.assistant th {
-  background: #f8f9fa;
-  font-weight: 600;
-}
-
-.flypost-message.assistant tr:nth-child(even) {
-  background: #f8f9fa;
-}
-
-.flypost-message.assistant code {
-  background: #f4f4f4;
-  padding: 0.15em 0.3em;
-  border-radius: 3px;
-  font-family: monospace;
-  font-size: 0.9em;
-}
-
-.flypost-message.assistant pre {
-  background: #f4f4f4;
-  padding: 0.75em;
-  border-radius: 4px;
-  overflow-x: auto;
-  margin: 0.5em 0;
-}
-
-.flypost-message.assistant pre code {
-  background: none;
+  letter-spacing: 0.16em;
+  color: var(--fp-muted);
+  background: transparent;
   padding: 0;
 }
 
-.flypost-message.assistant blockquote {
-  border-left: 3px solid #667eea;
-  padding-left: 0.75em;
-  margin: 0.5em 0;
-  color: #6c757d;
-}
-
-.flypost-message.assistant hr {
-  border: none;
-  border-top: 1px solid #dee2e6;
-  margin: 0.75em 0;
-}
-
-.flypost-message.assistant a {
-  color: #667eea;
-  text-decoration: none;
-}
-
-.flypost-message.assistant a:hover {
-  text-decoration: underline;
-}
-
-/* Suggested Follow-ups */
-.flypost-suggestions {
-  align-self: center;
-  width: 90%;
-  margin: 8px 0;
-  padding: 12px;
-  background: #f0f4ff;
-  border-radius: 12px;
-  border: 1px solid #d0e0ff;
-}
-
-.flypost-suggestions-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #4a5568;
-  margin-bottom: 8px;
-}
-
-.flypost-suggestion-button {
-  display: block;
-  width: 100%;
-  margin: 6px 0;
+/* User */
+.flypost-message.user {
+  align-self: flex-end;
+  max-width: 75%;
+  background: var(--fp-card);
+  color: var(--fp-text);
   padding: 10px 14px;
-  background: white;
-  border: 1px solid #667eea;
-  border-radius: 8px;
-  color: #667eea;
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.2s;
+  border-radius: 18px;
+  border-bottom-right-radius: 6px;
+  border: 1px solid var(--fp-border);
 }
 
-.flypost-suggestion-button:hover {
-  background: #667eea;
-  color: white;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
-}
-
-/* Quick Action Buttons */
-.flypost-quick-actions {
-  align-self: center;
-  width: 90%;
-  margin: 12px 0;
-  padding: 12px;
-  background: #fff9e6;
+/* Assistant */
+.flypost-message.assistant {
+  align-self: stretch;
+  background: var(--fp-bg);
+  color: var(--fp-text);
+  padding: 10px 14px;
   border-radius: 12px;
-  border: 1px solid #ffe066;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
+  border: 1px solid var(--fp-border);
 }
 
-.flypost-quick-action-button {
-  padding: 10px 16px;
-  background: white;
-  border: 2px solid #f59e0b;
-  border-radius: 8px;
-  color: #f59e0b;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+/* Error */
+.flypost-message.error {
+  background: #450a0a;
+  border-color: #7f1d1d;
+  color: #fecaca;
+}
+
+/* -------------------------------
+   Typing Indicator
+-------------------------------- */
+.flypost-typing {
+  align-self: flex-start;
+  background: var(--fp-bg);
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid var(--fp-border);
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
-.flypost-quick-action-button:hover {
-  background: #f59e0b;
-  color: white;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+.flypost-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--fp-accent);
+  animation: flypost-blink 1.4s infinite both;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-  .flypost-concierge-widget {
-    max-width: 100%;
-    border-radius: 0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .flypost-concierge-messages {
-    flex: 1;
-    height: auto;
-  }
+.flypost-typing span:nth-child(2) { animation-delay: 0.2s; }
+.flypost-typing span:nth-child(3) { animation-delay: 0.4s; }
 
-  .flypost-message.assistant table {
-    font-size: 0.8em;
-  }
+@keyframes flypost-blink {
+  0% { opacity: 0.2; }
+  20% { opacity: 1; }
+  100% { opacity: 0.2; }
+}
 
-  .flypost-message.assistant th,
-  .flypost-message.assistant td {
-    padding: 0.35em;
-  }
+/* -------------------------------
+   Input Bar (ChatGPT-style)
+-------------------------------- */
+.flypost-concierge-input {
+  border-top: 1px solid var(--fp-border);
+  background: var(--fp-bg);
+  padding: 10px 12px;
+  display: flex;
+}
+
+/* Text Input */
+.flypost-concierge-input input {
+  flex: 1;
+  background: var(--fp-bg);
+  border: 1px solid var(--fp-border);
+  border-right: none;
+  color: var(--fp-text);
+  padding: 10px 14px;
+  font-size: 14px;
+  border-radius: 999px 0 0 999px;
+  outline: none;
+}
+
+.flypost-concierge-input input::placeholder {
+  color: var(--fp-muted);
+}
+
+.flypost-concierge-input input:focus {
+  border-color: var(--fp-accent);
+  box-shadow: 0 0 0 1px rgba(216, 46, 126, 0.35);
+}
+
+/* Send Button */
+.flypost-concierge-input button {
+  border-radius: 0 999px 999px 0;
+  background: var(--fp-card);
+  border: 1px solid var(--fp-border);
+  border-left: none;
+  color: var(--fp-text);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.flypost-concierge-input button:hover:not(:disabled) {
+  background: var(--fp-accent);
+  border-color: var(--fp-accent);
+  color: #060810;
+}
+
+.flypost-concierge-input button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
