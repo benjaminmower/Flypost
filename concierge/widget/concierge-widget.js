@@ -817,12 +817,14 @@
       // Try streaming endpoint first
       try {
         const response = await fetch(`${config.apiBase}/api/chat/stream`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(requestBody)
-        });
+  method: 'POST',
+  cache: 'no-store',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(requestBody)
+});
+
 
         if (!response.ok) {
           throw new Error('Streaming not available, falling back to regular endpoint');
