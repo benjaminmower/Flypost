@@ -204,7 +204,7 @@
 
   /**
    * Render Markdown to HTML safely
-   * Sanitizes output to prevent XSS attacks by stripping raw HTML
+   * Uses marked + DOMPurify when available, with fallback to custom sanitization
    * Includes auto-link detection for plain URLs
    */
   function renderMarkdown(text) {
@@ -219,7 +219,18 @@
           // Enable auto-linking of URLs
           pedantic: false
         });
-        // Additional sanitization: remove any remaining script tags or event handlers
+        
+        // Use DOMPurify if available for robust sanitization
+        if (typeof DOMPurify !== 'undefined') {
+          return DOMPurify.sanitize(parsed, {
+            ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr'],
+            ALLOWED_ATTR: ['href', 'target', 'rel'],
+            ALLOW_DATA_ATTR: false,
+            ALLOW_UNKNOWN_PROTOCOLS: false
+          });
+        }
+        
+        // Fallback to custom sanitization
         return sanitizeHtml(parsed);
       } catch (error) {
         console.warn('Markdown parsing error:', error);
@@ -595,6 +606,9 @@
     messageDiv.innerHTML = '';
     messagesContainer.appendChild(messageDiv);
     
+    // Scroll to start of the new message
+    messageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
     // Trigger animation
     setTimeout(() => {
       messageDiv.classList.add('flypost-message-show');
@@ -604,15 +618,33 @@
   }
 
   /**
-   * Update streaming message with new token
+   * Update streaming message with new token (throttled with requestAnimationFrame)
    */
+  let pendingStreamUpdate = null;
+  let streamUpdateScheduled = false;
+  
   function updateStreamingMessage(messageDiv, content) {
-    messageDiv.innerHTML = renderMarkdown(content);
+    // Store the latest content
+    pendingStreamUpdate = { messageDiv, content };
     
-    // Auto-scroll if user is near bottom
-    const isNearBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < 100;
-    if (isNearBottom) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    // Only schedule update if not already scheduled
+    if (!streamUpdateScheduled) {
+      streamUpdateScheduled = true;
+      requestAnimationFrame(() => {
+        if (pendingStreamUpdate) {
+          const { messageDiv, content } = pendingStreamUpdate;
+          messageDiv.innerHTML = renderMarkdown(content);
+          
+          // Auto-scroll if user is near bottom
+          const isNearBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < 100;
+          if (isNearBottom) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          }
+          
+          pendingStreamUpdate = null;
+        }
+        streamUpdateScheduled = false;
+      });
     }
   }
 
@@ -814,16 +846,27 @@
 
       // Try streaming endpoint first
       try {
+        // Generate unique request ID for tracking
+        const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
         const response = await fetch(`${config.apiBase}/api/chat/stream`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-Request-Id': requestId
           },
           body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
           throw new Error('Streaming not available, falling back to regular endpoint');
+        }
+        
+        // Verify content-type is SSE
+        const contentType = response.headers.get('Content-Type');
+        if (!contentType || !contentType.includes('text/event-stream')) {
+          console.warn('Expected text/event-stream, got:', contentType);
+          throw new Error('Invalid content-type for streaming');
         }
 
         hideTyping();
@@ -832,16 +875,22 @@
         const streamingMessage = createStreamingMessage();
         let fullContent = '';
 
-        // Read the stream with proper multi-byte character handling
+        // Read the stream with proper multi-byte character handling and buffering
         const reader = response.body.getReader();
         const decoder = new TextDecoder('utf-8', { stream: true });
+        let buffer = ''; // Buffer for incomplete lines
 
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
 
+          // Decode chunk and add to buffer
           const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
+          buffer += chunk;
+          
+          // Split by newlines but keep the last incomplete line in buffer
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep last incomplete line in buffer
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
@@ -861,6 +910,21 @@
                 // Continue processing other lines
               }
             }
+          }
+        }
+        
+        // Process any remaining buffered content
+        if (buffer.trim() && buffer.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(buffer.substring(6));
+            if (data.type === 'token') {
+              fullContent += data.content;
+              updateStreamingMessage(streamingMessage, fullContent);
+            } else if (data.type === 'done') {
+              completeStreamingMessage(streamingMessage);
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse buffered SSE data:', buffer, parseError);
           }
         }
 
@@ -886,11 +950,15 @@
       } catch (streamError) {
         console.log('Streaming failed, falling back to regular endpoint:', streamError.message);
         
+        // Generate unique request ID for tracking
+        const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
         // Fallback to regular endpoint
         const response = await fetch(`${config.apiBase}/api/chat`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-Request-Id': requestId
           },
           body: JSON.stringify(requestBody)
         });

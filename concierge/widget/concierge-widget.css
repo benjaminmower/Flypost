@@ -44,10 +44,30 @@
   text-transform: uppercase;
   margin: 0;
   color: var(--fp-text);
+  flex: 1;
 }
 
 .flypost-concierge-header p {
   display: none;
+}
+
+/* Clear History Button */
+.flypost-clear-history-button {
+  background: transparent;
+  border: 1px solid var(--fp-border);
+  color: var(--fp-muted);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.flypost-clear-history-button:hover {
+  background: var(--fp-card);
+  color: var(--fp-text);
+  border-color: var(--fp-accent);
 }
 
 /* -------------------------------
@@ -127,6 +147,46 @@
   background: #450a0a;
   border-color: #7f1d1d;
   color: #fecaca;
+}
+
+/* -------------------------------
+   Message Animations
+-------------------------------- */
+.flypost-message-animated {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+.flypost-message-animated.flypost-message-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Streaming Cursor Effect */
+.flypost-message-streaming::after {
+  content: '▋';
+  animation: flypost-cursor-blink 1s infinite;
+  margin-left: 2px;
+  color: var(--fp-accent);
+}
+
+@keyframes flypost-cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* -------------------------------
+   Timestamps
+-------------------------------- */
+.flypost-timestamp {
+  align-self: center;
+  font-size: 11px;
+  color: var(--fp-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 16px 0 8px 0;
+  font-weight: 600;
 }
 
 /* -------------------------------
@@ -215,4 +275,168 @@
 .flypost-concierge-input button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* -------------------------------
+   Suggested Follow-ups
+-------------------------------- */
+.flypost-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--fp-bg-alt);
+  border-radius: 12px;
+  border: 1px solid var(--fp-border);
+}
+
+.flypost-suggestions-title {
+  font-size: 11px;
+  color: var(--fp-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.flypost-suggestion-button {
+  background: var(--fp-card);
+  border: 1px solid var(--fp-border);
+  color: var(--fp-text);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.flypost-suggestion-button:hover {
+  background: var(--fp-accent);
+  border-color: var(--fp-accent);
+  color: #060810;
+  transform: translateY(-1px);
+}
+
+/* -------------------------------
+   Quick Action Buttons
+-------------------------------- */
+.flypost-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  justify-content: center;
+}
+
+.flypost-quick-action-button {
+  background: var(--fp-card);
+  border: 2px solid #f59e0b;
+  color: #f59e0b;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.flypost-quick-action-button:hover {
+  background: #f59e0b;
+  color: #060810;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+/* -------------------------------
+   Markdown Styling in Messages
+-------------------------------- */
+.flypost-message.assistant h1,
+.flypost-message.assistant h2,
+.flypost-message.assistant h3 {
+  margin: 0.8em 0 0.4em 0;
+  color: var(--fp-text);
+}
+
+.flypost-message.assistant h1 { font-size: 1.5em; }
+.flypost-message.assistant h2 { font-size: 1.3em; }
+.flypost-message.assistant h3 { font-size: 1.1em; }
+
+.flypost-message.assistant p {
+  margin: 0.5em 0;
+}
+
+.flypost-message.assistant ul,
+.flypost-message.assistant ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.flypost-message.assistant li {
+  margin: 0.3em 0;
+}
+
+.flypost-message.assistant code {
+  background: var(--fp-card);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.flypost-message.assistant pre {
+  background: var(--fp-card);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.flypost-message.assistant pre code {
+  background: none;
+  padding: 0;
+}
+
+.flypost-message.assistant a {
+  color: var(--fp-accent);
+  text-decoration: underline;
+}
+
+.flypost-message.assistant a:hover {
+  color: var(--fp-text);
+}
+
+.flypost-message.assistant table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+}
+
+.flypost-message.assistant th,
+.flypost-message.assistant td {
+  border: 1px solid var(--fp-border);
+  padding: 8px;
+  text-align: left;
+}
+
+.flypost-message.assistant th {
+  background: var(--fp-card);
+  font-weight: 600;
+}
+
+.flypost-message.assistant hr {
+  border: none;
+  border-top: 1px solid var(--fp-border);
+  margin: 1em 0;
+}
+
+.flypost-message.assistant blockquote {
+  border-left: 3px solid var(--fp-accent);
+  padding-left: 12px;
+  margin: 0.8em 0;
+  color: var(--fp-muted);
 }
