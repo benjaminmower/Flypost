@@ -818,6 +818,13 @@
   }
 
   /**
+   * Generate unique request ID for tracking
+   */
+  function generateRequestId() {
+    return `req-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  }
+
+  /**
    * Send message to backend with streaming support
    */
   async function sendMessage(message) {
@@ -846,8 +853,7 @@
 
       // Try streaming endpoint first
       try {
-        // Generate unique request ID for tracking
-        const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const requestId = generateRequestId();
         
         const response = await fetch(`${config.apiBase}/api/chat/stream`, {
           method: 'POST',
@@ -950,8 +956,7 @@
       } catch (streamError) {
         console.log('Streaming failed, falling back to regular endpoint:', streamError.message);
         
-        // Generate unique request ID for tracking
-        const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const requestId = generateRequestId();
         
         // Fallback to regular endpoint
         const response = await fetch(`${config.apiBase}/api/chat`, {
