@@ -4,7 +4,7 @@
  * Tests the Two-Layer North Star enforcement at runtime
  */
 
-import { toDiscoveryEventV1, toDiscoveryEventsV1, computeEventIdentity } from './src/utils/discoveryMapper.js'
+import { toDiscoveryEventV1, toDiscoveryEventsV1, computeEventIdentity, CONFIG } from './src/utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse, _internal } from './src/utils/sanitizer.js'
 
 console.log('🧪 Testing Discovery V1 Contract & Runtime Guardrails\n')
@@ -117,12 +117,13 @@ function testDescriptionTruncation() {
   
   const discoveryEvent = toDiscoveryEventV1(mockEvent)
   
-  // Check that description is truncated to ~500 chars + "..."
-  if (discoveryEvent.description && discoveryEvent.description.length === 503) { // 500 + "..."
+  // Check that description is truncated to MAX_DESCRIPTION_LENGTH + "..."
+  const expectedLength = CONFIG.MAX_DESCRIPTION_LENGTH + '...'.length
+  if (discoveryEvent.description && discoveryEvent.description.length === expectedLength) {
     console.log(`   ✅ Description truncated to ${discoveryEvent.description.length} chars (includes "...")`)
     passed++
   } else {
-    console.log(`   ❌ Description not truncated correctly: ${discoveryEvent.description?.length} chars`)
+    console.log(`   ❌ Description not truncated correctly: ${discoveryEvent.description?.length} chars (expected ${expectedLength})`)
     failed++
   }
   
