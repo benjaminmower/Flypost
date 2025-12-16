@@ -35,12 +35,18 @@ export function computeEventIdentity(event) {
 }
 
 /**
+ * Maximum length for event descriptions in discovery responses
+ * Prevents abuse and ensures consistent response sizes
+ */
+const MAX_DESCRIPTION_LENGTH = 500
+
+/**
  * Truncates description to safe length
  * @param {string} description - The description text
- * @param {number} maxLength - Maximum length (default: 500)
+ * @param {number} maxLength - Maximum length (default: MAX_DESCRIPTION_LENGTH)
  * @returns {string} Truncated description
  */
-function truncateDescription(description, maxLength = 500) {
+function truncateDescription(description, maxLength = MAX_DESCRIPTION_LENGTH) {
   if (!description) return undefined
   if (typeof description !== 'string') return undefined
   
@@ -133,4 +139,11 @@ export function toDiscoveryEventsV1(events) {
   return events
     .map(event => toDiscoveryEventV1(event))
     .filter(event => event !== null)
+}
+
+/**
+ * Export constants for testing and configuration
+ */
+export const CONFIG = {
+  MAX_DESCRIPTION_LENGTH
 }

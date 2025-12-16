@@ -364,8 +364,8 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
 
     console.log(
       `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${
-        req.originalUrl
-      } (brokerageId=${brokerageId || 'ALL'})`
+        req.path
+      } lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radius}km (brokerageId=${brokerageId || 'ALL'})`
     )
 
     const events = await getEventsNear(latitude, longitude, radius, useFirestore)
