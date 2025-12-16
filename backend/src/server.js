@@ -22,6 +22,11 @@ dotenv.config()
 const app = express()
 const port = process.env.PORT || 3001
 
+// Configuration constants
+const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.3') // 300 meters default
+const FEEDBACK_RECENCY_THRESHOLD_HOURS = parseFloat(process.env.FEEDBACK_RECENCY_THRESHOLD_HOURS || '4') // 4 hours default
+const FEEDBACK_RECENCY_THRESHOLD_MS = FEEDBACK_RECENCY_THRESHOLD_HOURS * 60 * 60 * 1000
+
 // CORS
 const frontendOrigins = [
   ...((process.env.FRONTEND_URL || '')
@@ -238,11 +243,10 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
     }
 
-    // 1.25) Normalize dates FIRST (needed for eventIdentity computation)
+    // 2) Normalize dates (needed for eventIdentity computation)
     normalizeEventDates(parsedEvent, userContext)
 
-    // 1.5) NORMALIZE & KEYING (NEW)
-    // Compute the brokerage-agnostic event identity
+    // 3) Compute event identity (brokerage-agnostic)
     const eventIdentity = computeEventIdentity(parsedEvent)
     
     if (eventIdentity) {
@@ -262,7 +266,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       parsedEvent.flypost.canonicalKey = canonicalKey
     }
 
-    // 1.3) Normalize organizer phone field (telephone → phone alias)
+    // 4) Normalize organizer phone field (telephone → phone alias)
     if (parsedEvent.organizer && typeof parsedEvent.organizer === 'object') {
       const org = parsedEvent.organizer
       if (!org.phone && org.telephone) {
@@ -271,7 +275,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
     }
 
-    // 1.5) Enforce server-side eventId + timestamp (inside flypost)
+    // 5) Enforce server-side eventId + timestamp (inside flypost)
     parsedEvent.flypost = {
       ...parsedEvent.flypost,
       eventId: `evt_${Math.random()
@@ -280,7 +284,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       submissionTimestamp: new Date().toISOString()
     }
 
-    // 2) Validate the *schema-only* event (no brokerageId yet)
+    // 6) Validate the *schema-only* event (no brokerageId yet)
     const validation = validateEventData(parsedEvent)
     if (!validation.success) {
       console.error('❌ Validation failed:', validation.errors)
@@ -293,7 +297,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
 
     const validatedEvent = validation.data
 
-    // 2.5) ENFORCE PRICE REQUIREMENT
+    // 7) ENFORCE PRICE REQUIREMENT
     // After parsing, extraction, and normalization, enforce that a valid list price exists
     if (!hasValidListPrice(validatedEvent)) {
       console.error('❌ Price validation failed: No valid list price found')
@@ -305,10 +309,10 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       })
     }
 
-    // 3) Compute hash over the validated event (no brokerageId)
+    // 8) Compute hash over the validated event (no brokerageId)
     const eventHash = computeEventHash(validatedEvent)
 
-    // 4) Attach brokerageId + hash AFTER validation
+    // 9) Attach brokerageId + hash AFTER validation
     const eventToStore = {
       ...validatedEvent,
       brokerageId, // tenancy metadata (not governed by schema)
@@ -322,7 +326,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       )}... (brokerageId=${brokerageId})`
     )
 
-    // 5) Store
+    // 10) Store
     const storedEvent = await storeEvent(eventToStore)
     console.log(
       `📦 Stored event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId})`
@@ -451,7 +455,6 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
 
     // If no eventId provided, find nearest event
     if (!targetEventId) {
-      const PRESENCE_RADIUS_KM = 0.3 // 300 meters for check-in proximity
       const useFirestore = isFirestoreEnabled()
       const nearbyEvents = await getEventsNear(
         parseFloat(lat),
@@ -565,16 +568,15 @@ app.post('/v1/feedback/submit', writeLimiter, async (req, res) => {
       })
     }
 
-    // Enforce presence gate: attendance must be recent (within 4 hours)
-    const RECENCY_THRESHOLD_MS = 4 * 60 * 60 * 1000 // 4 hours
+    // Enforce presence gate: attendance must be recent
     const checkInTime = new Date(attendance.checkInTime)
     const now = new Date()
     const timeSinceCheckIn = now - checkInTime
 
-    if (timeSinceCheckIn > RECENCY_THRESHOLD_MS) {
+    if (timeSinceCheckIn > FEEDBACK_RECENCY_THRESHOLD_MS) {
       return res.status(403).json({
         success: false,
-        error: 'Attendance record is too old (must be within 4 hours)',
+        error: `Attendance record is too old (must be within ${FEEDBACK_RECENCY_THRESHOLD_HOURS} hours)`,
         checkInTime: attendance.checkInTime,
         hoursAgo: Math.round(timeSinceCheckIn / (60 * 60 * 1000))
       })
