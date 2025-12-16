@@ -16,6 +16,8 @@ import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
 import { computeCanonicalKey } from './utils/canonicalKey.js'
 import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.js'
+import { toDiscoveryEventsV1 } from './utils/discoveryMapper.js'
+import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
 
 dotenv.config()
 
@@ -345,7 +347,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
   }
 })
 
-// Events near (with optional brokerage filter)
+// Events near (with optional brokerage filter) - Discovery V1 Contract
 app.get('/v1/events/near', readLimiter, async (req, res) => {
   try {
     const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
@@ -361,7 +363,7 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
       getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId || null
 
     console.log(
-      `📋 Events endpoint: GET ${req.protocol}://${req.get('host')}${
+      `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${
         req.originalUrl
       } (brokerageId=${brokerageId || 'ALL'})`
     )
@@ -369,7 +371,6 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
     const events = await getEventsNear(latitude, longitude, radius, useFirestore)
 
     let filteredEvents = events || []
-    let note
 
     if (brokerageId) {
       // Server-side brokerage isolation
@@ -378,28 +379,26 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
           ev?.brokerageId === brokerageId ||
           ev?.flypost?.brokerageId === brokerageId // backward compat if any old data ever used that
       )
-
-      note = useFirestore
-        ? 'Querying from Firestore with geospatial filtering (then brokerage filter in server)'
-        : 'Naive in-memory retrieval with brokerage filter'
-    } else {
-      // No brokerageId → return all events (for generic Flypost app)
-      note = useFirestore
-        ? 'Querying from Firestore with geospatial filtering (no brokerage filter)'
-        : 'Naive in-memory retrieval (no brokerage filter)'
     }
 
-    res.json({
+    // Map to Discovery V1 format (allowlist registry-safe fields only)
+    const discoveryEvents = toDiscoveryEventsV1(filteredEvents)
+
+    // Build Discovery V1 response
+    let response = {
       success: true,
-      data: {
-        events: filteredEvents,
-        total: filteredEvents.length,
-        query: req.query || {},
-        brokerageId: brokerageId || null,
-        source: useFirestore ? 'Firestore' : 'Memory',
-        note
+      schemaVersion: 'discovery.v1',
+      events: discoveryEvents,
+      meta: {
+        count: discoveryEvents.length,
+        radiusKm: radius
       }
-    })
+    }
+
+    // Apply runtime sanitizer to strip any forbidden keys that might have leaked
+    response = sanitizeDiscoveryResponse(response)
+
+    res.json(response)
   } catch (error) {
     console.error('❌ Error retrieving events:', error)
     res.status(500).json({
