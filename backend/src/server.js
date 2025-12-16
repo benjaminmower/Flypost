@@ -14,7 +14,7 @@ import { validateEventData, getSchema } from './validation.js'
 import { storeEvent, getEventsNear, getStorageStats, clearEvents } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
-import { computeCanonicalKey } from './utils/canonicalKey.js'
+import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.js'
 import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.js'
 
 dotenv.config()
@@ -238,23 +238,29 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
     }
 
+    // 1.25) Normalize dates FIRST (needed for eventIdentity computation)
+    normalizeEventDates(parsedEvent, userContext)
+
     // 1.5) NORMALIZE & KEYING (NEW)
-    // Compute the canonical key immediately so it travels with the event
-    const canonicalKey = computeCanonicalKey(parsedEvent, brokerageId)
+    // Compute the brokerage-agnostic event identity
+    const eventIdentity = computeEventIdentity(parsedEvent)
     
-    if (canonicalKey) {
+    if (eventIdentity) {
       parsedEvent.flypost = {
         ...parsedEvent.flypost,
-        canonicalKey: canonicalKey,
+        eventIdentity: eventIdentity,
         brokerageId: brokerageId
       }
-      console.log(`🔑 Generated Canonical Key: ${canonicalKey}`)
+      console.log(`🔑 Generated Event Identity: ${eventIdentity}`)
     } else {
-      console.warn('⚠️ Could not generate canonical key (missing address?)')
+      console.warn('⚠️ Could not generate event identity (missing address or startDate?)')
     }
-
-    // 1.25) Normalize dates
-    normalizeEventDates(parsedEvent, userContext)
+    
+    // Legacy: Also compute old canonical key for backward compatibility during migration
+    const canonicalKey = computeCanonicalKey(parsedEvent, brokerageId)
+    if (canonicalKey) {
+      parsedEvent.flypost.canonicalKey = canonicalKey
+    }
 
     // 1.3) Normalize organizer phone field (telephone → phone alias)
     if (parsedEvent.organizer && typeof parsedEvent.organizer === 'object') {
@@ -405,6 +411,282 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve events',
+      details: error.message
+    })
+  }
+})
+
+/**
+ * POST /v1/presence/check-in
+ * Create an attendance record for presence at an event
+ * 
+ * Body:
+ * - eventId (optional): Specific event ID, or will match nearest event
+ * - lat (required): Latitude
+ * - lng (required): Longitude
+ * - buyerToken (required): Opaque buyer identifier
+ * - method (optional): 'geo_time', 'qr', or 'geo_time_qr'
+ * - timestamp (optional): ISO timestamp for check-in
+ */
+app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
+  try {
+    const { eventId, lat, lng, buyerToken, method, timestamp } = req.body
+
+    if (!buyerToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'buyerToken is required'
+      })
+    }
+
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        error: 'lat and lng are required for presence verification'
+      })
+    }
+
+    let targetEventId = eventId
+    let matchedBy = 'explicit'
+
+    // If no eventId provided, find nearest event
+    if (!targetEventId) {
+      const PRESENCE_RADIUS_KM = 0.3 // 300 meters for check-in proximity
+      const useFirestore = isFirestoreEnabled()
+      const nearbyEvents = await getEventsNear(
+        parseFloat(lat),
+        parseFloat(lng),
+        PRESENCE_RADIUS_KM,
+        useFirestore
+      )
+
+      if (!nearbyEvents || nearbyEvents.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'No events found within proximity for check-in',
+          hint: 'Make sure you are at the event location'
+        })
+      }
+
+      // For now, use the first/nearest event
+      // TODO: Add time window filtering based on timestamp
+      targetEventId = nearbyEvents[0].flypost.eventId
+      matchedBy = 'nearest'
+      console.log(`📍 Matched nearest event: ${targetEventId}`)
+    }
+
+    // Create attendance record
+    const { storeAttendance } = await import('./intelligenceStorage.js')
+    
+    const attendance = await storeAttendance({
+      eventId: targetEventId,
+      buyerToken,
+      checkInTime: timestamp || new Date().toISOString(),
+      presenceProof: {
+        method: method || 'geo_time',
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        matchedBy
+      }
+    })
+
+    res.json({
+      success: true,
+      attendance: {
+        attendanceId: attendance.attendanceId,
+        eventId: attendance.eventId,
+        checkInTime: attendance.checkInTime,
+        matchedBy
+      }
+    })
+  } catch (error) {
+    console.error('❌ Check-in error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Check-in failed',
+      details: error.message
+    })
+  }
+})
+
+/**
+ * POST /v1/feedback/submit
+ * Submit feedback for an event (requires recent attendance)
+ * 
+ * Body:
+ * - attendanceId (optional): Specific attendance record
+ * - eventId (optional): Event ID (if attendanceId not provided, requires buyerToken)
+ * - buyerToken (optional): Buyer token (if attendanceId not provided)
+ * - answers (required): { liked, disliked, wantsSimilar }
+ * - brokerageAffiliation (optional): Brokerage ID for routing
+ */
+app.post('/v1/feedback/submit', writeLimiter, async (req, res) => {
+  try {
+    const { attendanceId, eventId, buyerToken, answers, brokerageAffiliation } = req.body
+
+    if (!answers || !answers.hasOwnProperty('wantsSimilar')) {
+      return res.status(400).json({
+        success: false,
+        error: 'answers object with wantsSimilar is required'
+      })
+    }
+
+    const { 
+      findAttendanceById, 
+      findAttendanceByEventAndBuyer, 
+      storeFeedback 
+    } = await import('./intelligenceStorage.js')
+
+    let attendance = null
+
+    // Find attendance record
+    if (attendanceId) {
+      attendance = await findAttendanceById(attendanceId)
+    } else if (eventId && buyerToken) {
+      const records = await findAttendanceByEventAndBuyer(eventId, buyerToken)
+      if (records.length > 0) {
+        // Get most recent
+        attendance = records.sort((a, b) => 
+          new Date(b.checkInTime) - new Date(a.checkInTime)
+        )[0]
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Either attendanceId or (eventId + buyerToken) is required'
+      })
+    }
+
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        error: 'No attendance record found',
+        hint: 'You must check in at the event before submitting feedback'
+      })
+    }
+
+    // Enforce presence gate: attendance must be recent (within 4 hours)
+    const RECENCY_THRESHOLD_MS = 4 * 60 * 60 * 1000 // 4 hours
+    const checkInTime = new Date(attendance.checkInTime)
+    const now = new Date()
+    const timeSinceCheckIn = now - checkInTime
+
+    if (timeSinceCheckIn > RECENCY_THRESHOLD_MS) {
+      return res.status(403).json({
+        success: false,
+        error: 'Attendance record is too old (must be within 4 hours)',
+        checkInTime: attendance.checkInTime,
+        hoursAgo: Math.round(timeSinceCheckIn / (60 * 60 * 1000))
+      })
+    }
+
+    // Store feedback
+    const feedback = await storeFeedback({
+      attendanceId: attendance.attendanceId,
+      eventId: attendance.eventId,
+      answers: {
+        liked: answers.liked || '',
+        disliked: answers.disliked || '',
+        wantsSimilar: Boolean(answers.wantsSimilar)
+      },
+      brokerageAffiliation: brokerageAffiliation || null
+    })
+
+    res.json({
+      success: true,
+      feedback: {
+        feedbackId: feedback.feedbackId,
+        eventId: feedback.eventId,
+        createdAt: feedback.createdAt
+      }
+    })
+  } catch (error) {
+    console.error('❌ Feedback submission error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Feedback submission failed',
+      details: error.message
+    })
+  }
+})
+
+/**
+ * GET /v1/brokerages/:brokerageId/insights
+ * Get aggregated feedback insights for a brokerage
+ * 
+ * Returns basic aggregations of feedback where brokerageAffiliation matches
+ */
+app.get('/v1/brokerages/:brokerageId/insights', readLimiter, async (req, res) => {
+  try {
+    const { brokerageId } = req.params
+
+    if (!brokerageId) {
+      return res.status(400).json({
+        success: false,
+        error: 'brokerageId is required'
+      })
+    }
+
+    const { getFeedbackByBrokerage } = await import('./intelligenceStorage.js')
+    const feedbackRecords = await getFeedbackByBrokerage(brokerageId)
+
+    // Basic aggregation by eventId
+    const byEvent = {}
+    const recentVerbatims = []
+
+    for (const feedback of feedbackRecords) {
+      const eid = feedback.eventId
+      
+      if (!byEvent[eid]) {
+        byEvent[eid] = {
+          eventId: eid,
+          totalResponses: 0,
+          wantsSimilarCount: 0,
+          likedSnippets: [],
+          dislikedSnippets: []
+        }
+      }
+
+      byEvent[eid].totalResponses++
+      if (feedback.answers.wantsSimilar) {
+        byEvent[eid].wantsSimilarCount++
+      }
+
+      if (feedback.answers.liked) {
+        byEvent[eid].likedSnippets.push(feedback.answers.liked)
+      }
+      if (feedback.answers.disliked) {
+        byEvent[eid].dislikedSnippets.push(feedback.answers.disliked)
+      }
+
+      // Collect recent verbatims (last 10)
+      if (recentVerbatims.length < 10) {
+        recentVerbatims.push({
+          feedbackId: feedback.feedbackId,
+          eventId: feedback.eventId,
+          liked: feedback.answers.liked,
+          disliked: feedback.answers.disliked,
+          wantsSimilar: feedback.answers.wantsSimilar,
+          createdAt: feedback.createdAt
+        })
+      }
+    }
+
+    res.json({
+      success: true,
+      brokerageId,
+      summary: {
+        totalFeedbackRecords: feedbackRecords.length,
+        eventsWithFeedback: Object.keys(byEvent).length
+      },
+      byEvent: Object.values(byEvent),
+      recentVerbatims
+    })
+  } catch (error) {
+    console.error('❌ Insights error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve insights',
       details: error.message
     })
   }
