@@ -236,8 +236,9 @@ async function testFeedbackWithOldAttendance() {
       new Date(Date.now() + 3600000).toISOString()
     )
 
-    // Check in with old timestamp (5 hours ago)
-    const oldTimestamp = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
+    // Check in with old timestamp (5 hours ago - beyond the 4-hour threshold)
+    const FIVE_HOURS_MS = 5 * 60 * 60 * 1000
+    const oldTimestamp = new Date(Date.now() - FIVE_HOURS_MS).toISOString()
     
     const checkInResponse = await fetchImpl(`${BASE_URL}/v1/presence/check-in`, {
       method: 'POST',
