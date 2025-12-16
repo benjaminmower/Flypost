@@ -733,16 +733,16 @@ if (process.env.NODE_ENV !== 'production') {
       },
       name: req.body.name || 'Test Event',
       description: req.body.description || 'Mock event for testing',
-      startDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      startDate: req.body.startDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       location: {
         '@type': 'Place',
-        name: req.body.location || '123 Main Street',
+        name: req.body.location || req.body.streetAddress || '123 Main Street',
         address: {
           '@type': 'PostalAddress',
-          streetAddress: req.body.location || '123 Main Street',
-          addressLocality: 'Santa Monica',
-          addressRegion: 'CA',
-          postalCode: '90405',
+          streetAddress: req.body.streetAddress || req.body.location || '123 Main Street',
+          addressLocality: req.body.city || 'Santa Monica',
+          addressRegion: req.body.state || 'CA',
+          postalCode: req.body.postalCode || '90405',
           addressCountry: 'US'
         }
       },
@@ -750,6 +750,15 @@ if (process.env.NODE_ENV !== 'production') {
         '@type': 'Person',
         name: req.body.organizer || 'Test Organizer',
         email: req.body.email || 'test@example.com'
+      }
+    }
+    
+    // Add optional geo coordinates if provided
+    if (req.body.latitude && req.body.longitude) {
+      baseEvent.location.geo = {
+        '@type': 'GeoCoordinates',
+        latitude: parseFloat(req.body.latitude),
+        longitude: parseFloat(req.body.longitude)
       }
     }
 
@@ -764,14 +773,20 @@ if (process.env.NODE_ENV !== 'production') {
 
     const validatedEvent = validation.data
     
-    // Compute canonical key
-    const canonicalKey = computeCanonicalKey(validatedEvent, brokerageId)
-    if (canonicalKey) {
+    // Compute event identity (brokerage-agnostic)
+    const eventIdentity = computeEventIdentity(validatedEvent)
+    if (eventIdentity) {
       validatedEvent.flypost = {
         ...validatedEvent.flypost,
-        canonicalKey: canonicalKey,
+        eventIdentity: eventIdentity,
         brokerageId: brokerageId
       }
+    }
+    
+    // Also compute legacy canonical key for backward compatibility
+    const canonicalKey = computeCanonicalKey(validatedEvent, brokerageId)
+    if (canonicalKey) {
+      validatedEvent.flypost.canonicalKey = canonicalKey
     }
     
     const eventHash = computeEventHash(validatedEvent)
