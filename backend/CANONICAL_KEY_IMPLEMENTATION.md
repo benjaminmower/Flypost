@@ -1,54 +1,70 @@
-# Canonical Key Implementation
+# Event Identity Implementation (Brokerage-Agnostic)
 
 ## Overview
-This implementation introduces a **canonical key** system for event ingestion that enables "Edit instead of Create" behavior. When an event with the same address and brokerage ID is ingested again, it will update the existing event rather than creating a duplicate.
+This implementation introduces a **brokerage-agnostic event identity** system that enables global event recognition and "Edit instead of Create" behavior. Events are now uniquely identified by location and time window, allowing cross-brokerage event tracking and post-visit intelligence.
 
 ## Key Features
 
-### 1. Deterministic Canonical Keys
-- **Format**: `<normalized-address>|<brokerageId>`
-- **Normalization**: Lowercase, removes special characters, preserves only alphanumeric characters
-- **Example**: `123mainstreet-santamonica-ca-90405|test-brokerage-123`
+### 1. Global Event Identity (NEW)
+- **Format**: `<normalized-address>|<start-time-window>`
+- **Time Window**: ISO hour bucket (YYYY-MM-DDTHH) for events with time, or date bucket (YYYY-MM-DD) for date-only events
+- **Example**: `123mainstreet-santamonica-ca-90405|2025-01-15T14`
+- **Brokerage-Agnostic**: Multiple brokerages can reference the same canonical event
 
-### 2. Edit Instead of Create
+### 2. Edit Instead of Create (Cross-Brokerage)
 When Firestore is enabled:
-- The system checks for existing events using the canonical key
+- The system checks for existing events using the `eventIdentity`
 - If found, it preserves the stable `eventId` while updating the event data
 - Increments the `updateCount` in `flypost` to track the number of updates
 - Preserves creation timestamp, updates modification timestamp
+- **Now works across brokerages**: Same event ingested by different brokerages updates the same record
 - The hash is recomputed for the updated event data (hash.canonicalVersion remains 1, indicating the hash algorithm version)
 
-### 3. Brokerage Isolation
-- The canonical key includes the `brokerageId` to namespace uniqueness
-- Same address with different brokerages creates separate events
-- Ensures multi-tenant isolation
+### 3. Legacy Canonical Key (Deprecated)
+- **Old Format**: `<normalized-address>|<brokerageId>`
+- **Status**: Still computed for backward compatibility but not used for deduplication
+- **Migration**: New code should use `eventIdentity` instead of `canonicalKey`
 
 ## Implementation Details
 
-### Files Created
+### Files Created/Modified
 1. **`backend/src/utils/canonicalKey.js`**
-   - Exports `computeCanonicalKey(event, brokerageId)` function
+   - **NEW**: Exports `computeEventIdentity(event)` function - brokerage-agnostic identity
+   - **NEW**: Exports `computeStartTimeWindow(startDate)` helper - time bucket computation
+   - **LEGACY**: Exports `computeCanonicalKey(event, brokerageId)` function - deprecated
    - Handles address normalization
-   - Returns `null` if address data is missing
+   - Returns `null` if address/startDate data is missing
 
-### Files Modified
-1. **`backend/src/server.js`**
-   - Imports `computeCanonicalKey` from utils
-   - Computes canonical key after LLM parsing (step 1.5)
-   - Attaches canonical key and brokerageId to `parsedEvent.flypost`
-   - Updated test-add-event endpoint to include canonical key
+2. **`backend/src/intelligenceStorage.js`** (NEW)
+   - Post-visit intelligence storage layer
+   - Manages Attendance and Feedback collections
+   - In-memory + Firestore hybrid storage
+   - Functions: `storeAttendance`, `storeFeedback`, `findAttendanceById`, etc.
 
-2. **`backend/src/storage.js`**
-   - Imports `findEventByCanonicalKey` from firestoreClient
+3. **`backend/src/server.js`**
+   - Imports `computeEventIdentity` and `computeCanonicalKey` from utils
+   - Normalizes dates BEFORE computing identity (needed for time window)
+   - Computes `eventIdentity` and attaches to `parsedEvent.flypost`
+   - Also computes legacy `canonicalKey` for backward compatibility
+   - **NEW ENDPOINTS**:
+     - `POST /v1/presence/check-in` - Record attendance at event
+     - `POST /v1/feedback/submit` - Submit feedback with presence gate
+     - `GET /v1/brokerages/:brokerageId/insights` - Aggregated feedback
+
+4. **`backend/src/storage.js`**
+   - Imports `findEventByIdentity` (new) and `findEventByCanonicalKey` (legacy) from firestoreClient
    - Implements "Edit instead of Create" logic in `storeEvent()`:
-     - Checks Firestore for existing events by canonical key
+     - Checks Firestore for existing events by `eventIdentity` (brokerage-agnostic)
      - If found: preserves eventId, increments version, updates timestamps
      - If not found: creates new event as before
+     - **Cross-brokerage deduplication**: Same event from different brokerages updates one record
 
-3. **`backend/src/firestoreClient.js`**
-   - Added `findEventByCanonicalKey(canonicalKey)` function
-   - Queries Firestore with `where('flypost.canonicalKey', '==', canonicalKey)`
+5. **`backend/src/firestoreClient.js`**
+   - **NEW**: Added `findEventByIdentity(eventIdentity)` function
+   - **LEGACY**: Kept `findEventByCanonicalKey(canonicalKey)` function (deprecated)
+   - Queries Firestore with `where('flypost.eventIdentity', '==', eventIdentity)`
    - Returns first matching event or `null`
+   - Exported `getFirestoreClient()` for use by intelligence storage
 
 ### Test Files Created
 1. **`backend/test-canonical-key.js`**
@@ -80,26 +96,39 @@ Server tested with:
 ### Example 1: First Event Ingestion
 ```javascript
 // Address: "123 Main Street, Santa Monica, CA 90405"
+// Start Date: "2025-01-15T14:30:00Z"
 // Brokerage: "brokerage-abc"
-// Canonical Key: "123mainstreet-santamonica-ca-90405|brokerage-abc"
+// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14"
 // Result: New event created with eventId "evt_xyz123"
 ```
 
-### Example 2: Same Event Re-ingested
+### Example 2: Same Event Re-ingested (Same Brokerage)
 ```javascript
 // Address: "123 Main Street, Santa Monica, CA 90405" (same)
+// Start Date: "2025-01-15T14:45:00Z" (within same hour bucket)
 // Brokerage: "brokerage-abc" (same)
-// Canonical Key: "123mainstreet-santamonica-ca-90405|brokerage-abc" (same)
+// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14" (same)
 // Result: With Firestore - Updates existing event "evt_xyz123" (version 2)
-// Result: Without Firestore - Creates new event (canonical key infrastructure in place)
+// Result: Without Firestore - Creates new event (identity infrastructure in place)
 ```
 
-### Example 3: Different Brokerage
+### Example 3: Same Event from Different Brokerage (NEW BEHAVIOR)
 ```javascript
 // Address: "123 Main Street, Santa Monica, CA 90405" (same)
-// Brokerage: "brokerage-xyz" (different)
-// Canonical Key: "123mainstreet-santamonica-ca-90405|brokerage-xyz" (different)
-// Result: New event created (different canonical key)
+// Start Date: "2025-01-15T14:50:00Z" (same hour bucket)
+// Brokerage: "brokerage-xyz" (DIFFERENT)
+// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14" (SAME)
+// Result: With Firestore - Updates existing event "evt_xyz123" (version 3)
+// NEW: Cross-brokerage recognition - same canonical event!
+```
+
+### Example 4: Different Time Window
+```javascript
+// Address: "123 Main Street, Santa Monica, CA 90405" (same)
+// Start Date: "2025-01-15T15:30:00Z" (different hour)
+// Brokerage: "brokerage-abc" (same)
+// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T15" (different)
+// Result: New event created (different time window)
 ```
 
 ## Notes
@@ -114,9 +143,26 @@ Without Firestore, the system still:
 - Attaches them to events
 - Infrastructure is ready for when Firestore is enabled
 
-### Firestore Index Required
-For optimal performance, create a Firestore index on:
+### Firestore Indexes Required
+For optimal performance, create Firestore indexes on:
 ```
+Collection: events
+Field: flypost.eventIdentity
+Type: Ascending
+
+Collection: attendance
+Field: eventId
+Type: Ascending
+
+Collection: attendance
+Field: buyerToken
+Type: Ascending
+
+Collection: feedback
+Field: brokerageAffiliation
+Type: Ascending
+
+[LEGACY - can be removed after migration]
 Collection: events
 Field: flypost.canonicalKey
 Type: Ascending
@@ -127,9 +173,10 @@ Type: Ascending
 1. **Stable Event IDs**: Once created, an event's ID never changes
 2. **Natural Updates**: Just re-ingest the event to update it
 3. **Version Tracking**: `updateCount` in `flypost` tracks the number of times an event has been updated
-4. **Multi-tenant Safe**: Brokerage ID in key prevents cross-tenant conflicts
-5. **Multiple ingestions**: Re-ingesting the same event updates the existing record while incrementing the update counter
-6. **Backward Compatible**: Works with existing events without canonical keys
+4. **Brokerage-Agnostic**: Events are globally canonical, enabling cross-brokerage recognition
+5. **Post-Visit Intelligence**: Attendance and feedback can be linked to events regardless of which brokerage created them
+6. **Multiple Ingestions**: Re-ingesting the same event from ANY brokerage updates the existing record
+7. **Backward Compatible**: Works with existing events; legacy canonicalKey still computed
 
 ## Future Enhancements
 

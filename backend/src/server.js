@@ -14,13 +14,18 @@ import { validateEventData, getSchema } from './validation.js'
 import { storeEvent, getEventsNear, getStorageStats, clearEvents } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
-import { computeCanonicalKey } from './utils/canonicalKey.js'
+import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.js'
 import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.js'
 
 dotenv.config()
 
 const app = express()
 const port = process.env.PORT || 3001
+
+// Configuration constants
+const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.3') // 300 meters default
+const FEEDBACK_RECENCY_THRESHOLD_HOURS = parseFloat(process.env.FEEDBACK_RECENCY_THRESHOLD_HOURS || '4') // 4 hours default
+const FEEDBACK_RECENCY_THRESHOLD_MS = FEEDBACK_RECENCY_THRESHOLD_HOURS * 60 * 60 * 1000
 
 // CORS
 const frontendOrigins = [
@@ -238,25 +243,30 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
     }
 
-    // 1.5) NORMALIZE & KEYING (NEW)
-    // Compute the canonical key immediately so it travels with the event
-    const canonicalKey = computeCanonicalKey(parsedEvent, brokerageId)
-    
-    if (canonicalKey) {
-      parsedEvent.flypost = {
-        ...parsedEvent.flypost,
-        canonicalKey: canonicalKey,
-        brokerageId: brokerageId
-      }
-      console.log(`🔑 Generated Canonical Key: ${canonicalKey}`)
-    } else {
-      console.warn('⚠️ Could not generate canonical key (missing address?)')
-    }
-
-    // 1.25) Normalize dates
+    // 2) Normalize dates (needed for eventIdentity computation)
     normalizeEventDates(parsedEvent, userContext)
 
-    // 1.3) Normalize organizer phone field (telephone → phone alias)
+    // 3) Compute event identity (brokerage-agnostic)
+    const eventIdentity = computeEventIdentity(parsedEvent)
+    
+    if (eventIdentity) {
+      parsedEvent.flypost = {
+        ...parsedEvent.flypost,
+        eventIdentity: eventIdentity,
+        brokerageId: brokerageId
+      }
+      console.log(`🔑 Generated Event Identity: ${eventIdentity}`)
+    } else {
+      console.warn('⚠️ Could not generate event identity (missing address or startDate?)')
+    }
+    
+    // Legacy: Also compute old canonical key for backward compatibility during migration
+    const canonicalKey = computeCanonicalKey(parsedEvent, brokerageId)
+    if (canonicalKey) {
+      parsedEvent.flypost.canonicalKey = canonicalKey
+    }
+
+    // 4) Normalize organizer phone field (telephone → phone alias)
     if (parsedEvent.organizer && typeof parsedEvent.organizer === 'object') {
       const org = parsedEvent.organizer
       if (!org.phone && org.telephone) {
@@ -265,7 +275,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
     }
 
-    // 1.5) Enforce server-side eventId + timestamp (inside flypost)
+    // 5) Enforce server-side eventId + timestamp (inside flypost)
     parsedEvent.flypost = {
       ...parsedEvent.flypost,
       eventId: `evt_${Math.random()
@@ -274,7 +284,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       submissionTimestamp: new Date().toISOString()
     }
 
-    // 2) Validate the *schema-only* event (no brokerageId yet)
+    // 6) Validate the *schema-only* event (no brokerageId yet)
     const validation = validateEventData(parsedEvent)
     if (!validation.success) {
       console.error('❌ Validation failed:', validation.errors)
@@ -287,7 +297,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
 
     const validatedEvent = validation.data
 
-    // 2.5) ENFORCE PRICE REQUIREMENT
+    // 7) ENFORCE PRICE REQUIREMENT
     // After parsing, extraction, and normalization, enforce that a valid list price exists
     if (!hasValidListPrice(validatedEvent)) {
       console.error('❌ Price validation failed: No valid list price found')
@@ -299,10 +309,10 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       })
     }
 
-    // 3) Compute hash over the validated event (no brokerageId)
+    // 8) Compute hash over the validated event (no brokerageId)
     const eventHash = computeEventHash(validatedEvent)
 
-    // 4) Attach brokerageId + hash AFTER validation
+    // 9) Attach brokerageId + hash AFTER validation
     const eventToStore = {
       ...validatedEvent,
       brokerageId, // tenancy metadata (not governed by schema)
@@ -316,7 +326,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       )}... (brokerageId=${brokerageId})`
     )
 
-    // 5) Store
+    // 10) Store
     const storedEvent = await storeEvent(eventToStore)
     console.log(
       `📦 Stored event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId})`
@@ -411,6 +421,280 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
 })
 
 /**
+ * POST /v1/presence/check-in
+ * Create an attendance record for presence at an event
+ * 
+ * Body:
+ * - eventId (optional): Specific event ID, or will match nearest event
+ * - lat (required): Latitude
+ * - lng (required): Longitude
+ * - buyerToken (required): Opaque buyer identifier
+ * - method (optional): 'geo_time', 'qr', or 'geo_time_qr'
+ * - timestamp (optional): ISO timestamp for check-in
+ */
+app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
+  try {
+    const { eventId, lat, lng, buyerToken, method, timestamp } = req.body
+
+    if (!buyerToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'buyerToken is required'
+      })
+    }
+
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        error: 'lat and lng are required for presence verification'
+      })
+    }
+
+    let targetEventId = eventId
+    let matchedBy = 'explicit'
+
+    // If no eventId provided, find nearest event
+    if (!targetEventId) {
+      const useFirestore = isFirestoreEnabled()
+      const nearbyEvents = await getEventsNear(
+        parseFloat(lat),
+        parseFloat(lng),
+        PRESENCE_RADIUS_KM,
+        useFirestore
+      )
+
+      if (!nearbyEvents || nearbyEvents.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'No events found within proximity for check-in',
+          hint: 'Make sure you are at the event location'
+        })
+      }
+
+      // For now, use the first/nearest event
+      // TODO: Add time window filtering based on timestamp
+      targetEventId = nearbyEvents[0].flypost.eventId
+      matchedBy = 'nearest'
+      console.log(`📍 Matched nearest event: ${targetEventId}`)
+    }
+
+    // Create attendance record
+    const { storeAttendance } = await import('./intelligenceStorage.js')
+    
+    const attendance = await storeAttendance({
+      eventId: targetEventId,
+      buyerToken,
+      checkInTime: timestamp || new Date().toISOString(),
+      presenceProof: {
+        method: method || 'geo_time',
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        matchedBy
+      }
+    })
+
+    res.json({
+      success: true,
+      attendance: {
+        attendanceId: attendance.attendanceId,
+        eventId: attendance.eventId,
+        checkInTime: attendance.checkInTime,
+        matchedBy
+      }
+    })
+  } catch (error) {
+    console.error('❌ Check-in error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Check-in failed',
+      details: error.message
+    })
+  }
+})
+
+/**
+ * POST /v1/feedback/submit
+ * Submit feedback for an event (requires recent attendance)
+ * 
+ * Body:
+ * - attendanceId (optional): Specific attendance record
+ * - eventId (optional): Event ID (if attendanceId not provided, requires buyerToken)
+ * - buyerToken (optional): Buyer token (if attendanceId not provided)
+ * - answers (required): { liked, disliked, wantsSimilar }
+ * - brokerageAffiliation (optional): Brokerage ID for routing
+ */
+app.post('/v1/feedback/submit', writeLimiter, async (req, res) => {
+  try {
+    const { attendanceId, eventId, buyerToken, answers, brokerageAffiliation } = req.body
+
+    if (!answers || !answers.hasOwnProperty('wantsSimilar')) {
+      return res.status(400).json({
+        success: false,
+        error: 'answers object with wantsSimilar is required'
+      })
+    }
+
+    const { 
+      findAttendanceById, 
+      findAttendanceByEventAndBuyer, 
+      storeFeedback 
+    } = await import('./intelligenceStorage.js')
+
+    let attendance = null
+
+    // Find attendance record
+    if (attendanceId) {
+      attendance = await findAttendanceById(attendanceId)
+    } else if (eventId && buyerToken) {
+      const records = await findAttendanceByEventAndBuyer(eventId, buyerToken)
+      if (records.length > 0) {
+        // Get most recent
+        attendance = records.sort((a, b) => 
+          new Date(b.checkInTime) - new Date(a.checkInTime)
+        )[0]
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Either attendanceId or (eventId + buyerToken) is required'
+      })
+    }
+
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        error: 'No attendance record found',
+        hint: 'You must check in at the event before submitting feedback'
+      })
+    }
+
+    // Enforce presence gate: attendance must be recent
+    const checkInTime = new Date(attendance.checkInTime)
+    const now = new Date()
+    const timeSinceCheckIn = now - checkInTime
+
+    if (timeSinceCheckIn > FEEDBACK_RECENCY_THRESHOLD_MS) {
+      return res.status(403).json({
+        success: false,
+        error: `Attendance record is too old (must be within ${FEEDBACK_RECENCY_THRESHOLD_HOURS} hours)`,
+        checkInTime: attendance.checkInTime,
+        hoursAgo: Math.round(timeSinceCheckIn / (60 * 60 * 1000))
+      })
+    }
+
+    // Store feedback
+    const feedback = await storeFeedback({
+      attendanceId: attendance.attendanceId,
+      eventId: attendance.eventId,
+      answers: {
+        liked: answers.liked || '',
+        disliked: answers.disliked || '',
+        wantsSimilar: Boolean(answers.wantsSimilar)
+      },
+      brokerageAffiliation: brokerageAffiliation || null
+    })
+
+    res.json({
+      success: true,
+      feedback: {
+        feedbackId: feedback.feedbackId,
+        eventId: feedback.eventId,
+        createdAt: feedback.createdAt
+      }
+    })
+  } catch (error) {
+    console.error('❌ Feedback submission error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Feedback submission failed',
+      details: error.message
+    })
+  }
+})
+
+/**
+ * GET /v1/brokerages/:brokerageId/insights
+ * Get aggregated feedback insights for a brokerage
+ * 
+ * Returns basic aggregations of feedback where brokerageAffiliation matches
+ */
+app.get('/v1/brokerages/:brokerageId/insights', readLimiter, async (req, res) => {
+  try {
+    const { brokerageId } = req.params
+
+    if (!brokerageId) {
+      return res.status(400).json({
+        success: false,
+        error: 'brokerageId is required'
+      })
+    }
+
+    const { getFeedbackByBrokerage } = await import('./intelligenceStorage.js')
+    const feedbackRecords = await getFeedbackByBrokerage(brokerageId)
+
+    // Basic aggregation by eventId
+    const byEvent = {}
+    const recentVerbatims = []
+
+    for (const feedback of feedbackRecords) {
+      const eid = feedback.eventId
+      
+      if (!byEvent[eid]) {
+        byEvent[eid] = {
+          eventId: eid,
+          totalResponses: 0,
+          wantsSimilarCount: 0,
+          likedSnippets: [],
+          dislikedSnippets: []
+        }
+      }
+
+      byEvent[eid].totalResponses++
+      if (feedback.answers.wantsSimilar) {
+        byEvent[eid].wantsSimilarCount++
+      }
+
+      if (feedback.answers.liked) {
+        byEvent[eid].likedSnippets.push(feedback.answers.liked)
+      }
+      if (feedback.answers.disliked) {
+        byEvent[eid].dislikedSnippets.push(feedback.answers.disliked)
+      }
+
+      // Collect recent verbatims (last 10)
+      if (recentVerbatims.length < 10) {
+        recentVerbatims.push({
+          feedbackId: feedback.feedbackId,
+          eventId: feedback.eventId,
+          liked: feedback.answers.liked,
+          disliked: feedback.answers.disliked,
+          wantsSimilar: feedback.answers.wantsSimilar,
+          createdAt: feedback.createdAt
+        })
+      }
+    }
+
+    res.json({
+      success: true,
+      brokerageId,
+      summary: {
+        totalFeedbackRecords: feedbackRecords.length,
+        eventsWithFeedback: Object.keys(byEvent).length
+      },
+      byEvent: Object.values(byEvent),
+      recentVerbatims
+    })
+  } catch (error) {
+    console.error('❌ Insights error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve insights',
+      details: error.message
+    })
+  }
+})
+
+/**
  * Dev-only utilities
  */
 if (process.env.NODE_ENV !== 'production') {
@@ -451,16 +735,16 @@ if (process.env.NODE_ENV !== 'production') {
       },
       name: req.body.name || 'Test Event',
       description: req.body.description || 'Mock event for testing',
-      startDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      startDate: req.body.startDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       location: {
         '@type': 'Place',
-        name: req.body.location || '123 Main Street',
+        name: req.body.location || req.body.streetAddress || '123 Main Street',
         address: {
           '@type': 'PostalAddress',
-          streetAddress: req.body.location || '123 Main Street',
-          addressLocality: 'Santa Monica',
-          addressRegion: 'CA',
-          postalCode: '90405',
+          streetAddress: req.body.streetAddress || req.body.location || '123 Main Street',
+          addressLocality: req.body.city || 'Santa Monica',
+          addressRegion: req.body.state || 'CA',
+          postalCode: req.body.postalCode || '90405',
           addressCountry: 'US'
         }
       },
@@ -468,6 +752,15 @@ if (process.env.NODE_ENV !== 'production') {
         '@type': 'Person',
         name: req.body.organizer || 'Test Organizer',
         email: req.body.email || 'test@example.com'
+      }
+    }
+    
+    // Add optional geo coordinates if provided
+    if (req.body.latitude && req.body.longitude) {
+      baseEvent.location.geo = {
+        '@type': 'GeoCoordinates',
+        latitude: parseFloat(req.body.latitude),
+        longitude: parseFloat(req.body.longitude)
       }
     }
 
@@ -482,14 +775,20 @@ if (process.env.NODE_ENV !== 'production') {
 
     const validatedEvent = validation.data
     
-    // Compute canonical key
-    const canonicalKey = computeCanonicalKey(validatedEvent, brokerageId)
-    if (canonicalKey) {
+    // Compute event identity (brokerage-agnostic)
+    const eventIdentity = computeEventIdentity(validatedEvent)
+    if (eventIdentity) {
       validatedEvent.flypost = {
         ...validatedEvent.flypost,
-        canonicalKey: canonicalKey,
+        eventIdentity: eventIdentity,
         brokerageId: brokerageId
       }
+    }
+    
+    // Also compute legacy canonical key for backward compatibility
+    const canonicalKey = computeCanonicalKey(validatedEvent, brokerageId)
+    if (canonicalKey) {
+      validatedEvent.flypost.canonicalKey = canonicalKey
     }
     
     const eventHash = computeEventHash(validatedEvent)

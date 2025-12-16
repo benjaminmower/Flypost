@@ -7,7 +7,8 @@ import {
   saveEvent as saveToFirestore, 
   getAllEvents as getFirestoreEvents, 
   isFirestoreEnabled,
-  findEventByCanonicalKey // <--- Import this new function
+  findEventByCanonicalKey, // Legacy
+  findEventByIdentity // New brokerage-agnostic identity
 } from './firestoreClient.js'
 import { hasValidListPrice } from './utils/priceExtractor.js'
 
@@ -25,14 +26,15 @@ export async function storeEvent(eventData) {
   let updateCount = 0
 
   // 1. CHECK: Does this exist in Firestore?
+  // Now using brokerage-agnostic eventIdentity for cross-brokerage event recognition
   // Note: This performs a query on every event ingestion when Firestore is enabled.
   // For high-volume scenarios, consider implementing a cache layer or batch processing.
-  if (isFirestoreEnabled() && finalEvent.flypost.canonicalKey) {
+  if (isFirestoreEnabled() && finalEvent.flypost.eventIdentity) {
     try {
-      const existing = await findEventByCanonicalKey(finalEvent.flypost.canonicalKey)
+      const existing = await findEventByIdentity(finalEvent.flypost.eventIdentity)
       
       if (existing) {
-        console.log(`🔄 Found existing event ${existing.flypost.eventId} for key ${finalEvent.flypost.canonicalKey}`)
+        console.log(`🔄 Found existing event ${existing.flypost.eventId} for identity ${finalEvent.flypost.eventIdentity}`)
         isUpdate = true
         updateCount = (existing.flypost?.updateCount || 0) + 1
         
@@ -78,7 +80,7 @@ export async function storeEvent(eventData) {
         // not an incrementing counter
       }
     } catch (err) {
-      console.error('⚠️ Error checking canonical key:', err)
+      console.error('⚠️ Error checking event identity:', err)
       // Fallback: Proceed as new create if check fails
     }
   }
