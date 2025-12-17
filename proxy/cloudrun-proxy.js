@@ -40,7 +40,7 @@ app.use((req, res, next) => {
       'Access-Control-Allow-Methods',
       'GET,POST,OPTIONS',
     );
-    res.set('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    res.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-flypost-write-token');
     res.sendStatus(204); // Preflight response
     return;
   }
@@ -64,54 +64,7 @@ function enforceOriginMethods(req, res, next) {
 
 app.use(enforceOriginMethods);
 
-// -------------------------------------
-// Write-token authentication middleware
-// Checks POST requests to /api/* paths before routing
-// Supports multiple static tokens (global + per-brokerage)
-// Exempts /api/chat (read-only endpoint that uses POST)
-// -------------------------------------
-
-// Collect all allowed tokens here
-const WRITE_TOKENS = [
-  process.env. FLYPOST_WRITE_TOKEN, // global token (e.g., "goflypost")
-  process.env.VISTA_WRITE_TOKEN, // Vista-specific token (e.g., "vist@sir")
-  process.env.BHHS_UTAH_WRITE_TOKEN, // BHHS Utah brokerage
-  process.env.COMPASS_WRITE_TOKEN, // Compass brokerage
-].filter(Boolean);
-
-function requireWriteToken(req, res, next) {
-  const isApiPost =
-    req.method === 'POST' && req.originalUrl. startsWith('/api/');
-  const isChatEndpoint = req.originalUrl.startsWith('/api/chat');
-
-  // Chat endpoint is read-only, doesn't need write token
-  if (isApiPost && !isChatEndpoint && WRITE_TOKENS.length > 0) {
-    const token = req.get('x-flypost-write-token') || '';
-
-    if (!token) {
-      console.log(`🔒 Write-token missing for ${req.method} ${req.originalUrl}`);
-      return res.status(401).json({
-        success: false,
-        error:  'Unauthorized: Missing write token',
-      });
-    }
-
-    const matched = WRITE_TOKENS.includes(token);
-    if (!matched) {
-      console.log(`🔒 Write-token invalid for ${req.method} ${req.originalUrl}`);
-      return res.status(401).json({
-        success: false,
-        error: 'Unauthorized: Invalid write token',
-      });
-    }
-
-    console. log(`✅ Write-token validated for ${req.method} ${req.originalUrl}`);
-  }
-
-  next();
-}
-
-app.use(requireWriteToken);
+// Authentication is now handled in forward.js (single source of truth)
 
 const forward = createForward();
 
