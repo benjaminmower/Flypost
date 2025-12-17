@@ -329,7 +329,106 @@ POST /api/parse-and-publish
 }
 ```
 
-### 3. Query Events Near Location
+### 3. Upsert Event (Canonical Ingestion)
+
+```
+POST /v1/events/upsert
+```
+
+**Description:**
+Canonical structured ingestion endpoint for machine sources (MLS, calendar scraper, manual entry, LLM adapter). Accepts full Schema.org Event objects and upserts by `eventIdentity` (location + time window).
+
+**Request:**
+```json
+{
+  "event": {
+    "@context": "https://schema.org",
+    "@type": "Event",
+    "flypost": {
+      "category": "open-houses"
+    },
+    "name": "Beautiful 3BR Open House",
+    "description": "Stunning renovated home with modern finishes",
+    "startDate": "2025-01-20T14:00:00.000Z",
+    "location": {
+      "@type": "Place",
+      "name": "123 Main Street",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "123 Main Street",
+        "addressLocality": "Santa Monica",
+        "addressRegion": "CA",
+        "postalCode": "90405"
+      }
+    },
+    "organizer": {
+      "@type": "Person",
+      "name": "Jane Smith",
+      "email": "jane@example.com"
+    }
+  },
+  "source": {
+    "sourceType": "mls",
+    "sourceId": "MLS-12345"
+  }
+}
+```
+
+**Success Response (Insert):**
+```json
+{
+  "success": true,
+  "operation": "insert",
+  "data": {
+    "eventId": "evt_abc123_1234567890",
+    "eventIdentity": "123mainstreet-santamonica-ca-90405|2025-01-20T14",
+    "updateCount": 0,
+    "event": {/* Full stored event */}
+  }
+}
+```
+
+**Success Response (Update):**
+```json
+{
+  "success": true,
+  "operation": "update",
+  "data": {
+    "eventId": "evt_abc123_1234567890",
+    "eventIdentity": "123mainstreet-santamonica-ca-90405|2025-01-20T14",
+    "updateCount": 1,
+    "event": {/* Updated event with merged sources */}
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "error": "Event validation failed",
+  "details": [/* Validation errors */]
+}
+```
+
+**Behavior:**
+- **North Star Enforcement**: Strips Layer 2 intelligence fields (attendance, buyerToken, presenceProof, feedback, sentiment, insights, brokerageAffiliation, intelligence*)
+- **Server Authority**: Always sets/overwrites `flypost.eventIdentity`, `flypost.eventId`, `flypost.submissionTimestamp`, `flypost.updateCount`
+- **Upsert by Identity**: Uses `eventIdentity` (location + time window) as unique key
+  - If identity exists: Updates event, preserves `eventId`, increments `updateCount`
+  - If new: Creates event with `updateCount: 0`
+- **Source Provenance**: Tracks sources in `flypost.sources` array, deduplicates by `sourceType + sourceId`
+- **Defaults**: Sets `realTimeData: true`, `crawlable: true`, `queryable: true` if missing
+
+**Source Types:**
+- `mls`: Multiple Listing Service
+- `calendar`: Calendar integration
+- `scraper`: Web scraper
+- `manual`: Manual entry
+- `llm`: LLM adapter
+- `api`: External API
+
+### 4. Query Events Near Location
 
 ```
 GET /v1/events/near?lat=39.7817&lng=-89.6501&radius=10
