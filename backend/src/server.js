@@ -19,6 +19,8 @@ import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.
 import { sanitizeEvent } from './utils/northStarEnforcer.js'
 import { mergeSources, validateSource } from './utils/sourceProvenance.js'
 import { enrichEventMetadata, normalizeEventDates } from './utils/eventEnrichment.js'
+import { toDiscoveryEventsV1 } from './utils/discoveryMapper.js'
+import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
 
 dotenv.config()
 
