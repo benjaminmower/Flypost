@@ -8,6 +8,102 @@ Flypost v4 is a minimal event ingestion and query API designed for machine-to-ma
 **API Version**: v4.0.0-mvp  
 **Content-Type**: `application/json`
 
+## Authentication
+
+All write endpoints (POST requests) require authentication. Read endpoints (GET requests) are publicly accessible.
+
+### Authentication Methods
+
+Two authentication methods are supported:
+
+#### 1. Firebase ID Token (Human Publishers)
+
+For web/mobile clients with Firebase authentication:
+
+```http
+POST /api/parse-and-publish
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+```
+
+The Firebase ID token is verified using the Firebase Admin SDK. On successful verification:
+- The user's UID and email are attached to the request context
+- Optional custom claims (e.g., `flypostPublisher: true`) are checked for authorization
+
+#### 2. HMAC Request Signing (Machine Publishers)
+
+For machine-to-machine communication (MLS adapters, scrapers, etc.):
+
+**Required Headers:**
+- `x-flypost-client-id`: Client identifier (registered in server config)
+- `x-flypost-timestamp`: Unix timestamp in seconds (must be within 5 minutes of server time)
+- `x-flypost-signature`: Base64-encoded HMAC-SHA256 signature
+
+**Signature Algorithm:**
+
+1. Compute canonical string:
+   ```
+   canonical_string = "${timestamp}.${METHOD}.${path}.${sha256_hex(raw_body)}"
+   ```
+
+2. Compute signature:
+   ```
+   signature = base64(hmac_sha256(client_secret, canonical_string))
+   ```
+
+**Example:**
+```http
+POST /v1/events/upsert
+Content-Type: application/json
+x-flypost-client-id: mls-adapter
+x-flypost-timestamp: 1734473200
+x-flypost-signature: GFkgTxDCJg24WE364oaxdigIbviCFGWGhfI+977WGEQ=
+
+{
+  "event": { ... }
+}
+```
+
+**Security Features:**
+- Replay protection: Requests with timestamps older than 5 minutes are rejected
+- Body integrity: Request body is hashed and included in the signature
+- Timing-safe comparison: Signatures are compared using constant-time comparison to prevent timing attacks
+
+### Protected Endpoints
+
+The following endpoints require authentication:
+- `POST /api/parse-and-publish` - Parse natural language and publish event
+- `POST /v1/events/upsert` - Structured event ingestion
+- `POST /v1/presence/check-in` - Record event attendance
+- `POST /v1/feedback/submit` - Submit event feedback
+
+### Public Endpoints
+
+The following endpoints are publicly accessible:
+- `GET /health` - Health check
+- `GET /v1/events/near` - Query events by location
+- `GET /v1/brokerages/:brokerageId/insights` - Brokerage feedback insights
+
+### Error Responses
+
+**401 Unauthorized** - Authentication required or failed:
+```json
+{
+  "success": false,
+  "error": "Authentication required",
+  "message": "Provide either Authorization: Bearer <firebase_token> or HMAC signature headers"
+}
+```
+
+**503 Service Unavailable** - Firebase Auth not configured:
+```json
+{
+  "success": false,
+  "error": "Firebase authentication not available",
+  "message": "Firebase Admin SDK is not initialized. Set GOOGLE_CLOUD_PROJECT to enable."
+}
+```
+
 ---
 
 ## Decision 1: Initial API Direction & Goals

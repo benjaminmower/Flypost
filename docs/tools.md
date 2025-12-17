@@ -73,9 +73,12 @@ Returns an object with:
 
 **API Endpoint:** `POST /api/parse-and-publish`
 
+**Authentication:** Required. See [Authentication](#authentication) section below.
+
 **Error Handling:**
 
 - **400 Bad Request**: Invalid input or validation failure
+- **401 Unauthorized**: Missing or invalid authentication credentials
 - **500 Internal Server Error**: Server-side error during parsing or publishing
 
 ---
@@ -245,6 +248,160 @@ The Flypost client can be configured via:
      timeout: 30000  // 30 seconds
    })
    ```
+
+---
+
+## Authentication
+
+### Overview
+
+All write operations (POST requests) require authentication. Read operations (GET requests) are publicly accessible without authentication.
+
+### Authentication Methods
+
+#### Method 1: Firebase ID Token (Recommended for Web/Mobile)
+
+For human publishers using Firebase authentication:
+
+```typescript
+const client = createFlypostClient({
+  apiBase: 'http://localhost:3001',
+  getAuthToken: async () => {
+    // Get Firebase ID token from your Firebase auth instance
+    const user = firebase.auth().currentUser
+    return await user.getIdToken()
+  }
+})
+
+// The client will automatically include the token in requests
+await client.flypostParseAndPublish({
+  naturalLanguageInput: 'Event description here'
+})
+```
+
+**HTTP Headers:**
+```http
+Authorization: Bearer <firebase_id_token>
+```
+
+#### Method 2: HMAC Request Signing (For Machine Clients)
+
+For machine-to-machine communication (MLS adapters, scrapers, automated systems):
+
+**Required Headers:**
+- `x-flypost-client-id`: Your registered client ID
+- `x-flypost-timestamp`: Current Unix timestamp in seconds
+- `x-flypost-signature`: HMAC-SHA256 signature (base64-encoded)
+
+**Signature Calculation:**
+
+1. Build canonical string:
+   ```
+   canonical = "${timestamp}.${METHOD}.${path}.${sha256_hex(body)}"
+   ```
+
+2. Compute HMAC signature:
+   ```
+   signature = base64(hmac_sha256(client_secret, canonical))
+   ```
+
+**Example Implementation (Node.js):**
+
+```javascript
+import crypto from 'crypto'
+
+function signRequest(clientId, clientSecret, method, path, body) {
+  const timestamp = Math.floor(Date.now() / 1000).toString()
+  
+  // Compute body hash
+  const bodyHash = crypto
+    .createHash('sha256')
+    .update(Buffer.from(body))
+    .digest('hex')
+  
+  // Build canonical string
+  const canonical = `${timestamp}.${method}.${path}.${bodyHash}`
+  
+  // Compute signature
+  const signature = crypto
+    .createHmac('sha256', clientSecret)
+    .update(canonical)
+    .digest('base64')
+  
+  return {
+    'x-flypost-client-id': clientId,
+    'x-flypost-timestamp': timestamp,
+    'x-flypost-signature': signature
+  }
+}
+
+// Usage
+const body = JSON.stringify({ event: { /* ... */ } })
+const headers = signRequest(
+  'mls-adapter',
+  'your-secret-key',
+  'POST',
+  '/v1/events/upsert',
+  body
+)
+
+const response = await fetch('http://localhost:3001/v1/events/upsert', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    ...headers
+  },
+  body
+})
+```
+
+**Security Notes:**
+
+- Timestamps must be within 5 minutes of server time (replay protection)
+- Request body is hashed to ensure integrity
+- Use constant-time signature comparison to prevent timing attacks
+- Never expose client secrets in client-side code
+
+### Configuration
+
+**Server-side (Environment Variables):**
+
+```bash
+# Firebase Admin SDK (uses Application Default Credentials on Cloud Run)
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+
+# HMAC client secrets (JSON object mapping clientId to secret)
+FLYPOST_HMAC_SECRETS_JSON='{"mls-adapter":"secret1","scraper":"secret2"}'
+
+# Timestamp skew tolerance (default: 300 seconds / 5 minutes)
+HMAC_TIMESTAMP_SKEW_SECONDS=300
+```
+
+### Protected Endpoints
+
+Require authentication:
+- `POST /api/parse-and-publish`
+- `POST /v1/events/upsert`
+- `POST /v1/presence/check-in`
+- `POST /v1/feedback/submit`
+
+### Public Endpoints
+
+No authentication required:
+- `GET /health`
+- `GET /v1/events/near`
+- `GET /v1/brokerages/:brokerageId/insights`
+
+### Error Responses
+
+**401 Unauthorized:**
+```json
+{
+  "success": false,
+  "error": "Authentication required",
+  "message": "Provide either Authorization: Bearer <firebase_token> or HMAC signature headers"
+}
+```
 
 ---
 
