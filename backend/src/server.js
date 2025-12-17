@@ -21,8 +21,13 @@ import { mergeSources, validateSource } from './utils/sourceProvenance.js'
 import { enrichEventMetadata, normalizeEventDates } from './utils/eventEnrichment.js'
 import { toDiscoveryEventsV1 } from './utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
+import { initializeFirebaseAdmin } from './auth/firebaseAdmin.js'
+import { requireWriteAuth } from './auth/middleware.js'
 
 dotenv.config()
+
+// Initialize Firebase Admin SDK for authentication
+initializeFirebaseAdmin()
 
 const app = express()
 const port = process.env.PORT || 3001
@@ -67,7 +72,15 @@ app.use(
     credentials: true
   })
 )
-app.use(express.json({ limit: '1mb' }))
+
+// Capture raw body for HMAC signature verification
+// Must come before express.json()
+app.use(express.json({ 
+  limit: '1mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf
+  }
+}))
 
 // Trust proxy for rate limiting (important for deployment behind proxies)
 app.set('trust proxy', 1)
@@ -146,7 +159,7 @@ const healthHandler = (_req, res) => {
 app.get(['/health', '/api/health'], healthHandler)
 
 // Parse & publish
-app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
+app.post('/api/parse-and-publish', requireWriteAuth(), writeLimiter, async (req, res) => {
   try {
     const body = req.body || {}
 
@@ -438,7 +451,7 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
  * - Tracks source provenance
  * - Returns operation type (insert/update) and event data
  */
-app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
+app.post('/v1/events/upsert', requireWriteAuth(), writeLimiter, async (req, res) => {
   try {
     const body = req.body || {}
     
@@ -573,7 +586,7 @@ app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
  * - method (optional): 'geo_time', 'qr', or 'geo_time_qr'
  * - timestamp (optional): ISO timestamp for check-in
  */
-app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
+app.post('/v1/presence/check-in', requireWriteAuth(), writeLimiter, async (req, res) => {
   try {
     const { eventId, lat, lng, buyerToken, method, timestamp } = req.body
 
@@ -664,7 +677,7 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
  * - answers (required): { liked, disliked, wantsSimilar }
  * - brokerageAffiliation (optional): Brokerage ID for routing
  */
-app.post('/v1/feedback/submit', writeLimiter, async (req, res) => {
+app.post('/v1/feedback/submit', requireWriteAuth(), writeLimiter, async (req, res) => {
   try {
     const { attendanceId, eventId, buyerToken, answers, brokerageAffiliation } = req.body
 
