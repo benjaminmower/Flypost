@@ -106,7 +106,15 @@ module.exports = function createForward() {
     const origin = req.headers.origin
     const requestId = ensureRequestId(req)
     // Use originalUrl to check path since req.path may be stripped by Express routing
-    const originalPath = req.originalUrl.split('?')[0] // Remove query string
+    // Extract path without query string/hash using URL parsing for robustness
+    let originalPath
+    try {
+      // Use URL parsing for reliable path extraction
+      originalPath = new URL(req.originalUrl, 'http://localhost').pathname
+    } catch {
+      // Fallback to simple split if URL parsing fails (shouldn't happen)
+      originalPath = req.originalUrl.split('?')[0].split('#')[0]
+    }
     const isApiPost = req.method === 'POST' && originalPath.startsWith('/api/')
     const isParseAndPublish =
       req.method === 'POST' && originalPath === '/api/parse-and-publish'
@@ -139,7 +147,9 @@ module.exports = function createForward() {
       let firebaseUser = null
       let resolvedBrokerageId = null
 
-      // Check if this is /api/chat or /api/chat/* (but not /api/chatbot)
+      // Check if this is /api/chat or /api/chat/* (but not /api/chatbot or /api/chatbot/*)
+      // Logic: exact match OR starts with '/api/chat/' (note the trailing slash)
+      // This correctly excludes '/api/chatbot' because it doesn't start with '/api/chat/'
       const isChatEndpoint = originalPath === '/api/chat' || originalPath.startsWith('/api/chat/')
 
       if (isApiPost && !isChatEndpoint) {
