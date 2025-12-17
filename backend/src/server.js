@@ -219,29 +219,9 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     }
 
     // 2) Normalize dates (needed for eventIdentity computation)
-    normalizeEventDates(parsedEvent, userContext)
+    normalizeEventDates(parsedEvent)
 
-    // 3) Compute event identity (brokerage-agnostic)
-    const eventIdentity = computeEventIdentity(parsedEvent)
-    
-    if (eventIdentity) {
-      parsedEvent.flypost = {
-        ...parsedEvent.flypost,
-        eventIdentity: eventIdentity,
-        brokerageId: brokerageId
-      }
-      console.log(`🔑 Generated Event Identity: ${eventIdentity}`)
-    } else {
-      console.warn('⚠️ Could not generate event identity (missing address or startDate?)')
-    }
-    
-    // Legacy: Also compute old canonical key for backward compatibility during migration
-    const canonicalKey = computeCanonicalKey(parsedEvent, brokerageId)
-    if (canonicalKey) {
-      parsedEvent.flypost.canonicalKey = canonicalKey
-    }
-
-    // 4) Normalize organizer phone field (telephone → phone alias)
+    // 3) Normalize organizer phone field (telephone → phone alias)
     if (parsedEvent.organizer && typeof parsedEvent.organizer === 'object') {
       const org = parsedEvent.organizer
       if (!org.phone && org.telephone) {
@@ -250,17 +230,54 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
     }
 
-    // 5) Enforce server-side eventId + timestamp (inside flypost)
-    parsedEvent.flypost = {
-      ...parsedEvent.flypost,
-      eventId: `evt_${Math.random()
-        .toString(36)
-        .slice(2, 11)}_${Date.now()}`,
-      submissionTimestamp: new Date().toISOString()
+    // 4) Check for existing event by identity to determine if update
+    let existingEvent = null
+    let isUpdate = false
+    let updateCount = 0
+    
+    const tempIdentity = computeEventIdentity(parsedEvent)
+    if (tempIdentity) {
+      try {
+        existingEvent = await findEventByIdentity(tempIdentity)
+        if (existingEvent) {
+          isUpdate = true
+          updateCount = (existingEvent.flypost?.updateCount || 0) + 1
+          console.log(`🔄 Found existing event ${existingEvent.flypost.eventId} for identity ${tempIdentity}`)
+        }
+      } catch (err) {
+        console.error('⚠️ Error checking event identity:', err)
+      }
     }
 
-    // 6) Validate the *schema-only* event (no brokerageId yet)
-    const validation = validateEventData(parsedEvent)
+    // 5) Enrich event with server-side metadata
+    const enrichedEvent = enrichEventMetadata(parsedEvent, {
+      brokerageId,
+      isUpdate,
+      existingEventId: existingEvent?.flypost?.eventId,
+      updateCount
+    })
+    
+    // Legacy: Also compute old canonical key for backward compatibility during migration
+    const canonicalKey = computeCanonicalKey(enrichedEvent, brokerageId)
+    if (canonicalKey) {
+      enrichedEvent.flypost.canonicalKey = canonicalKey
+    }
+    
+    // 6) Add source provenance for LLM adapter
+    if (existingEvent?.flypost?.sources) {
+      enrichedEvent.flypost.sources = mergeSources(
+        existingEvent.flypost.sources,
+        { sourceType: 'llm', sourceId: 'parse-and-publish' }
+      )
+    } else {
+      enrichedEvent.flypost.sources = mergeSources(
+        [],
+        { sourceType: 'llm', sourceId: 'parse-and-publish' }
+      )
+    }
+
+    // 7) Validate the enriched event
+    const validation = validateEventData(enrichedEvent)
     if (!validation.success) {
       console.error('❌ Validation failed:', validation.errors)
       return res.status(400).json({
@@ -272,7 +289,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
 
     const validatedEvent = validation.data
 
-    // 7) ENFORCE PRICE REQUIREMENT
+    // 8) ENFORCE PRICE REQUIREMENT
     // After parsing, extraction, and normalization, enforce that a valid list price exists
     if (!hasValidListPrice(validatedEvent)) {
       console.error('❌ Price validation failed: No valid list price found')
@@ -284,14 +301,24 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       })
     }
 
-    // 8) Compute hash over the validated event (no brokerageId)
+    // 9) Compute hash over the validated event
     const eventHash = computeEventHash(validatedEvent)
 
-    // 9) Attach brokerageId + hash AFTER validation
+    // 10) Prepare event for storage
     const eventToStore = {
       ...validatedEvent,
       brokerageId, // tenancy metadata (not governed by schema)
       hash: eventHash
+    }
+    
+    // If updating, preserve metadata
+    if (isUpdate && existingEvent) {
+      if (existingEvent._firestoreMetadata) {
+        eventToStore._firestoreMetadata = {
+          ...existingEvent._firestoreMetadata,
+          updatedAt: new Date()
+        }
+      }
     }
 
     console.log(
@@ -301,10 +328,10 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       )}... (brokerageId=${brokerageId})`
     )
 
-    // 10) Store
+    // 11) Store (will handle upsert via eventIdentity)
     const storedEvent = await storeEvent(eventToStore)
     console.log(
-      `📦 Stored event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId})`
+      `📦 ${isUpdate ? 'Updated' : 'Stored'} event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId})`
     )
 
     res.json({
