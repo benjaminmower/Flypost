@@ -34,6 +34,9 @@ if (COMPASS_TOKEN) TOKEN_TENANCY[COMPASS_TOKEN] = 'compass'  // ← ADD THIS
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || ''
 const HAS_FIREBASE_AUTH = Boolean(FIREBASE_PROJECT_ID)
 
+// Origin-gated auth policy: app.goflypost.com requires Firebase, others require static token
+const APP_ORIGIN = 'https://app.goflypost.com'
+
 const allowedOrigins = Array.from(
   new Set([
     ...((process.env.FRONTEND_ORIGIN || '')
@@ -128,39 +131,64 @@ module.exports = function createForward() {
     try {
       //-------------------------------------
       // Write authentication + tenancy derivation
+      // Origin-gated policy:
+      // - app.goflypost.com: requires Firebase Bearer token
+      // - other origins: require x-flypost-write-token
+      // - /api/chat is exempt (read-only POST endpoint)
       //-------------------------------------
       let firebaseUser = null
       let resolvedBrokerageId = null
 
-      if (isApiPost && WRITE_TOKENS.length) {
+      const isChatEndpoint = req.path.startsWith('/api/chat')
+
+      if (isApiPost && !isChatEndpoint) {
         const bearer = req.headers.authorization || req.headers.Authorization
         const headerToken = (req.headers['x-flypost-write-token'] || '').toString().trim()
-        const bearerToken = extractBearer(bearer)
 
-        const firebaseAuthResult = await verifyFirebaseIdToken(bearer)
-        if (firebaseAuthResult.ok) {
-          firebaseUser = firebaseAuthResult.decoded
-        }
+        // Check if request is from app.goflypost.com
+        const isAppOrigin = origin === APP_ORIGIN
 
-        let matchedStaticToken = null
-        for (const token of WRITE_TOKENS) {
-          if (!token) continue
-          if (headerToken === token || bearerToken === token) {
-            matchedStaticToken = token
-            resolvedBrokerageId = TOKEN_TENANCY[token] || null
-            break
+        if (isAppOrigin) {
+          // App origin: require Firebase token
+          const firebaseAuthResult = await verifyFirebaseIdToken(bearer)
+          if (!firebaseAuthResult.ok) {
+            setCors(res, origin)
+            console.log(`🔒 Firebase auth failed for ${origin}: ${firebaseAuthResult.reason}`)
+            return res.status(401).json({
+              success: false,
+              error: 'unauthorized: Firebase authentication required for app.goflypost.com',
+              requestId
+            })
           }
-        }
+          firebaseUser = firebaseAuthResult.decoded
+          console.log(`✅ Firebase auth successful for ${origin} (uid=${firebaseUser.uid})`)
+        } else {
+          // Non-app origin: require static write token
+          if (!WRITE_TOKENS.length) {
+            // No tokens configured - allow for backward compatibility
+            console.log(`⚠️  No write tokens configured, allowing ${req.method} ${req.path}`)
+          } else {
+            let matchedStaticToken = null
+            for (const token of WRITE_TOKENS) {
+              if (!token) continue
+              if (headerToken === token) {
+                matchedStaticToken = token
+                resolvedBrokerageId = TOKEN_TENANCY[token] || null
+                break
+              }
+            }
 
-        const hasValidStaticToken = Boolean(matchedStaticToken)
-
-        if (!firebaseUser && !hasValidStaticToken) {
-          setCors(res, origin)
-          return res.status(401).json({
-            success: false,
-            error: 'unauthorized write',
-            requestId
-          })
+            if (!matchedStaticToken) {
+              setCors(res, origin)
+              console.log(`🔒 Static write token missing/invalid for origin=${origin || 'none'}`)
+              return res.status(401).json({
+                success: false,
+                error: 'unauthorized: valid x-flypost-write-token required',
+                requestId
+              })
+            }
+            console.log(`✅ Static write token validated for origin=${origin || 'none'}`)
+          }
         }
       }
 
