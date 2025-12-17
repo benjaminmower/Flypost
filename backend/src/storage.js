@@ -7,12 +7,48 @@ import {
   saveEvent as saveToFirestore, 
   getAllEvents as getFirestoreEvents, 
   isFirestoreEnabled,
-  findEventByCanonicalKey // <--- Import this new function
+  findEventByCanonicalKey, // Legacy
+  findEventByIdentity as findEventByIdentityFirestore // New brokerage-agnostic identity
 } from './firestoreClient.js'
 import { hasValidListPrice } from './utils/priceExtractor.js'
 
 // In-memory event store
 let eventStore = new Map()
+
+/**
+ * Find an event by its event identity (brokerage-agnostic).
+ * Checks both in-memory store and Firestore.
+ * @param {string} eventIdentity - The event identity to search for
+ * @returns {Promise<object|null>} - The event or null if not found
+ */
+export async function findEventByIdentity(eventIdentity) {
+  if (!eventIdentity) {
+    return null
+  }
+  
+  // First check in-memory store
+  for (const event of eventStore.values()) {
+    if (event.flypost?.eventIdentity === eventIdentity) {
+      console.log(`🔍 Found event in memory by identity: ${eventIdentity}`)
+      return event
+    }
+  }
+  
+  // Then check Firestore if enabled
+  if (isFirestoreEnabled()) {
+    try {
+      const firestoreEvent = await findEventByIdentityFirestore(eventIdentity)
+      if (firestoreEvent) {
+        console.log(`🔍 Found event in Firestore by identity: ${eventIdentity}`)
+        return firestoreEvent
+      }
+    } catch (err) {
+      console.error('⚠️ Error checking Firestore for event identity:', err)
+    }
+  }
+  
+  return null
+}
 
 /**
  * Store an event in memory and optionally in Firestore
@@ -24,15 +60,16 @@ export async function storeEvent(eventData) {
   let isUpdate = false
   let updateCount = 0
 
-  // 1. CHECK: Does this exist in Firestore?
+  // 1. CHECK: Does this exist in memory or Firestore?
+  // Now using brokerage-agnostic eventIdentity for cross-brokerage event recognition
   // Note: This performs a query on every event ingestion when Firestore is enabled.
   // For high-volume scenarios, consider implementing a cache layer or batch processing.
-  if (isFirestoreEnabled() && finalEvent.flypost.canonicalKey) {
+  if (finalEvent.flypost.eventIdentity) {
     try {
-      const existing = await findEventByCanonicalKey(finalEvent.flypost.canonicalKey)
+      const existing = await findEventByIdentity(finalEvent.flypost.eventIdentity)
       
       if (existing) {
-        console.log(`🔄 Found existing event ${existing.flypost.eventId} for key ${finalEvent.flypost.canonicalKey}`)
+        console.log(`🔄 Found existing event ${existing.flypost.eventId} for identity ${finalEvent.flypost.eventIdentity}`)
         isUpdate = true
         updateCount = (existing.flypost?.updateCount || 0) + 1
         
@@ -78,7 +115,7 @@ export async function storeEvent(eventData) {
         // not an incrementing counter
       }
     } catch (err) {
-      console.error('⚠️ Error checking canonical key:', err)
+      console.error('⚠️ Error checking event identity:', err)
       // Fallback: Proceed as new create if check fails
     }
   }

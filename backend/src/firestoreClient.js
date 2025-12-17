@@ -12,7 +12,7 @@ let firestoreInstance = null
  * Uses Application Default Credentials (ADC) or FIRESTORE_EMULATOR_HOST for local development
  * @returns {Firestore} - Firestore instance
  */
-function getFirestoreClient() {
+export function getFirestoreClient() {
   if (firestoreInstance) {
     return firestoreInstance
   }
@@ -220,8 +220,37 @@ export async function getAllEvents(limit = 100) {
 }
 
 /**
- * Find a single event by its canonical key.
+ * Find a single event by its event identity (brokerage-agnostic).
+ * Requires a Firestore index on 'flypost.eventIdentity'.
+ * @param {string} eventIdentity 
+ * @returns {Promise<object|null>}
+ */
+export async function findEventByIdentity(eventIdentity) {
+  // Check if Firestore is enabled before attempting query
+  if (!isFirestoreEnabled()) {
+    return null
+  }
+  
+  const eventsCollection = getEventsCollection()
+  
+  try {
+    const snapshot = await eventsCollection
+      .where('flypost.eventIdentity', '==', eventIdentity)
+      .limit(1)
+      .get()
+
+    if (snapshot.empty) return null
+    return snapshot.docs[0].data()
+  } catch (error) {
+    console.error('❌ Firestore findEventByIdentity error:', error)
+    throw new Error(`Failed to find event by identity: ${error.message}`)
+  }
+}
+
+/**
+ * LEGACY: Find a single event by its canonical key.
  * Requires a Firestore index on 'flypost.canonicalKey'.
+ * @deprecated Use findEventByIdentity for brokerage-agnostic event identity
  * @param {string} canonicalKey 
  * @returns {Promise<object|null>}
  */
