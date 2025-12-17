@@ -1,11 +1,14 @@
 # Flypost Proxy Server
 
-A lightweight proxy server for Flypost v4 that forwards requests to the backend and provides write-token authentication for API endpoints.
+A lightweight proxy server for Flypost v4 that forwards requests to the backend and provides origin-gated authentication for API endpoints.
 
 ## Features
 
 - **Request Forwarding**: Forwards requests to the backend service
-- **Write-Token Authentication**: Optional authentication for POST requests to `/api/*` endpoints
+- **Origin-Gated Authentication**: Different auth policies for browser vs. server-to-server writes
+- **Firebase Authentication**: Browser writes from `app.goflypost.com` and `post.goflypost.com` require Firebase ID tokens
+- **Read-Only Origins**: `ask.goflypost.com` is read-only (can only use `/api/chat`)
+- **Static Token Authentication**: Machine/GPT writes use `x-flypost-write-token`
 - **CORS Support**: Configurable CORS for allowed origins
 - **Google Cloud Run Compatible**: Supports Google Cloud ID token authentication
 
@@ -13,79 +16,140 @@ A lightweight proxy server for Flypost v4 that forwards requests to the backend 
 
 - `PORT` (default: `8080`): Port for the proxy server
 - `BACKEND_URL`: URL of the backend service to forward requests to
-- `FLYPOST_WRITE_TOKEN` (optional): Global write token for all POST requests to `/api/*` endpoints
+- `FIREBASE_PROJECT_ID`: Firebase project ID for validating Firebase ID tokens from browser clients
+- `FLYPOST_WRITE_TOKEN` (optional): Global write token for server-to-server POST requests to `/api/*` endpoints
 - `VISTA_WRITE_TOKEN` (optional): Vista SIR brokerage-specific write token for agent GPTs
 - `BHHS_UTAH_WRITE_TOKEN` (optional): BHHS Utah brokerage-specific write token for agent GPTs
 - `COMPASS_WRITE_TOKEN` (optional): Compass brokerage-specific write token for agent GPTs
 - `FRONTEND_ORIGIN` (optional): Comma-separated list of allowed CORS origins
 - `PROXY_USE_ID_TOKEN` (default: `true`): Whether to use Google Cloud ID tokens for backend authentication
 
-## Write-Token Authentication
+## Origin-Gated Authentication Policy
 
-The proxy includes a middleware that protects write operations (POST requests to `/api/*`) with an optional authentication token.
+The proxy implements different authentication requirements based on the request origin, creating distinct surfaces for browser publishing, read-only querying, and machine writes.
 
-### Multi-Token Support
+### Authentication Rules
 
-The proxy supports multiple write tokens to enable brokerage-specific access control:
-- **Global token** (`FLYPOST_WRITE_TOKEN`): Universal write access
-- **Brokerage-specific tokens**: Allow individual brokerages to publish events to their tenancy
+#### 1. Firebase-Required Browser Origins
+
+**Origins**: `https://app.goflypost.com`, `https://post.goflypost.com`
+
+Browser writes from these origins **require Firebase authentication**:
+- Must provide a valid Firebase ID token via `Authorization: Bearer <firebase_id_token>`
+- Static write tokens (e.g., `x-flypost-write-token`) are **not accepted** from these origins
+- Returns `401` with clear error if Firebase token is missing or invalid
+
+This ensures browser clients cannot use static secrets, which would be visible in browser dev tools.
+
+#### 2. Read-Only Ask Origin
+
+**Origin**: `https://ask.goflypost.com`
+
+This origin is read-only and can only access chat endpoints:
+- ✅ Allowed: `POST /api/chat` and `/api/chat/*` (without authentication)
+- ❌ Rejected: Any other `POST /api/*` endpoint (returns `401`)
+
+This separation ensures the concierge/query surface cannot be used to publish events.
+
+#### 3. Machine / Server-to-Server Writes
+
+**Origins**: No origin header, or origins not matching the above
+
+Server-to-server requests use static token authentication:
+- Require valid token in `x-flypost-write-token` header
+- Supports multiple tokens for brokerage-specific access:
+  - `FLYPOST_WRITE_TOKEN`: Global write access
   - `VISTA_WRITE_TOKEN`: Vista SIR brokerage
   - `BHHS_UTAH_WRITE_TOKEN`: BHHS Utah brokerage
   - `COMPASS_WRITE_TOKEN`: Compass brokerage
+- Token determines tenancy (brokerageId) for the request
 
-Each brokerage's agent GPT uses their specific token to ensure proper tenancy isolation.
+#### 4. Chat Endpoint Exemption
 
-### How it works
+**Paths**: `/api/chat` and `/api/chat/*` (exact match only)
 
-1. The middleware checks if the request is a POST to any path starting with `/api/`
-2. If `FLYPOST_WRITE_TOKEN` is configured, it validates the `x-flypost-write-token` header
-3. If the token is missing or invalid, the request is rejected with a 401 status
-4. If no `FLYPOST_WRITE_TOKEN` is configured, all requests are allowed (backward compatible)
+These read-only POST endpoints are exempt from write authentication:
+- Can be accessed without authentication from any origin
+- Used for chat/concierge queries that don't modify state
+- **Important**: `/api/chatbot` is NOT exempt (requires authentication)
 
-### Key Design
+### Implementation Details
 
-The middleware uses `req.originalUrl` instead of `req.path` to check for `/api/` prefix. This is important because:
+Authentication is enforced in `src/forward.js` as the single source of truth:
+- Uses `req.originalUrl` to reliably detect paths (Express may strip path prefixes)
+- Checks origin header to determine auth requirements
+- Validates Firebase tokens using Google's OAuth2Client
+- Maps static tokens to brokerageId for tenancy isolation
+- Injects auth metadata into backend requests (uid, email, brokerageId)
 
-- `app.post('/api/parse-and-publish', forward)` → `req.path = '/api/parse-and-publish'`
-- `app.use('/api', forward)` → `req.path = '/foo'` (prefix stripped by Express)
+### Usage Examples
 
-Using `req.originalUrl` ensures the middleware correctly validates all POST requests to `/api/*` paths, regardless of how they're routed.
+#### Browser Publishing (Firebase Auth)
 
-### Usage Example
+From `app.goflypost.com` or `post.goflypost.com`, use Firebase ID token:
+
+```javascript
+// Get Firebase ID token from authenticated user
+const idToken = await firebase.auth().currentUser.getIdToken();
+
+// Make authenticated write request
+await fetch('https://api.goflypost.com/api/parse-and-publish', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${idToken}`
+  },
+  body: JSON.stringify({
+    naturalLanguageInput: 'Open house this Sunday 1-4pm at 123 Main St'
+  })
+});
+```
+
+#### Chat Queries (No Auth Required)
+
+From `ask.goflypost.com` or any origin:
 
 ```bash
-# Without write-token (all POST requests allowed)
-curl -X POST http://localhost:8080/api/parse-and-publish \
+curl -X POST https://api.goflypost.com/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"naturalLanguageInput": "Event on Saturday"}'
+  -H "Origin: https://ask.goflypost.com" \
+  -d '{"message": "What open houses are near 90210?"}'
+```
 
-# With write-token configured
-export FLYPOST_WRITE_TOKEN="your-secret-token"
+#### Machine/GPT Writes (Static Token)
 
-# Valid request with token
-curl -X POST http://localhost:8080/api/parse-and-publish \
+For server-to-server or GPT integrations:
+
+```bash
+# Using global write token
+curl -X POST https://api.goflypost.com/api/parse-and-publish \
   -H "Content-Type: application/json" \
   -H "x-flypost-write-token: your-secret-token" \
   -d '{"naturalLanguageInput": "Event on Saturday"}'
 
-# Invalid request without token (will return 401)
-curl -X POST http://localhost:8080/api/parse-and-publish \
+# Using brokerage-specific token
+curl -X POST https://api.goflypost.com/api/parse-and-publish \
   -H "Content-Type: application/json" \
-  -d '{"naturalLanguageInput": "Event on Saturday"}'
+  -H "x-flypost-write-token: vista-sir-token" \
+  -d '{"naturalLanguageInput": "Open house...", "brokerageId": "vista-sir"}'
 ```
 
-### Protected Endpoints
+### Protected vs. Public Endpoints
 
-When `FLYPOST_WRITE_TOKEN` is set, the following endpoints require authentication:
-- POST `/api/parse-and-publish` (and any other POST to `/api/*`)
+#### Protected (Require Authentication)
 
-### Unprotected Endpoints
+**POST `/api/*`** endpoints require authentication based on origin:
+- From `app.goflypost.com`, `post.goflypost.com`: Firebase token required
+- From other origins or no origin: Static write token required
+- Examples: `/api/parse-and-publish`, `/api/events`, etc.
 
-The following endpoints do NOT require authentication:
-- GET `/health`
-- GET `/v1/events/near`
-- GET `/api/*` (all GET requests)
-- Any non-POST requests
+**Exception**: `/api/chat` and `/api/chat/*` are exempt (public)
+
+#### Public (No Authentication Required)
+
+- **GET** requests to any endpoint (e.g., `GET /v1/events/near`, `GET /api/schema`)
+- **POST** `/api/chat` and `/api/chat/*` (chat queries)
+- **GET** `/health` (health check)
 
 ## Running the Proxy
 
@@ -102,17 +166,26 @@ BACKEND_URL=http://localhost:3001 FLYPOST_WRITE_TOKEN=secret npm start
 
 ## Testing
 
-Run the integration tests:
+Run the comprehensive origin-gated authentication tests:
+
+```bash
+node test-origin-auth.js
+```
+
+This test suite validates:
+- ✅ Firebase auth for browser origins (`app.goflypost.com`, `post.goflypost.com`)
+- ✅ Read-only enforcement for `ask.goflypost.com`
+- ✅ `/api/chat` exemption from auth
+- ✅ `/api/chatbot` is NOT exempt (requires auth)
+- ✅ Static token auth for machine/server-to-server writes
+- ✅ Proper rejection of invalid/missing credentials
+- ✅ Public read endpoints remain accessible
+
+Run the legacy write-token tests:
 
 ```bash
 node test-middleware.js
 ```
-
-This will run comprehensive tests for the write-token middleware to ensure:
-- POST requests with valid tokens are allowed
-- POST requests with invalid tokens are rejected
-- GET requests are not affected
-- Backward compatibility when no token is configured
 
 ## Routes
 
