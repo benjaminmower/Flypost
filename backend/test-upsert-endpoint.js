@@ -24,7 +24,11 @@ async function waitForServer(maxAttempts = 10) {
   throw new Error('Server did not become ready in time')
 }
 
-// Helper: create a minimal valid event
+/**
+ * Helper: create a minimal valid event for testing
+ * @param {object} overrides - Optional properties to override in the event
+ * @returns {object} A valid Schema.org Event object
+ */
 function createTestEvent(overrides = {}) {
   return {
     '@context': 'https://schema.org',
