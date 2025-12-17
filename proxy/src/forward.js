@@ -139,7 +139,7 @@ module.exports = function createForward() {
       let firebaseUser = null
       let resolvedBrokerageId = null
 
-      const isChatEndpoint = req.path.startsWith('/api/chat')
+      const isChatEndpoint = req.path === '/api/chat' || req.path.startsWith('/api/chat/')
 
       if (isApiPost && !isChatEndpoint) {
         const bearer = req.headers.authorization || req.headers.Authorization

@@ -9,7 +9,6 @@
 const express = require('express')
 const cors = require('cors')
 const http = require('http')
-const { OAuth2Client } = require('google-auth-library')
 
 // Mock Firebase verification for testing
 class MockFirebaseVerifier {
@@ -59,7 +58,7 @@ function createTestServer(firebaseVerifier, writeTokens = []) {
   async function originGatedAuth(req, res, next) {
     const origin = req.headers.origin
     const isApiPost = req.method === 'POST' && req.path.startsWith('/api/')
-    const isChatEndpoint = req.path.startsWith('/api/chat')
+    const isChatEndpoint = req.path === '/api/chat' || req.path.startsWith('/api/chat/')
 
     if (isApiPost && !isChatEndpoint) {
       const bearer = req.headers.authorization || req.headers.Authorization
@@ -112,6 +111,14 @@ function createTestServer(firebaseVerifier, writeTokens = []) {
 
   app.post('/api/chat', (req, res) => {
     res.json({ success: true, message: 'chat called (exempt)' })
+  })
+
+  app.post('/api/chat/stream', (req, res) => {
+    res.json({ success: true, message: 'chat stream called (exempt)' })
+  })
+
+  app.post('/api/chatbot', (req, res) => {
+    res.json({ success: true, message: 'chatbot called (should require auth)' })
   })
 
   app.get('/api/schema', (req, res) => {
@@ -314,6 +321,32 @@ async function runTests() {
           body: JSON.stringify({ test: 'data' })
         })
         if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`)
+      })
+
+      // Test 13: POST to /api/chat/stream should be exempt (subpath of /api/chat/)
+      await test('POST /api/chat/stream should be exempt', async (url) => {
+        const res = await fetch(`${url}/api/chat/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': 'https://api.goflypost.com'
+          },
+          body: JSON.stringify({ test: 'data' })
+        })
+        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`)
+      })
+
+      // Test 14: POST to /api/chatbot should require auth (not under /api/chat/)
+      await test('POST /api/chatbot should require write token', async (url) => {
+        const res = await fetch(`${url}/api/chatbot`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': 'https://api.goflypost.com'
+          },
+          body: JSON.stringify({ test: 'data' })
+        })
+        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
       })
 
       console.log(`\n📊 Results: ${passed} passed, ${failed} failed`)
