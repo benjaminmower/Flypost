@@ -22,7 +22,22 @@ A lightweight proxy server for Flypost v4 that forwards requests to the backend 
 
 ## Write-Token Authentication
 
-The proxy includes a middleware that protects write operations (POST requests to `/api/*`) with an optional authentication token.
+The proxy implements an **origin-gated authentication policy** for write operations (POST requests to `/api/*`):
+
+### Authentication Policy
+
+1. **Requests from `https://app.goflypost.com`:**
+   - **MUST** include a valid Firebase ID token in the `Authorization: Bearer <token>` header
+   - Firebase authentication is verified against the configured `FIREBASE_PROJECT_ID`
+   - User identity (UID, email) is extracted and passed to the backend for provenance tracking
+
+2. **Requests from other origins (or no origin):**
+   - **MUST** include a valid static write token in the `x-flypost-write-token` header
+   - Supports multiple tokens for brokerage-specific access control
+   - Token-to-tenancy mapping ensures proper isolation
+
+3. **Exempt endpoint:**
+   - `/api/chat` is exempt from authentication (read-only POST endpoint)
 
 ### Multi-Token Support
 
@@ -37,39 +52,49 @@ Each brokerage's agent GPT uses their specific token to ensure proper tenancy is
 
 ### How it works
 
+Authentication is enforced in `proxy/src/forward.js` before requests are forwarded to the backend:
+
 1. The middleware checks if the request is a POST to any path starting with `/api/`
-2. If `FLYPOST_WRITE_TOKEN` is configured, it validates the `x-flypost-write-token` header
-3. If the token is missing or invalid, the request is rejected with a 401 status
-4. If no `FLYPOST_WRITE_TOKEN` is configured, all requests are allowed (backward compatible)
+2. The `/api/chat` endpoint is exempt from authentication checks
+3. For authenticated endpoints:
+   - If `Origin` header is exactly `https://app.goflypost.com`:
+     - Verifies Firebase ID token in `Authorization` header
+     - Returns 401 if missing or invalid
+   - For all other origins (including missing Origin):
+     - Validates `x-flypost-write-token` against configured tokens
+     - Returns 401 if missing or invalid
+     - Maps token to brokerageId for tenancy enforcement
 
-### Key Design
+### Usage Examples
 
-The middleware uses `req.originalUrl` instead of `req.path` to check for `/api/` prefix. This is important because:
-
-- `app.post('/api/parse-and-publish', forward)` → `req.path = '/api/parse-and-publish'`
-- `app.use('/api', forward)` → `req.path = '/foo'` (prefix stripped by Express)
-
-Using `req.originalUrl` ensures the middleware correctly validates all POST requests to `/api/*` paths, regardless of how they're routed.
-
-### Usage Example
+#### From app.goflypost.com (Firebase authentication)
 
 ```bash
-# Without write-token (all POST requests allowed)
-curl -X POST http://localhost:8080/api/parse-and-publish \
+# Valid request with Firebase ID token
+curl -X POST https://api.goflypost.com/api/parse-and-publish \
   -H "Content-Type: application/json" \
+  -H "Origin: https://app.goflypost.com" \
+  -H "Authorization: Bearer <firebase-id-token>" \
   -d '{"naturalLanguageInput": "Event on Saturday"}'
 
-# With write-token configured
-export FLYPOST_WRITE_TOKEN="your-secret-token"
+# Invalid - missing Firebase token (will return 401)
+curl -X POST https://api.goflypost.com/api/parse-and-publish \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://app.goflypost.com" \
+  -d '{"naturalLanguageInput": "Event on Saturday"}'
+```
 
-# Valid request with token
-curl -X POST http://localhost:8080/api/parse-and-publish \
+#### From other origins (static write token)
+
+```bash
+# Valid request with static write token
+curl -X POST https://api.goflypost.com/api/parse-and-publish \
   -H "Content-Type: application/json" \
   -H "x-flypost-write-token: your-secret-token" \
   -d '{"naturalLanguageInput": "Event on Saturday"}'
 
-# Invalid request without token (will return 401)
-curl -X POST http://localhost:8080/api/parse-and-publish \
+# Invalid - missing write token (will return 401)
+curl -X POST https://api.goflypost.com/api/parse-and-publish \
   -H "Content-Type: application/json" \
   -d '{"naturalLanguageInput": "Event on Saturday"}'
 ```
@@ -105,14 +130,19 @@ BACKEND_URL=http://localhost:3001 FLYPOST_WRITE_TOKEN=secret npm start
 Run the integration tests:
 
 ```bash
+# Test origin-gated authentication policy
+node test-origin-gated-auth.js
+
+# Test legacy middleware (deprecated)
 node test-middleware.js
 ```
 
-This will run comprehensive tests for the write-token middleware to ensure:
-- POST requests with valid tokens are allowed
-- POST requests with invalid tokens are rejected
+The origin-gated auth tests verify:
+- Firebase authentication for `app.goflypost.com` origin
+- Static token authentication for other origins
+- 401 responses for missing/invalid credentials
+- `/api/chat` endpoint remains exempt
 - GET requests are not affected
-- Backward compatibility when no token is configured
 
 ## Routes
 

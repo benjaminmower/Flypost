@@ -290,11 +290,24 @@ paths:
 ```
 
 ## Authentication Instructions
-### Current Auth Setup (write-protected)
-- **Auth type:** API Key (static token)
-- **Scope:** Required for **all POST** requests under `/api/*` (currently `POST /api/parse-and-publish`). The read endpoint `GET /v1/events/near` remains public.
-- **Header:** `X-Flypost-Write-Token`
-- **Value:** Provisioned in the Flypost Cloud Run proxy environment as `FLYPOST_WRITE_TOKEN` (fallback: `WRITE_TOKEN`).
+
+### Current Auth Setup (Origin-Gated Policy)
+
+The Flypost proxy uses an **origin-gated authentication policy**:
+
+1. **For browser requests from `https://app.goflypost.com`:**
+   - Requires Firebase ID token in `Authorization: Bearer <token>` header
+   - User authentication via Firebase Email Link (passwordless sign-in)
+   - No static write token needed
+
+2. **For GPT Actions and other integrations:**
+   - **Auth type:** API Key (static token)
+   - **Scope:** Required for **all POST** requests under `/api/*` (currently `POST /api/parse-and-publish`)
+   - **Header:** `X-Flypost-Write-Token`
+   - **Value:** Provisioned in the Flypost Cloud Run proxy environment as `FLYPOST_WRITE_TOKEN` or brokerage-specific tokens
+   - The read endpoint `GET /v1/events/near` remains public
+
+### GPT Actions Configuration
 
 In the Actions configuration:
 - Set **Authentication** to **API Key** → **Header**.
@@ -302,8 +315,9 @@ In the Actions configuration:
 - **Value:** the write token you received (same as proxy `FLYPOST_WRITE_TOKEN`).
 - No OAuth configuration, client ID, or callback URL is required.
 
-### Optional: Firebase Email Link (Passwordless) sign-in for writes
-If you prefer passwordless logins, you can let clients authenticate with Firebase **Email Link (Passwordless Sign-in)** and send their Firebase ID token to the proxy:
+### Firebase Email Link (Passwordless) sign-in for app.goflypost.com
+
+Browser requests from `https://app.goflypost.com` use Firebase **Email Link (Passwordless Sign-in)**:
 
 1. **Enable Email Link** in Firebase Console → Authentication → Sign-in method → Email/Password → **Email link (passwordless sign-in)**.
 2. **Client snippet (web, modular SDK):**
