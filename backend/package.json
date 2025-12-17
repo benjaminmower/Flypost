@@ -18,6 +18,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^8.2.1",
     "marked": "^17.0.1",
+    "node-fetch": "^3.3.2",
     "openai": "^4.104.0"
   },
   "keywords": [

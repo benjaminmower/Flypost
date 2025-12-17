@@ -11,7 +11,7 @@ import dotenv from 'dotenv'
 import rateLimit from 'express-rate-limit'
 import { parseEventWithLLM } from './llmParser.js'
 import { validateEventData, getSchema } from './validation.js'
-import { storeEvent, getEventsNear, getStorageStats, clearEvents } from './storage.js'
+import { storeEvent, getEventsNear, getStorageStats, clearEvents, findEventByIdentity } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
 import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.js'
@@ -19,7 +19,6 @@ import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.
 import { sanitizeEvent } from './utils/northStarEnforcer.js'
 import { mergeSources, validateSource } from './utils/sourceProvenance.js'
 import { enrichEventMetadata, normalizeEventDates } from './utils/eventEnrichment.js'
-import { findEventByIdentity } from './firestoreClient.js'
 
 dotenv.config()
 
@@ -110,34 +109,6 @@ if (ENABLE_CONCIERGE) {
   }
 } else {
   console.log('⚪ Web Concierge feature disabled (set ENABLE_CONCIERGE=true to enable)')
-}
-
-/**
- * Utilities: ISO date normalization
- */
-function isIsoDateTime(str) {
-  return typeof str === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(str)
-}
-function toIsoIfParsable(value) {
-  if (typeof value !== 'string') return value
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? value : d.toISOString()
-}
-function normalizeEventDates(event /*, userContext */) {
-  if (event.startDate && !isIsoDateTime(event.startDate)) {
-    const before = event.startDate
-    event.startDate = toIsoIfParsable(event.startDate)
-    if (event.startDate !== before) {
-      console.log(`⏱️  Normalized startDate to ISO: ${before} -> ${event.startDate}`)
-    }
-  }
-  if (event.endDate && !isIsoDateTime(event.endDate)) {
-    const before = event.endDate
-    event.endDate = toIsoIfParsable(event.endDate)
-    if (event.endDate !== before) {
-      console.log(`⏱️  Normalized endDate to ISO: ${before} -> ${event.endDate}`)
-    }
-  }
 }
 
 // Helper: derive brokerageId from header/body/query
@@ -478,7 +449,7 @@ app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
     // First compute identity to check for existing
     const tempIdentity = computeEventIdentity(event)
     
-    if (tempIdentity && isFirestoreEnabled()) {
+    if (tempIdentity) {
       try {
         existingEvent = await findEventByIdentity(tempIdentity)
         if (existingEvent) {
