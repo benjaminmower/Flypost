@@ -1,274 +1,255 @@
-# Flypost v4 Strategy Shift: Global Event Identity & Post-Visit Intelligence
+# Two-Layer North Star: Strategy & Enforcement
 
 ## Overview
-This document describes the architectural pivot from brokerage-exclusive discovery to a **global, brokerage-agnostic event identity system** with a **post-visit intelligence ledger**. This shift establishes a new economic core around presence verification and buyer sentiment, moving away from pre-visit concierge/discovery features.
 
-## Core Principles
+The Flypost v4 architecture enforces a clear separation between **Layer 1 (Registry)** and **Layer 2 (Intelligence)** at runtime to ensure that machine-to-machine discovery surfaces remain pure registry data without any intelligence leakage.
 
-### 1. Global Event Identity
-**Events are now globally canonical, not brokerage-scoped.**
+## The Two Layers
 
-- **Identity Format**: `<normalized-address>|<start-time-window>`
-  - Example: `123mainstreet-santamonica-ca-90405|2025-01-15T14`
-- **Time Window**: ISO hour bucket (YYYY-MM-DDTHH) for time-aware events, or date bucket (YYYY-MM-DD) for date-only
-- **Cross-Brokerage Recognition**: Multiple brokerages can reference and update the same canonical event
-- **No Brokerage in Identity**: Brokerage metadata is stored separately; it does not participate in event identity
+### Layer 1: Registry (Discovery)
+**Purpose:** Provide basic, factual event information for discovery and listing.
 
-### 2. Attendance + Feedback Ledger
-**Post-visit intelligence is first-class, not embedded in events.**
+**Data includes:**
+- Event identifiers (`eventId`, `eventIdentity`)
+- Category and classification
+- Temporal data (dates, times)
+- Location data (address, coordinates)
+- Basic descriptive information (name, description)
+- Submission metadata
 
-#### Attendance Records
-Track verified presence at events:
-- `attendanceId`: Stable identifier
-- `eventId`: Links to canonical event
-- `buyerToken`: Opaque/pseudonymous buyer identifier (no PII)
-- `checkInTime`: ISO timestamp
-- `dwellBand`: Optional dwell time classification
-- `presenceProof`: Evidence of presence (geo_time, QR, or combined)
+**API Surface:** `/v1/events/near` and other discovery endpoints
 
-#### Feedback Records
-Capture sentiment linked to attendance:
-- `feedbackId`: Stable identifier
-- `attendanceId`: Links to attendance record
-- `eventId`: Denormalized for query convenience
-- `answers`: Three required fields
-  - `liked`: Free-form positive feedback
-  - `disliked`: Free-form negative feedback
-  - `wantsSimilar`: Boolean preference signal
-- `brokerageAffiliation`: Optional brokerage routing
-- `createdAt`: ISO timestamp
+### Layer 2: Intelligence
+**Purpose:** Collect and analyze attendance, engagement, sentiment, and other derived insights.
 
-### 3. Presence as Value Gate
-**Feedback requires verified attendance within a recency window.**
+**Data includes:**
+- Attendance tracking (`attendance`, `attendees`, `presenceProof`)
+- Buyer tokens and verification data
+- Feedback and sentiment analysis
+- Brokerage-specific intelligence
+- Derived insights and analytics
 
-- **Presence Gate**: Feedback submission requires a recent attendance record
-- **Recency Threshold**: 4 hours from check-in time
-- **No Gaming**: Cannot submit feedback without check-in proof
-- **Privacy Preserving**: Buyer identity is pseudonymous (opaque tokens)
+**API Surface:** Separate intelligence endpoints (future implementation)
 
-### 4. Brokerage Routing Post-Event
-**Brokerages get insights from their affiliated feedback.**
+## Runtime Enforcement Mechanisms
 
-- Feedback can include optional `brokerageAffiliation` field
-- Brokerage insights endpoint aggregates by affiliation
-- Routing happens AFTER the visit, not before
-- No brokerage gatekeeping of event visibility
+### 1. Discovery V1 Contract
 
-## API Endpoints
+The `/v1/events/near` endpoint returns a versioned, registry-safe response contract:
 
-### Presence Check-In
-```
-POST /v1/presence/check-in
-
-Body:
+```javascript
 {
-  "eventId": "evt_..." (optional, will match nearest if omitted),
-  "lat": 34.0195,
-  "lng": -118.4912,
-  "buyerToken": "buyer_opaque_token_123",
-  "method": "geo_time" (optional: geo_time | qr | geo_time_qr),
-  "timestamp": "2025-01-15T14:30:00Z" (optional)
-}
-
-Response:
-{
-  "success": true,
-  "attendance": {
-    "attendanceId": "att_...",
-    "eventId": "evt_...",
-    "checkInTime": "2025-01-15T14:30:00Z",
-    "matchedBy": "nearest" | "explicit"
+  success: true,
+  schemaVersion: "discovery.v1",
+  events: [/* DiscoveryEventV1[] */],
+  meta: {
+    count: 42,
+    radiusKm: 10
   }
 }
 ```
 
-### Feedback Submission
-```
-POST /v1/feedback/submit
+**Contract guarantees:**
+- `schemaVersion` indicates the contract version
+- `events` array contains only `DiscoveryEventV1` objects
+- No Layer 2 data can appear in the response
 
-Body:
+### 2. Allowlist Mapper
+
+The `discoveryMapper.js` utility implements a strict allowlist that converts stored event objects to the `DiscoveryEventV1` format.
+
+**Implementation:** `backend/src/utils/discoveryMapper.js`
+
+**Key functions:**
+- `toDiscoveryEventV1(event)` - Maps a single event to Discovery V1 format
+- `toDiscoveryEventsV1(events)` - Maps an array of events
+- `computeEventIdentity(event)` - Computes event identity with fallbacks
+
+**Allowlisted fields:**
+```javascript
 {
-  "attendanceId": "att_..." (optional, can use eventId + buyerToken instead),
-  "eventId": "evt_..." (required if attendanceId not provided),
-  "buyerToken": "buyer_opaque_token_123" (required if attendanceId not provided),
-  "answers": {
-    "liked": "Beautiful kitchen, great neighborhood",
-    "disliked": "Small backyard",
-    "wantsSimilar": true
+  eventId: string,           // Required
+  eventIdentity: string,     // Required (computed if missing)
+  category: string,          // Default: "open_house"
+  startDate: string,         // ISO 8601 timestamp
+  endDate: string,           // ISO 8601 timestamp
+  name: string,              // Optional
+  description: string,       // Optional, truncated to 500 chars
+  address: {                 // Structured address
+    streetAddress: string,
+    addressLocality: string,
+    addressRegion: string,
+    postalCode: string,
+    addressCountry: string
   },
-  "brokerageAffiliation": "brokerage-abc" (optional)
-}
-
-Response:
-{
-  "success": true,
-  "feedback": {
-    "feedbackId": "fbk_...",
-    "eventId": "evt_...",
-    "createdAt": "2025-01-15T16:00:00Z"
-  }
-}
-
-Errors:
-- 404: No attendance record found
-- 403: Attendance too old (must be within 4 hours)
-```
-
-### Brokerage Insights
-```
-GET /v1/brokerages/:brokerageId/insights
-
-Response:
-{
-  "success": true,
-  "brokerageId": "brokerage-abc",
-  "summary": {
-    "totalFeedbackRecords": 42,
-    "eventsWithFeedback": 15
+  geo: {                     // Optional coordinates
+    latitude: number,
+    longitude: number
   },
-  "byEvent": [
-    {
-      "eventId": "evt_...",
-      "totalResponses": 8,
-      "wantsSimilarCount": 6,
-      "likedSnippets": ["Beautiful kitchen", "Great location"],
-      "dislikedSnippets": ["Small lot"]
-    }
-  ],
-  "recentVerbatims": [...]
+  submissionTimestamp: string,  // Optional metadata
+  updateCount: number           // Optional metadata
 }
 ```
 
-## North Star Enforcement at Ingestion
+**Safety features:**
+- Description truncation to 500 characters (prevents abuse)
+- Structured address fields (consistent format)
+- Null/undefined handling throughout
 
-**Architectural Separation: Layer 1 (Discovery) vs Layer 2 (Intelligence)**
+### 3. Runtime Anti-Drift Sanitizer
 
-To maintain clean architectural boundaries, the event ingestion endpoints enforce strict separation:
+The `sanitizer.js` utility provides a fail-safe mechanism that recursively strips forbidden keys from responses.
 
-### Layer 1: Discovery (Events)
-- **What/Where/When**: Event metadata, location, time, description
-- **Ingested via**: `/v1/events/upsert` and `/api/parse-and-publish`
-- **Storage**: `events` collection
+**Implementation:** `backend/src/utils/sanitizer.js`
 
-### Layer 2: Intelligence (Post-Visit)
-- **Who/How**: Attendance, presence proof, feedback, sentiment
-- **Collected via**: `/v1/presence/check-in` and `/v1/feedback/submit`
-- **Storage**: `attendance` and `feedback` collections
+**Behavior:**
+- **Strip:** Remove forbidden keys recursively
+- **Warn:** Log warnings when drift is detected
+- **Continue:** Never fail the request (availability over purity)
 
-### Forbidden Fields
-The following fields are **stripped** during event ingestion (with warning logged):
-- `attendance`, `attendees`
-- `buyerToken`, `presenceProof`
-- `feedback`, `sentiment`
-- `insights`, `brokerageAffiliation`
-- Any field starting with `intelligence*`
+**Forbidden keys:**
+```javascript
+// Explicit forbidden keys
+'attendance', 'attendees', 'buyerToken', 'presenceProof',
+'feedback', 'sentiment', 'insights', 'brokerageAffiliation'
 
-**Rationale**: Intelligence data must be collected separately post-visit with presence verification. Embedding it in events would bypass the presence gate and compromise the economic model.
+// Pattern-based forbidden keys
+'intelligence*' (any key starting with 'intelligence')
+```
 
-### Source Provenance
-Events track their origin via `flypost.sources` array:
-```json
+**Example output when drift detected:**
+```
+⚠️  DRIFT DETECTED: Stripped 3 forbidden key(s) from discovery response:
+response.events[0].attendance, response.events[1].feedback, response.events[2].sentiment
+```
+
+### 4. Processing Pipeline
+
+The `/v1/events/near` endpoint applies both mechanisms:
+
+```javascript
+// 1. Retrieve raw events from storage
+const events = await getEventsNear(latitude, longitude, radius, useFirestore)
+
+// 2. Apply brokerage filtering (if needed)
+let filteredEvents = applyBrokerageFilter(events, brokerageId)
+
+// 3. Map to Discovery V1 format (allowlist)
+const discoveryEvents = toDiscoveryEventsV1(filteredEvents)
+
+// 4. Build versioned response
+let response = {
+  success: true,
+  schemaVersion: 'discovery.v1',
+  events: discoveryEvents,
+  meta: { count: discoveryEvents.length, radiusKm: radius }
+}
+
+// 5. Apply runtime sanitizer (defense in depth)
+response = sanitizeDiscoveryResponse(response)
+
+// 6. Return to client
+res.json(response)
+```
+
+## Why This Enforces the Two-Layer North Star
+
+### Defense in Depth
+The two-mechanism approach provides layered protection:
+1. **Primary defense (allowlist mapper):** Only explicitly permitted fields pass through
+2. **Secondary defense (sanitizer):** Catches any drift or bugs that might leak forbidden data
+
+### Fail-Safe Philosophy
+- **Never fail requests** due to drift detection
+- **Always log warnings** so drift can be investigated
+- **Strip and continue** to maintain service availability
+
+### Future-Proof Design
+- New Layer 2 fields are automatically forbidden (intelligence* pattern)
+- Schema versioning allows for future API evolution
+- Clear separation enables independent scaling of layers
+
+### Developer Experience
+- Clear contract makes integration predictable
+- Warnings in logs enable rapid debugging
+- Tests validate guardrails work correctly
+
+## Testing
+
+The `test-discovery-v1.js` suite validates all enforcement mechanisms:
+
+1. **Schema version presence:** Confirms `schemaVersion: "discovery.v1"` in responses
+2. **Required fields:** Validates `eventId` and `eventIdentity` are present
+3. **Description truncation:** Ensures safety limits are enforced
+4. **Forbidden key detection:** Tests the sanitizer correctly identifies Layer 2 keys
+5. **Drift protection:** Confirms forbidden keys are stripped even if present
+6. **Allowlist mapping:** Validates only permitted fields pass through
+
+**Run tests:**
+```bash
+cd backend
+node test-discovery-v1.js
+```
+
+## Migration Notes
+
+### Backward Compatibility
+The Discovery V1 contract is a **breaking change** for clients expecting the old response format.
+
+**Old format:**
+```javascript
 {
-  "flypost": {
-    "sources": [
-      {
-        "sourceType": "mls",
-        "sourceId": "MLS-12345",
-        "addedAt": "2025-01-20T14:00:00Z"
-      },
-      {
-        "sourceType": "scraper",
-        "sourceId": "SCRAPE-789",
-        "addedAt": "2025-01-20T15:00:00Z"
-      }
-    ]
+  success: true,
+  data: {
+    events: [...],
+    total: 42,
+    query: {...},
+    brokerageId: "...",
+    source: "Firestore",
+    note: "..."
   }
 }
 ```
 
-**Deduplication**: Sources are deduped by `sourceType + sourceId`. Updates from the same source refresh the timestamp.
+**New format (Discovery V1):**
+```javascript
+{
+  success: true,
+  schemaVersion: "discovery.v1",
+  events: [...],  // DiscoveryEventV1[] only
+  meta: {
+    count: 42,
+    radiusKm: 10
+  }
+}
+```
 
-## Legacy Features (Non-Core)
-
-The following features are now considered **legacy** and are not part of the core economic value:
-
-### Brokerage-Exclusive Concierge
-- **Status**: Legacy
-- **Location**: `/api/chat` endpoint (conditionally enabled)
-- **Description**: Brokerage-scoped LLM-powered discovery chat
-- **Reasoning**: Discovery is not the economic core; presence + sentiment is
-
-### Brokerage-Scoped Event Visibility
-- **Status**: Deprecated (but still supported during migration)
-- **Old Behavior**: Events were scoped to brokerages via `canonicalKey`
-- **New Behavior**: Events are globally visible; `brokerageId` is metadata only
-
-## Migration Path
-
-### For Existing Code
-1. **Use `eventIdentity`** instead of `canonicalKey` for new queries
-2. `canonicalKey` still computed for backward compatibility
-3. Both `findEventByIdentity` and `findEventByCanonicalKey` available during transition
-4. Eventually remove `canonicalKey` support
-
-### For New Features
-1. Always use `computeEventIdentity()` for event deduplication
-2. Store attendance/feedback in new collections, not embedded in events
-3. Use presence gates for value-gated features
-4. Route via `brokerageAffiliation`, not event ownership
-
-## Storage Collections
-
-### Events (Modified)
-- **Primary Collection**: `events`
-- **Key Fields**:
-  - `flypost.eventIdentity`: Global canonical identity (NEW)
-  - `flypost.canonicalKey`: Legacy brokerage-scoped key (deprecated)
-  - `brokerageId`: Metadata only, not part of identity
-
-### Attendance (New)
-- **Collection**: `attendance`
-- **Indexes**: `eventId`, `buyerToken`, `attendanceId` (primary key)
-
-### Feedback (New)
-- **Collection**: `feedback`
-- **Indexes**: `brokerageAffiliation`, `eventId`, `attendanceId`, `feedbackId` (primary key)
-
-## Testing Strategy
-
-### Unit Tests
-- Event identity determinism and normalization
-- Time window computation (hour vs date buckets)
-- Edit-instead-of-create with new identity
-
-### Integration Tests
-- Cross-brokerage event deduplication
-- Presence check-in creates attendance
-- Feedback requires recent attendance
-- Presence gate enforcement (4-hour window)
-- Brokerage insights aggregation
-
-### Acceptance Criteria
-- Same event from different brokerages updates one record
-- Feedback submission fails without check-in
-- Feedback submission fails with old check-in (>4 hours)
-- Insights endpoint correctly aggregates by brokerage affiliation
+### Migration Path
+1. Update client applications to consume the new contract
+2. Remove dependencies on old `data.total`, `data.source`, `data.note` fields
+3. Use `meta.count` instead of `data.total`
+4. Expect only Discovery V1 fields in `events[]` array
 
 ## Future Enhancements
 
-### Not in This PR
-- LLM synthesis of insights (kept intentionally basic)
-- UI for check-in/feedback (API only in this PR)
-- Advanced presence verification (QR codes, geofencing)
-- Dwell time tracking
-- Buyer preference profiles
-- Cross-event similarity matching
+### Intelligence Layer Endpoints
+When Layer 2 is implemented, it will use separate endpoints:
+- `/v1/intelligence/attendance` - Attendance tracking
+- `/v1/intelligence/feedback` - Feedback and sentiment
+- `/v1/intelligence/insights` - Derived analytics
 
-## Summary
+These endpoints will **never** share response contracts with Discovery endpoints.
 
-This shift establishes Flypost v4's new architectural truth:
-1. **Events are global**, not brokerage-owned
-2. **Intelligence lives in ledgers**, not embedded in events
-3. **Presence gates value**, feedback requires check-in
-4. **Brokerages route post-event**, via affiliation not ownership
-5. **Discovery is legacy**, intelligence is core
+### Schema Evolution
+Future versions (discovery.v2, discovery.v3) can be introduced without breaking existing clients by maintaining the `schemaVersion` field.
+
+## Conclusion
+
+The Two-Layer North Star enforcement provides:
+- ✅ **Clear separation** between Registry and Intelligence
+- ✅ **Runtime guardrails** that prevent data leakage
+- ✅ **Fail-safe design** that maintains availability
+- ✅ **Future-proof architecture** for scaling both layers independently
+- ✅ **Developer confidence** through comprehensive testing
+
+This architectural decision ensures Flypost v4 can evolve both layers independently while maintaining a clean, predictable machine-to-machine discovery surface.
