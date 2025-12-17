@@ -70,7 +70,7 @@ function createTestServer() {
     return new Promise((resolve) => {
       const mockApp = express()
       mockApp.use(express.json())
-      
+
       // Mock backend endpoints
       mockApp.post('/api/parse-and-publish', (req, res) => {
         res.json({ success: true, message: 'parse-and-publish called', data: { eventId: 'evt_123' } })
