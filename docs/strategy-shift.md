@@ -139,6 +139,55 @@ Response:
 }
 ```
 
+## North Star Enforcement at Ingestion
+
+**Architectural Separation: Layer 1 (Discovery) vs Layer 2 (Intelligence)**
+
+To maintain clean architectural boundaries, the event ingestion endpoints enforce strict separation:
+
+### Layer 1: Discovery (Events)
+- **What/Where/When**: Event metadata, location, time, description
+- **Ingested via**: `/v1/events/upsert` and `/api/parse-and-publish`
+- **Storage**: `events` collection
+
+### Layer 2: Intelligence (Post-Visit)
+- **Who/How**: Attendance, presence proof, feedback, sentiment
+- **Collected via**: `/v1/presence/check-in` and `/v1/feedback/submit`
+- **Storage**: `attendance` and `feedback` collections
+
+### Forbidden Fields
+The following fields are **stripped** during event ingestion (with warning logged):
+- `attendance`, `attendees`
+- `buyerToken`, `presenceProof`
+- `feedback`, `sentiment`
+- `insights`, `brokerageAffiliation`
+- Any field starting with `intelligence*`
+
+**Rationale**: Intelligence data must be collected separately post-visit with presence verification. Embedding it in events would bypass the presence gate and compromise the economic model.
+
+### Source Provenance
+Events track their origin via `flypost.sources` array:
+```json
+{
+  "flypost": {
+    "sources": [
+      {
+        "sourceType": "mls",
+        "sourceId": "MLS-12345",
+        "addedAt": "2025-01-20T14:00:00Z"
+      },
+      {
+        "sourceType": "scraper",
+        "sourceId": "SCRAPE-789",
+        "addedAt": "2025-01-20T15:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+**Deduplication**: Sources are deduped by `sourceType + sourceId`. Updates from the same source refresh the timestamp.
+
 ## Legacy Features (Non-Core)
 
 The following features are now considered **legacy** and are not part of the core economic value:
