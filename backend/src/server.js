@@ -501,8 +501,6 @@ app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
     if (body.source || existingEvent?.flypost?.sources) {
       const existingSources = existingEvent?.flypost?.sources || []
       event.flypost.sources = mergeSources(existingSources, body.source)
-    } else if (body.source) {
-      event.flypost.sources = mergeSources([], body.source)
     }
     
     // 8. Validate the enriched event

@@ -51,9 +51,11 @@ export function mergeSources(existingSources, newSource) {
   
   if (existingIndex >= 0) {
     // Update existing source with new timestamp
+    const existing = sources[existingIndex]
     sources[existingIndex] = {
       ...newSource,
-      lastUpdated: new Date().toISOString()
+      addedAt: existing.addedAt, // Preserve original addedAt
+      updatedAt: new Date().toISOString() // Track when it was last updated
     }
     console.log(`📍 Updated existing source: ${newSource.sourceType}${newSource.sourceId ? ` (${newSource.sourceId})` : ''}`)
   } else {
