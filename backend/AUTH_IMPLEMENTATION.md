@@ -328,12 +328,39 @@ Monitor these metrics in production:
 
 ## Deployment Checklist
 
+### Cloud Build Configuration
+
+Update `backend/cloudbuild.yaml` to include HMAC secrets:
+
+```yaml
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+      gcloud run deploy flypostv4 \
+        --image gcr.io/$PROJECT_ID/goflypost-backend:$SHORT_SHA \
+        --region=${_REGION:-us-west1} \
+        --platform=managed \
+        --set-env-vars NODE_ENV=production,PORT=8080,FRONTEND_URL=${_FRONTEND_URL} \
+        --update-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest,FLYPOST_HMAC_SECRETS_JSON=FLYPOST_HMAC_SECRETS_JSON:latest
+```
+
+**Note**: Create the `FLYPOST_HMAC_SECRETS_JSON` secret in Google Secret Manager first:
+```bash
+# Create secret with initial value (JSON format)
+echo '{"mls-adapter":"your-secret-here"}' | gcloud secrets create FLYPOST_HMAC_SECRETS_JSON --data-file=-
+
+# Update secret value
+echo '{"mls-adapter":"new-secret","scraper":"another-secret"}' | gcloud secrets versions add FLYPOST_HMAC_SECRETS_JSON --data-file=-
+```
+
 ### Cloud Run Deployment
 
-- [ ] Set `GOOGLE_CLOUD_PROJECT` environment variable
-- [ ] Configure HMAC secrets in Secret Manager
-- [ ] Set `FLYPOST_HMAC_SECRETS_JSON` from Secret Manager
-- [ ] Verify ADC is working (check logs for Firebase initialization)
+- [ ] Set `GOOGLE_CLOUD_PROJECT` environment variable (automatically set on Cloud Run)
+- [ ] Create HMAC secrets in Secret Manager
+- [ ] Update `cloudbuild.yaml` to include secrets
+- [ ] Deploy and verify ADC is working (check logs for Firebase initialization)
 - [ ] Test Firebase authentication with real tokens
 - [ ] Test HMAC authentication with production client IDs
 - [ ] Monitor 401 responses and rate limiting
