@@ -16,6 +16,10 @@ import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
 import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.js'
 import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.js'
+import { sanitizeEvent } from './utils/northStarEnforcer.js'
+import { mergeSources, validateSource } from './utils/sourceProvenance.js'
+import { enrichEventMetadata, normalizeEventDates } from './utils/eventEnrichment.js'
+import { findEventByIdentity } from './firestoreClient.js'
 
 dotenv.config()
 
@@ -421,6 +425,148 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
 })
 
 /**
+ * POST /v1/events/upsert
+ * Canonical structured ingestion endpoint for machine sources
+ * (MLS, calendar, scraper, manual, LLM adapter)
+ * 
+ * Body:
+ * - event (required): Full Schema.org Event object
+ * - source (optional): { sourceType: string, sourceId?: string }
+ * 
+ * Behavior:
+ * - Validates the event using AJV
+ * - Strips Layer 2 intelligence fields (North Star enforcement)
+ * - Computes event identity (brokerage-agnostic)
+ * - Upserts by eventIdentity (insert if new, update if exists)
+ * - Tracks source provenance
+ * - Returns operation type (insert/update) and event data
+ */
+app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
+  try {
+    const body = req.body || {}
+    
+    // 1. Validate request structure
+    if (!body.event || typeof body.event !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Request body must include an "event" object'
+      })
+    }
+    
+    // 2. Validate source if provided
+    if (body.source) {
+      const sourceValidation = validateSource(body.source)
+      if (!sourceValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid source: ${sourceValidation.error}`
+        })
+      }
+    }
+    
+    // 3. Apply North Star enforcement: strip Layer 2 intelligence fields
+    let event = sanitizeEvent(body.event)
+    
+    // 4. Normalize dates
+    normalizeEventDates(event)
+    
+    // 5. Check for existing event by identity
+    let existingEvent = null
+    let isUpdate = false
+    let updateCount = 0
+    
+    // First compute identity to check for existing
+    const tempIdentity = computeEventIdentity(event)
+    
+    if (tempIdentity && isFirestoreEnabled()) {
+      try {
+        existingEvent = await findEventByIdentity(tempIdentity)
+        if (existingEvent) {
+          isUpdate = true
+          updateCount = (existingEvent.flypost?.updateCount || 0) + 1
+          console.log(`🔄 Found existing event ${existingEvent.flypost.eventId} for identity ${tempIdentity}`)
+        }
+      } catch (err) {
+        console.error('⚠️ Error checking event identity:', err)
+        // Continue as new event if check fails
+      }
+    }
+    
+    // 6. Enrich event with server-side metadata
+    event = enrichEventMetadata(event, {
+      isUpdate,
+      existingEventId: existingEvent?.flypost?.eventId,
+      updateCount
+    })
+    
+    // 7. Handle source provenance
+    if (body.source || existingEvent?.flypost?.sources) {
+      const existingSources = existingEvent?.flypost?.sources || []
+      event.flypost.sources = mergeSources(existingSources, body.source)
+    } else if (body.source) {
+      event.flypost.sources = mergeSources([], body.source)
+    }
+    
+    // 8. Validate the enriched event
+    const validation = validateEventData(event)
+    if (!validation.success) {
+      console.error('❌ Validation failed:', validation.errors)
+      return res.status(400).json({
+        success: false,
+        error: 'Event validation failed',
+        details: validation.errors
+      })
+    }
+    
+    const validatedEvent = validation.data
+    
+    // 9. Compute hash
+    const eventHash = computeEventHash(validatedEvent)
+    console.log(`🔐 Computed event hash: ${eventHash.value.substring(0, 16)}...`)
+    
+    // 10. Prepare event for storage
+    const eventToStore = {
+      ...validatedEvent,
+      hash: eventHash
+    }
+    
+    // 11. If updating, preserve metadata
+    if (isUpdate && existingEvent) {
+      // Preserve Firestore metadata
+      if (existingEvent._firestoreMetadata) {
+        eventToStore._firestoreMetadata = {
+          ...existingEvent._firestoreMetadata,
+          updatedAt: new Date()
+        }
+      }
+    }
+    
+    // 12. Store
+    const storedEvent = await storeEvent(eventToStore)
+    console.log(`📦 ${isUpdate ? 'Updated' : 'Inserted'} event: ${storedEvent.flypost.eventId}`)
+    
+    // 13. Return response
+    res.json({
+      success: true,
+      operation: isUpdate ? 'update' : 'insert',
+      data: {
+        eventId: storedEvent.flypost.eventId,
+        eventIdentity: storedEvent.flypost.eventIdentity,
+        updateCount: storedEvent.flypost.updateCount,
+        event: storedEvent
+      }
+    })
+  } catch (error) {
+    console.error('❌ Upsert error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Event upsert failed',
+      details: error.message
+    })
+  }
+})
+
+/**
  * POST /v1/presence/check-in
  * Create an attendance record for presence at an event
  * 
@@ -819,6 +965,9 @@ app.listen(port, () => {
   console.log(`🌐 Health check:       http://localhost:${port}/health`)
   console.log(
     `🤖 Parse endpoint:     POST   http://localhost:${port}/api/parse-and-publish`
+  )
+  console.log(
+    `📝 Upsert endpoint:    POST   http://localhost:${port}/v1/events/upsert`
   )
   console.log(
     `📋 Events endpoint:    GET    http://localhost:${port}/v1/events/near?brokerageId=...`
