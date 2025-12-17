@@ -19,13 +19,15 @@ export function initializeFirebaseAdmin() {
     return firebaseApp
   }
 
+  // Mark as attempted to prevent repeated initialization attempts
+  initialized = true
+
   try {
     // Check if GOOGLE_CLOUD_PROJECT is set (required for Firestore)
     const projectId = process.env.GOOGLE_CLOUD_PROJECT
 
     if (!projectId) {
       console.log('⚪ Firebase Admin not initialized: GOOGLE_CLOUD_PROJECT not set')
-      initialized = true
       return null
     }
 
@@ -36,11 +38,9 @@ export function initializeFirebaseAdmin() {
     })
 
     console.log('✅ Firebase Admin SDK initialized (project:', projectId + ')')
-    initialized = true
     return firebaseApp
   } catch (error) {
     console.error('❌ Failed to initialize Firebase Admin:', error.message)
-    initialized = true
     return null
   }
 }

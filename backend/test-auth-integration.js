@@ -65,7 +65,8 @@ try {
 // Test 2: HMAC authenticated request should succeed
 console.log('Test 2: HMAC authenticated POST should succeed')
 try {
-  // Set up test client
+  // NOTE: Test secrets only - never use these in production!
+  // In production, secrets should be securely managed (e.g., Secret Manager)
   process.env.FLYPOST_HMAC_SECRETS_JSON = JSON.stringify({
     'test-client': 'test-secret-123'
   })

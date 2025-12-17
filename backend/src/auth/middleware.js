@@ -91,10 +91,10 @@ async function handleHmacAuth(req, res, next, hmacHeaders) {
   // Verify we have rawBody available
   if (!req.rawBody) {
     console.error('❌ rawBody not available for HMAC verification')
-    return res.status(500).json({
+    return res.status(503).json({
       success: false,
-      error: 'Server configuration error',
-      message: 'Raw body not captured for HMAC verification'
+      error: 'Authentication service temporarily unavailable',
+      message: 'Unable to process HMAC authentication at this time'
     })
   }
   

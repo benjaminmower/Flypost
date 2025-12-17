@@ -130,17 +130,21 @@ export function verifyHmacSignature({ clientId, timestamp, signature, method, pa
   const expectedSignature = computeSignature(secrets[clientId], canonicalString)
   
   // Constant-time comparison to prevent timing attacks
-  const actualBuffer = Buffer.from(signature, 'base64')
-  const expectedBuffer = Buffer.from(expectedSignature, 'base64')
-  
-  if (actualBuffer.length !== expectedBuffer.length) {
+  let isValid = false
+  try {
+    const actualBuffer = Buffer.from(signature, 'base64')
+    const expectedBuffer = Buffer.from(expectedSignature, 'base64')
+    
+    // timingSafeEqual will throw if buffers have different lengths
+    // This is safe as the error doesn't leak timing information
+    isValid = crypto.timingSafeEqual(actualBuffer, expectedBuffer)
+  } catch (error) {
+    // Invalid base64 or length mismatch
     return {
       valid: false,
       error: 'Invalid signature'
     }
   }
-  
-  const isValid = crypto.timingSafeEqual(actualBuffer, expectedBuffer)
   
   if (!isValid) {
     return {
