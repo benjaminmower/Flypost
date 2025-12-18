@@ -207,8 +207,8 @@ async function executeGetEventsNear(args, backendUrl, brokerageId) {
     const data = await response.json()
     return {
       success: true,
-      events: data.data?.events || [],
-      total: data.data?.total || 0
+      events: data.events || [],
+      total: data.meta?.count || (data.events || []).length
     }
   } catch (error) {
     console.error('Error fetching events:', error)
