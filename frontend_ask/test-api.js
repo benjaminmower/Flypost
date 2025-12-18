@@ -53,10 +53,7 @@ function test(name, fn) {
 
 // Test 1: Function accepts location parameter
 test('sendChatMessage function accepts location parameter', () => {
-  const funcMatch = apiSource.match(/export\s+async\s+function\s+sendChatMessage\s*\([^)]+\)/)
-  if (!funcMatch) return false
-  const params = funcMatch[0]
-  return params.includes('location')
+  return apiSource.includes('sendChatMessage(message, location')
 })
 
 // Test 2: Location parameter has default value

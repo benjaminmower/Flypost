@@ -16,6 +16,9 @@ const responseText = document.getElementById('response-text')
 let userLocation = null
 let locationRequested = false
 
+// Constants
+const LOCATION_CACHE_DURATION = 5 * 60 * 1000 // 5 minutes in milliseconds
+
 // Initialize app
 function init() {
   console.log('🚀 Flypost Ask - Chat Interface Starting...')
@@ -41,7 +44,7 @@ async function requestLocation() {
     const position = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         timeout: 10000,
-        maximumAge: 300000 // Cache for 5 minutes
+        maximumAge: LOCATION_CACHE_DURATION
       })
     })
     
@@ -91,7 +94,7 @@ async function handleChatSubmit(e) {
     showResponse(responseContent, 'success')
 
     // Show hint if location wasn't available
-    if (!userLocation && !responseContent.includes('ZIP') && !responseContent.includes('zip')) {
+    if (!userLocation && !/zip/i.test(responseContent)) {
       showResponse(responseContent + '\n\n💡 Tip: For better results, include a ZIP code like 90254.', 'success')
     }
 
