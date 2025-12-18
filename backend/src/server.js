@@ -532,6 +532,10 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
     // Apply runtime sanitizer to strip any forbidden keys that might have leaked
     response = sanitizeDiscoveryResponse(response)
 
+    // Set access tier header and Vary header for caching
+    res.set('X-Flypost-Access-Tier', accessTier)
+    res.set('Vary', 'x-api-key')
+    
     res.json(response)
   } catch (error) {
     console.error('❌ Error retrieving events:', error)
@@ -618,6 +622,10 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
     // Apply runtime sanitizer to strip any forbidden keys that might have leaked
     response = sanitizeDiscoveryResponse(response)
 
+    // Set access tier header and Vary header for caching
+    res.set('X-Flypost-Access-Tier', accessTier)
+    res.set('Vary', 'x-api-key')
+    
     res.json(response)
   } catch (error) {
     console.error('❌ Error retrieving event:', error)

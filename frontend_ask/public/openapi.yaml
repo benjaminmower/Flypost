@@ -15,9 +15,9 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0.html
 
 servers:
-  - url: https://ask.goflypost.com
+  - url: https://api.goflypost.com/v1
     description: Production server
-  - url: http://localhost:3001
+  - url: http://localhost:3001/v1
     description: Development server
 
 tags:
@@ -33,9 +33,20 @@ paths:
         Supports optional date range filtering and two-tier access control.
         
         **Access Tiers:**
-        - **Public**: No brokerage_id or API key. Returns approximate locations (reduced geo precision)
-          and fewer fields.
-        - **Brokerage-scoped**: With brokerage_id and/or API key. Returns full fidelity data.
+        - **Public**: No brokerage_id or API key. Returns approximate locations (reduced geo precision ~1km),
+          city/region only (no street address or postal code), description max 200 chars, no timestamps.
+          Rate limit: 100 requests per 15 minutes.
+        - **Brokerage-scoped**: With brokerage_id and/or API key. Returns full fidelity data with precise
+          coordinates, complete address, description max 500 chars, includes timestamps.
+          Rate limit: 500 requests per 15 minutes.
+        
+        **Date Filtering:**
+        When `start` and/or `end` parameters are provided, events are filtered using overlap logic:
+        - An event is included if its time range overlaps with the requested date range
+        - Event must not end before the requested start date
+        - Event must not start after the requested end date
+        - If only `start` is provided, returns events that end on or after the start date
+        - If only `end` is provided, returns events that start on or before the end date
       operationId: getEventsNear
       tags:
         - discovery
@@ -97,6 +108,33 @@ paths:
       responses:
         '200':
           description: Successful response with list of events
+          headers:
+            X-Flypost-Access-Tier:
+              description: Indicates the access tier used for this request
+              schema:
+                type: string
+                enum: [public, brokerage]
+              example: "public"
+            Vary:
+              description: Indicates which request headers affect caching
+              schema:
+                type: string
+              example: "x-api-key"
+            RateLimit-Limit:
+              description: The maximum number of requests allowed in the time window
+              schema:
+                type: integer
+              example: 100
+            RateLimit-Remaining:
+              description: The number of requests remaining in the current time window
+              schema:
+                type: integer
+              example: 95
+            RateLimit-Reset:
+              description: The time at which the rate limit resets (Unix timestamp)
+              schema:
+                type: integer
+              example: 1705334400
           content:
             application/json:
               schema:
@@ -171,6 +209,33 @@ paths:
       responses:
         '200':
           description: Successful response with event details
+          headers:
+            X-Flypost-Access-Tier:
+              description: Indicates the access tier used for this request
+              schema:
+                type: string
+                enum: [public, brokerage]
+              example: "brokerage"
+            Vary:
+              description: Indicates which request headers affect caching
+              schema:
+                type: string
+              example: "x-api-key"
+            RateLimit-Limit:
+              description: The maximum number of requests allowed in the time window
+              schema:
+                type: integer
+              example: 500
+            RateLimit-Remaining:
+              description: The number of requests remaining in the current time window
+              schema:
+                type: integer
+              example: 495
+            RateLimit-Reset:
+              description: The time at which the rate limit resets (Unix timestamp)
+              schema:
+                type: integer
+              example: 1705334400
           content:
             application/json:
               schema:
@@ -243,7 +308,10 @@ components:
           example: "Beautiful 4BR Home in Santa Monica"
         description:
           type: string
-          description: Event description (truncated based on access tier)
+          description: |
+            Event description (truncated based on access tier).
+            - Public tier: max 200 characters (plus '...' if truncated)
+            - Brokerage tier: max 500 characters (plus '...' if truncated)
           example: "Stunning modern home with ocean views..."
         startDate:
           type: string
