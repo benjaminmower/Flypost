@@ -277,6 +277,38 @@ export async function findEventByCanonicalKey(canonicalKey) {
 }
 
 /**
+ * Get a single event by its document ID from Firestore
+ * @param {string} eventId - The event ID (document ID in Firestore)
+ * @returns {Promise<object|null>} - The event or null if not found
+ */
+export async function getEventByIdFromFirestore(eventId) {
+  if (!isFirestoreEnabled()) {
+    return null
+  }
+  
+  const eventsCollection = getEventsCollection()
+  
+  try {
+    const docRef = eventsCollection.doc(eventId)
+    const docSnap = await docRef.get()
+    
+    if (!docSnap.exists) {
+      return null
+    }
+    
+    const data = docSnap.data()
+    // Remove Firestore internal metadata from returned event
+    const { _firestoreMetadata, ...eventData } = data
+    
+    console.log(`🔥 Retrieved event by ID from Firestore: ${eventId}`)
+    return eventData
+  } catch (error) {
+    console.error('❌ Firestore getEventById error:', error)
+    throw new Error(`Failed to get event by ID from Firestore: ${error.message}`)
+  }
+}
+
+/**
  * Get events collection reference
  * @returns {FirebaseFirestore.CollectionReference} - Events collection reference
  */

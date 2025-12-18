@@ -11,7 +11,7 @@ import dotenv from 'dotenv'
 import rateLimit from 'express-rate-limit'
 import { parseEventWithLLM } from './llmParser.js'
 import { validateEventData, getSchema } from './validation.js'
-import { storeEvent, getEventsNear, getStorageStats, clearEvents, findEventByIdentity, getEventById } from './storage.js'
+import { storeEvent, getEventsNear, getStorageStats, clearEvents, findEventByIdentity, getEventById, getEventByIdAny } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
 import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.js'
@@ -566,10 +566,12 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
       `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${req.path} (eventId=${event_id}, tier=${accessTier})`
     )
 
-    // Try to get event from storage (wrap in try-catch for safety)
+    const useFirestore = isFirestoreEnabled()
+
+    // Try to get event from storage with Firestore + memory fallback
     let event = null
     try {
-      event = getEventById(event_id)
+      event = await getEventByIdAny(event_id, useFirestore)
     } catch (storageError) {
       console.error('❌ Storage error:', storageError)
       throw storageError
