@@ -8,11 +8,19 @@
     "build": "vite build && node scripts/copy-assets.js",
     "preview": "vite preview"
   },
-  "dependencies": {},
+  "dependencies": {
+    "marked": "^17.0.1"
+  },
   "devDependencies": {
     "vite": "^5.4.2"
   },
-  "keywords": ["flypost", "ask", "chat", "events", "frontend"],
+  "keywords": [
+    "flypost",
+    "ask",
+    "chat",
+    "events",
+    "frontend"
+  ],
   "author": "goflypost",
   "license": "Apache-2.0"
 }
