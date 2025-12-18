@@ -143,7 +143,11 @@ function mockFirebaseVerification(validTokens = {}) {
         projectId: 'test-project-id'
       })
     } catch (err) {
-      // Already initialized
+      // Check if it's already initialized error
+      if (err.code !== 'app/duplicate-app') {
+        console.error('Unexpected Firebase Admin initialization error:', err)
+        throw err
+      }
     }
   }
   

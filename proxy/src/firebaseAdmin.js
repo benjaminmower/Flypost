@@ -21,6 +21,12 @@ function initializeFirebaseAdmin() {
     return null
   }
 
+  // Check if already initialized
+  if (admin.apps.length > 0) {
+    firebaseApp = admin.apps[0]
+    return firebaseApp
+  }
+
   try {
     // Initialize with minimal config - ADC will be used automatically in Cloud Run
     firebaseApp = admin.initializeApp({
