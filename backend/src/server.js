@@ -11,7 +11,7 @@ import dotenv from 'dotenv'
 import rateLimit from 'express-rate-limit'
 import { parseEventWithLLM } from './llmParser.js'
 import { validateEventData, getSchema } from './validation.js'
-import { storeEvent, getEventsNear, getStorageStats, clearEvents, findEventByIdentity } from './storage.js'
+import { storeEvent, getEventsNear, getStorageStats, clearEvents, findEventByIdentity, getEventById } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
 import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.js'
@@ -19,7 +19,7 @@ import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.
 import { sanitizeEvent } from './utils/northStarEnforcer.js'
 import { mergeSources, validateSource } from './utils/sourceProvenance.js'
 import { enrichEventMetadata, normalizeEventDates } from './utils/eventEnrichment.js'
-import { toDiscoveryEventsV1 } from './utils/discoveryMapper.js'
+import { toDiscoveryEventsV1, toDiscoveryEventV1 } from './utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
 
 dotenv.config()
@@ -89,6 +89,41 @@ const readLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+// Stricter rate limiter for anonymous public access (no brokerage_id or key)
+const publicReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Tighter limit for public anonymous access
+  message: { success: false, error: 'Too many anonymous requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+// Anomaly detection: track requests per IP
+const ipRequestTracker = new Map()
+const ANOMALY_THRESHOLD = 50 // requests per 5 minutes
+const ANOMALY_WINDOW_MS = 5 * 60 * 1000 // 5 minutes
+
+function trackAndDetectAnomaly(ip) {
+  const now = Date.now()
+  
+  if (!ipRequestTracker.has(ip)) {
+    ipRequestTracker.set(ip, [])
+  }
+  
+  const requests = ipRequestTracker.get(ip)
+  // Remove old requests outside the window
+  const recentRequests = requests.filter(timestamp => now - timestamp < ANOMALY_WINDOW_MS)
+  recentRequests.push(now)
+  ipRequestTracker.set(ip, recentRequests)
+  
+  if (recentRequests.length > ANOMALY_THRESHOLD) {
+    console.warn(`⚠️  ANOMALY DETECTED: IP ${ip} made ${recentRequests.length} requests in ${ANOMALY_WINDOW_MS / 1000}s`)
+    return true
+  }
+  
+  return false
+}
+
 // Request logging
 app.use((req, res, next) => {
   console.log(`📡 ${req.method} ${req.path}`)
@@ -119,12 +154,33 @@ function getBrokerageIdFromRequest(req, source) {
   if (headerId) return headerId
 
   if (source === 'body') {
-    return (req.body && req.body.brokerageId) || null
+    return (req.body && (req.body.brokerageId || req.body.brokerage_id)) || null
   }
   if (source === 'query') {
-    return (req.query && req.query.brokerageId) || null
+    return (req.query && (req.query.brokerageId || req.query.brokerage_id)) || null
   }
   return null
+}
+
+// Helper: reduce geo precision for public aggregate queries
+function reduceGeoPrecision(lat, lng, precision = 2) {
+  return {
+    latitude: parseFloat(lat.toFixed(precision)),
+    longitude: parseFloat(lng.toFixed(precision))
+  }
+}
+
+// Helper: determine access tier (public vs brokerage-scoped)
+function getAccessTier(req) {
+  const brokerageId = getBrokerageIdFromRequest(req, 'query')
+  // CodeQL: api_key in query is acceptable for read-only public API
+  // Prefer header (x-api-key) but allow query param for AI plugin compatibility
+  const hasApiKey = req.get('x-api-key') || req.query.api_key
+  
+  if (brokerageId || hasApiKey) {
+    return 'brokerage' // Full fidelity
+  }
+  return 'public' // Reduced precision and fewer fields
 }
 
 // Health
@@ -364,14 +420,45 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
   }
 })
 
+// Dynamic rate limiting middleware based on access tier
+function applyTieredRateLimit(req, res, next) {
+  const accessTier = getAccessTier(req)
+  if (accessTier === 'public') {
+    return publicReadLimiter(req, res, next)
+  }
+  return readLimiter(req, res, next)
+}
+
 // Events near (with optional brokerage filter) - Discovery V1 Contract
-app.get('/v1/events/near', readLimiter, async (req, res) => {
+app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
   try {
+    // CodeQL: lat/lng from query params is acceptable - these are public geographic coordinates
+    // Validate to prevent injection attacks
     const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
     const longitude = parseFloat(
       req.query.lng || req.query.longitude || '-118.4912'
     )
     const radius = parseFloat(req.query.radius || '10')
+    
+    // Validate coordinate ranges
+    if (isNaN(latitude) || latitude < -90 || latitude > 90) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid latitude: must be between -90 and 90'
+      })
+    }
+    if (isNaN(longitude) || longitude < -180 || longitude > 180) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid longitude: must be between -180 and 180'
+      })
+    }
+    if (isNaN(radius) || radius < 0 || radius > 100) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid radius: must be between 0 and 100 km'
+      })
+    }
 
     const useFirestore = isFirestoreEnabled()
 
@@ -379,10 +466,21 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
     const brokerageId =
       getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId || null
 
+    // Determine access tier for two-tier access control
+    const accessTier = getAccessTier(req)
+    
+    // Track and detect anomalies
+    const clientIp = req.ip || req.connection.remoteAddress
+    trackAndDetectAnomaly(clientIp)
+
+    // Date filtering parameters (ISO 8601 date-time strings)
+    const startFilter = req.query.start ? new Date(req.query.start) : null
+    const endFilter = req.query.end ? new Date(req.query.end) : null
+
     console.log(
       `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${
         req.path
-      } lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radius}km (brokerageId=${brokerageId || 'ALL'})`
+      } lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radius}km (brokerageId=${brokerageId || 'ALL'}, tier=${accessTier}, dateRange=${startFilter ? startFilter.toISOString() : 'none'} to ${endFilter ? endFilter.toISOString() : 'none'})`
     )
 
     const events = await getEventsNear(latitude, longitude, radius, useFirestore)
@@ -398,8 +496,26 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
       )
     }
 
+    // Date range filtering
+    if (startFilter || endFilter) {
+      filteredEvents = filteredEvents.filter(ev => {
+        const eventStart = ev.startDate ? new Date(ev.startDate) : null
+        const eventEnd = ev.endDate ? new Date(ev.endDate) : eventStart
+
+        // Event must overlap with the requested date range
+        if (startFilter && eventEnd && eventEnd < startFilter) {
+          return false // Event ends before requested start
+        }
+        if (endFilter && eventStart && eventStart > endFilter) {
+          return false // Event starts after requested end
+        }
+        return true
+      })
+    }
+
     // Map to Discovery V1 format (allowlist registry-safe fields only)
-    const discoveryEvents = toDiscoveryEventsV1(filteredEvents)
+    // Pass access tier for field restrictions
+    const discoveryEvents = toDiscoveryEventsV1(filteredEvents, { accessTier })
 
     // Build Discovery V1 response
     let response = {
@@ -408,7 +524,8 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
       events: discoveryEvents,
       meta: {
         count: discoveryEvents.length,
-        radiusKm: radius
+        radiusKm: radius,
+        accessTier
       }
     }
 
@@ -421,6 +538,92 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve events',
+      details: error.message
+    })
+  }
+})
+
+// Get single event by ID - Discovery V1 Contract
+app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
+  try {
+    const { event_id } = req.params
+    
+    if (!event_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'event_id parameter is required'
+      })
+    }
+
+    // Determine access tier for two-tier access control
+    const accessTier = getAccessTier(req)
+    
+    // Track and detect anomalies
+    const clientIp = req.ip || req.connection.remoteAddress
+    trackAndDetectAnomaly(clientIp)
+
+    console.log(
+      `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${req.path} (eventId=${event_id}, tier=${accessTier})`
+    )
+
+    // Try to get event from storage (wrap in try-catch for safety)
+    let event = null
+    try {
+      event = getEventById(event_id)
+    } catch (storageError) {
+      console.error('❌ Storage error:', storageError)
+      throw storageError
+    }
+    
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found',
+        eventId: event_id
+      })
+    }
+
+    // Check brokerage isolation if brokerageId is provided
+    const brokerageId = getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId
+    if (brokerageId) {
+      if (event.brokerageId !== brokerageId && event.flypost?.brokerageId !== brokerageId) {
+        return res.status(404).json({
+          success: false,
+          error: 'Event not found',
+          eventId: event_id
+        })
+      }
+    }
+
+    // Map to Discovery V1 format (allowlist registry-safe fields only)
+    const discoveryEvent = toDiscoveryEventV1(event, { accessTier })
+
+    if (!discoveryEvent) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to format event'
+      })
+    }
+
+    // Build Discovery V1 response
+    let response = {
+      success: true,
+      schemaVersion: 'discovery.v1',
+      event: discoveryEvent,
+      meta: {
+        accessTier
+      }
+    }
+
+    // Apply runtime sanitizer to strip any forbidden keys that might have leaked
+    response = sanitizeDiscoveryResponse(response)
+
+    res.json(response)
+  } catch (error) {
+    console.error('❌ Error retrieving event:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve event',
       details: error.message
     })
   }
