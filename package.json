@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "build:ask": "cd frontend_ask && npm install && npm run build",
+    "build:post": "cd frontend_post && npm install && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "example": "tsx examples/flypost-agent.ts",

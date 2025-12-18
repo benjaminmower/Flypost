@@ -11,6 +11,12 @@
         body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; }
         .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% -20%, #2f195f 0%, #060810 80%); z-index: -1; }
         .text-glow { background: linear-gradient(to right, #d82e7e, #f7f7f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .status { margin-top: 1rem; padding: 1rem; border-radius: 0.5rem; }
+        .status.hidden { display: none; }
+        .status.info { background-color: rgba(64, 201, 162, 0.1); border: 1px solid rgba(64, 201, 162, 0.3); }
+        .status.success { background-color: rgba(64, 201, 162, 0.2); border: 1px solid rgba(64, 201, 162, 0.5); }
+        .status.error { background-color: rgba(216, 46, 126, 0.1); border: 1px solid rgba(216, 46, 126, 0.3); }
+        .hidden { display: none; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
@@ -22,10 +28,36 @@
         <div class="text-4xl font-black text-hot_berry uppercase tracking-tighter transform rotate-[-2deg]">POST</div>
     </nav>
 
-    <main class="max-w-3xl mt-20">
+    <main class="max-w-3xl mt-20 w-full">
         <h1 class="text-6xl md:text-8xl font-bold mb-6 tracking-tighter italic">Market your <span class="text-glow">Listing.</span></h1>
         <p class="text-air_force_blue-700 text-lg mb-12">The agent dashboard to capture leads and manage open houses with AI.</p>
-        <button class="bg-bright_snow text-ink_black px-12 py-5 rounded-full font-black text-lg hover:bg-hot_berry hover:text-white transition-all transform hover:scale-105">Post a Listing</button>
+        
+        <!-- Auth Section -->
+        <div id="auth-section" class="max-w-xl mx-auto">
+            <div class="bg-white/5 border border-hot_berry/30 p-6 rounded-2xl">
+                <h2 class="text-2xl font-bold mb-4">Sign In to Post Events</h2>
+                <p class="text-air_force_blue-700 mb-6">We'll send you a magic link to sign in securely.</p>
+                <div class="flex gap-2">
+                    <input id="auth-email" type="email" placeholder="your@email.com" class="bg-transparent border border-bright_snow/20 flex-grow p-3 rounded-lg focus:outline-none focus:border-hot_berry text-white">
+                    <button id="send-link-btn" class="bg-hot_berry text-white px-6 py-3 rounded-lg font-bold hover:bg-hot_berry/90 transition">Send Link</button>
+                </div>
+                <div id="auth-status" class="status info mt-4">Not signed in.</div>
+            </div>
+        </div>
+
+        <!-- Publishing Section (hidden until signed in) -->
+        <div id="publish-section" class="hidden max-w-xl mx-auto">
+            <button id="signout-btn" class="mb-4 text-sm text-air_force_blue-700 hover:text-bright_snow transition">Sign Out</button>
+            <form id="event-form" class="bg-white/5 border border-hot_berry/30 p-6 rounded-2xl">
+                <h2 class="text-2xl font-bold mb-4">Publish Your Event</h2>
+                <textarea id="event-input" rows="5" placeholder="Open house this Saturday 2-4pm at 123 Main St, Santa Monica..." class="bg-transparent border border-bright_snow/20 w-full p-3 rounded-lg focus:outline-none focus:border-hot_berry text-white mb-4"></textarea>
+                <button id="publish-btn" type="submit" class="bg-bright_snow text-ink_black px-8 py-3 rounded-full font-black text-lg hover:bg-hot_berry hover:text-white transition-all transform hover:scale-105 w-full">Publish Event</button>
+            </form>
+            <div id="publish-status" class="status hidden"></div>
+            <pre id="publish-result" class="hidden mt-4 p-4 bg-white/5 border border-mint_leaf/30 rounded-lg text-left text-xs overflow-auto max-h-64"></pre>
+        </div>
     </main>
+    
+    <script type="module" src="/src/main.js"></script>
 </body>
 </html>
