@@ -3,8 +3,8 @@ info:
   title: Flypost Ask - Public Discovery API
   description: |
     Read-only public API for discovering real estate events (open houses, garage sales, etc.).
-    This API provides two endpoints for event discovery with optional date range filtering
-    and two-tier access control (public aggregate vs brokerage-scoped).
+    This API provides two endpoints for event discovery with optional date range filtering.
+    All responses are Layer-1 registry-safe, with no Layer-2 intelligence fields.
   version: 1.0.0
   contact:
     name: Flypost Support
@@ -16,7 +16,7 @@ info:
 
 servers:
   - url: https://api.goflypost.com/v1
-    description: Production API server
+    description: Production server
   - url: http://localhost:3001/v1
     description: Development server
 
@@ -30,10 +30,7 @@ paths:
       summary: Find events near a location
       description: |
         Retrieves events near a specified geographic location within a given radius.
-        Supports optional date range filtering and pagination.
-        
-        **Uniformly Layer-1**: All users receive the same data. No tiering, no redaction variations.
-        Rate limit: 500 requests per 15 minutes.
+        Supports optional date range filtering for time-based queries.
       operationId: getEventsNear
       tags:
         - discovery
@@ -91,39 +88,6 @@ paths:
             type: string
             format: date-time
           example: "2025-12-31T23:59:59Z"
-        - name: limit
-          in: query
-          description: Maximum number of results to return (default 25, max 50)
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 50
-            default: 25
-          example: 25
-        - name: cursor
-          in: query
-          description: Pagination cursor from previous response
-          required: false
-          schema:
-            type: string
-          example: "evt_20250115_abc123"
-        - name: sort
-          in: query
-          description: Sort order for results
-          required: false
-          schema:
-            type: string
-            enum: [distance, startDate]
-            default: distance
-          example: "distance"
-        - name: brokerage_id
-          in: query
-          description: Optional brokerage identifier for scoped access (enables full fidelity)
-          required: false
-          schema:
-            type: string
-          example: "brokerage_abc123"
       responses:
         '200':
           description: Successful response with list of events
@@ -153,10 +117,6 @@ paths:
                         type: number
                         description: Search radius in kilometers
                         example: 10
-                      cursor:
-                        type: string
-                        description: Cursor for next page (if more results available)
-                        example: "evt_20250115_abc123"
         '400':
           description: Bad request
           content:
@@ -179,11 +139,7 @@ paths:
   /events/{event_id}:
     get:
       summary: Get a single event by ID
-      description: |
-        Retrieves a single event by its unique event ID.
-        
-        **Uniformly Layer-1**: All users receive the same data. No tiering, no redaction variations.
-        Rate limit: 500 requests per 15 minutes.
+      description: Retrieves a single event by its unique event ID.
       operationId: getEventById
       tags:
         - discovery
@@ -195,13 +151,6 @@ paths:
           schema:
             type: string
           example: "evt_20250115_abc123"
-        - name: brokerage_id
-          in: query
-          description: Optional brokerage identifier for scoped access (enables full fidelity)
-          required: false
-          schema:
-            type: string
-          example: "brokerage_abc123"
       responses:
         '200':
           description: Successful response with event details
@@ -218,9 +167,6 @@ paths:
                     example: "discovery.v1"
                   event:
                     $ref: '#/components/schemas/DiscoveryEvent'
-                  meta:
-                    type: object
-                    description: Response metadata (empty object, reserved for future use)
         '404':
           description: Event not found
           content:
@@ -244,9 +190,7 @@ components:
   schemas:
     DiscoveryEvent:
       type: object
-      description: |
-        Event in Discovery V1 format (Layer-1 data only).
-        All users receive the same full-fidelity data. No tiering or redaction variations.
+      description: Event in Discovery V1 format (Layer-1 registry-safe only).
       required:
         - eventId
         - eventIdentity
@@ -272,7 +216,7 @@ components:
           example: "Beautiful 4BR Home in Santa Monica"
         description:
           type: string
-          description: Event description (truncated to max 500 characters)
+          description: Event description (truncated to 500 chars)
           example: "Stunning modern home with ocean views..."
         startDate:
           type: string
@@ -286,7 +230,7 @@ components:
           example: "2025-01-15T14:00:00Z"
         address:
           type: object
-          description: Event address (full address for all users)
+          description: Event address
           properties:
             streetAddress:
               type: string
@@ -310,23 +254,18 @@ components:
               example: "US"
         geo:
           type: object
-          description: Geographic coordinates (full precision for all users)
+          description: Geographic coordinates
           properties:
             latitude:
               type: number
               format: double
-              description: Latitude (full precision)
-              example: 34.052235
+              description: Latitude
+              example: 34.0522
             longitude:
               type: number
               format: double
-              description: Longitude (full precision)
-              example: -118.243683
-        detailsUrl:
-          type: string
-          format: uri
-          description: Canonical URL for event details (anti-parasitism)
-          example: "https://goflypost.com/events/evt_20250115_abc123"
+              description: Longitude
+              example: -118.2437
         submissionTimestamp:
           type: string
           format: date-time
@@ -349,17 +288,5 @@ components:
         details:
           type: string
           description: Additional error details (optional)
-
-  securitySchemes:
-    ApiKeyHeader:
-      type: apiKey
-      in: header
-      name: x-api-key
-      description: Optional API key for authenticated access
-    BrokerageId:
-      type: apiKey
-      in: query
-      name: brokerage_id
-      description: Optional brokerage identifier for scoped access
 
 security: []
