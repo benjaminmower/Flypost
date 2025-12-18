@@ -25,7 +25,7 @@ import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
 dotenv.config()
 
 const app = express()
-const port = process.env.PORT || 3001
+const port = process.env.PORT || 8080
 
 // Configuration constants
 const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.3') // 300 meters default
