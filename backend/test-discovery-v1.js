@@ -425,11 +425,11 @@ function testArrayMapping() {
     failed++
   }
   
-  if (discoveryEvents[1].category === 'garage-sale') {
-    console.log('   ✅ Second event category preserved')
+  if (discoveryEvents[1].category === 'garage_sale') {
+    console.log('   ✅ Second event category normalized (garage-sale → garage_sale)')
     passed++
   } else {
-    console.log('   ❌ Second event category not preserved')
+    console.log(`   ❌ Second event category not normalized correctly: ${discoveryEvents[1].category}`)
     failed++
   }
   
