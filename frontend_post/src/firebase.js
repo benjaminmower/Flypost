@@ -21,16 +21,18 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 }
 
-// Debug log (visible in console only, does NOT leak keys)
-console.log('[Flypost Post] FirebaseConfig loaded:', {
-  apiKeyPresent: !!firebaseConfig.apiKey,
-  authDomain: firebaseConfig.authDomain,
-  projectId: firebaseConfig.projectId,
-  appIdPresent: !!firebaseConfig.appId
-})
+// Debug log (only in development)
+if (import.meta.env.DEV) {
+  console.log('[Flypost Post] FirebaseConfig loaded:', {
+    apiKeyPresent: !!firebaseConfig.apiKey,
+    authDomain: firebaseConfig.authDomain,
+    projectId: firebaseConfig.projectId,
+    appIdPresent: !!firebaseConfig.appId
+  })
+}
 
 if (!firebaseConfig.apiKey) {
-  console.error('[Flypost Post] ERROR: Missing Firebase API key. Check Netlify env vars.')
+  console.error('[Flypost Post] ERROR: Missing Firebase API key. Check environment configuration.')
 }
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
