@@ -154,7 +154,12 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     const brokerageId =
       getBrokerageIdFromRequest(req, 'body') || body.brokerageId || null
 
-    if (!brokerageId) {
+    // Check if this is a Firebase-authenticated request
+    const isFirebaseAuth = req.get('x-flypost-auth-provider') === 'firebase'
+
+    // Require brokerageId for non-Firebase writes (machine/static-token flows)
+    // Firebase-authenticated browser writes can proceed without brokerageId
+    if (!brokerageId && !isFirebaseAuth) {
       return res.status(400).json({
         success: false,
         error:
@@ -185,7 +190,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     }
 
     console.log(
-      `🤖 Processing (brokerageId=${brokerageId}): "${naturalLanguageInput.substring(
+      `🤖 Processing (brokerageId=${brokerageId || 'none'}, firebaseAuth=${isFirebaseAuth}): "${naturalLanguageInput.substring(
         0,
         100
       )}..."`
@@ -327,13 +332,13 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       `🔐 Computed event hash: ${eventHash.value.substring(
         0,
         16
-      )}... (brokerageId=${brokerageId})`
+      )}... (brokerageId=${brokerageId || 'none'})`
     )
 
     // 11) Store (will handle upsert via eventIdentity)
     const storedEvent = await storeEvent(eventToStore)
     console.log(
-      `📦 ${isUpdate ? 'Updated' : 'Stored'} event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId})`
+      `📦 ${isUpdate ? 'Updated' : 'Stored'} event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId || 'none'})`
     )
 
     res.json({
