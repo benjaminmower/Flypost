@@ -166,7 +166,7 @@ module.exports = function createForward() {
         if (origin === 'https://ask.goflypost.com') {
           // ask.goflypost.com is read-only - reject all POST except /api/chat (already handled above)
           setCors(res, origin)
-          console.log(`🔒 Read-only origin ${origin} attempted write to ${req.originalUrl}`)
+          console.log(`🔒 Read-only origin ${origin} attempted write to ${originalPath}`)
           return res.status(401).json({
             success: false,
             error: 'ask.goflypost.com is read-only. Writes are not allowed.',
@@ -221,7 +221,7 @@ module.exports = function createForward() {
 
           if (!firebaseUser && !hasValidStaticToken) {
             setCors(res, origin)
-            console.log(`🔒 No valid auth for ${req.method} ${req.originalUrl} from ${origin || 'no-origin'}`)
+            console.log(`🔒 No valid auth for ${req.method} ${originalPath} from ${origin || 'no-origin'}`)
             return res.status(401).json({
               success: false,
               error: 'Unauthorized: Missing or invalid authentication',
@@ -231,7 +231,7 @@ module.exports = function createForward() {
           }
 
           if (hasValidStaticToken) {
-            console.log(`✅ Static write token validated for ${req.method} ${req.originalUrl}`)
+            console.log(`✅ Static write token validated for ${req.method} ${originalPath}`)
           }
         }
       }
