@@ -1,0 +1,12 @@
+# Netlify configuration for Flypost Ask site
+# Deploy this at ask.goflypost.com
+
+[build]
+  base = "frontend_ask"
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
