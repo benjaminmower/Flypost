@@ -235,10 +235,12 @@ These files are:
 
 ### Note on ai.json URLs
 
-The `.well-known/ai.json` file currently references `https://app.goflypost.com/openapi.json`. 
-Since both sites will serve `openapi.json` at their own root, you may want to:
-- Update the URL in `frontend/public/.well-known/ai.json` to use a relative path: `"/openapi.json"`
-- Or parameterize it during the build process if different sites need different OpenAPI specs
+The `.well-known/ai.json` file in `frontend/public/` maintains the absolute URL `https://app.goflypost.com/openapi.json` 
+for the existing deployment. During the build process, the copy scripts automatically update the URL to use a relative 
+path (`/openapi.json`) for each new site. This ensures:
+- The original file remains unchanged for existing deployments
+- Each new site references its own `openapi.json` at the root
+- No manual URL updates are needed when deploying to new domains
 
 ## Security Notes
 
