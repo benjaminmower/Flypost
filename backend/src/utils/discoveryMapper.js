@@ -10,6 +10,114 @@
 import { computeCanonicalKey } from './canonicalKey.js'
 
 /**
+ * Valid Discovery API category enum values (snake_case singular)
+ */
+const VALID_CATEGORIES = [
+  'open_house',
+  'garage_sale',
+  'estate_sale',
+  'moving_sale',
+  'yard_sale',
+  'other'
+]
+
+/**
+ * Category normalization mappings
+ * Maps various input formats to canonical snake_case singular values
+ */
+const CATEGORY_MAPPINGS = {
+  // Open house variants
+  'open-houses': 'open_house',
+  'open-house': 'open_house',
+  'open house': 'open_house',
+  'open houses': 'open_house',
+  'openhouse': 'open_house',
+  'openhouses': 'open_house',
+  'open_house': 'open_house',
+  
+  // Garage sale variants
+  'garage-sales': 'garage_sale',
+  'garage-sale': 'garage_sale',
+  'garage sale': 'garage_sale',
+  'garage sales': 'garage_sale',
+  'garagesale': 'garage_sale',
+  'garagesales': 'garage_sale',
+  'garage_sale': 'garage_sale',
+  
+  // Yard sale variants
+  'yard-sales': 'yard_sale',
+  'yard-sale': 'yard_sale',
+  'yard sale': 'yard_sale',
+  'yard sales': 'yard_sale',
+  'yardsale': 'yard_sale',
+  'yardsales': 'yard_sale',
+  'yard_sale': 'yard_sale',
+  
+  // Estate sale variants
+  'estate-sales': 'estate_sale',
+  'estate-sale': 'estate_sale',
+  'estate sale': 'estate_sale',
+  'estate sales': 'estate_sale',
+  'estatesale': 'estate_sale',
+  'estatesales': 'estate_sale',
+  'estate_sale': 'estate_sale',
+  
+  // Moving sale variants
+  'moving-sales': 'moving_sale',
+  'moving-sale': 'moving_sale',
+  'moving sale': 'moving_sale',
+  'moving sales': 'moving_sale',
+  'movingsale': 'moving_sale',
+  'movingsales': 'moving_sale',
+  'moving_sale': 'moving_sale',
+  
+  // Other
+  'other': 'other'
+}
+
+/**
+ * Normalize a category value to Discovery API enum format (snake_case singular)
+ * @param {string} input - Raw category input
+ * @returns {string} - Normalized category value
+ */
+export function normalizeCategory(input) {
+  if (!input || typeof input !== 'string') {
+    return 'other'
+  }
+  
+  // Lowercase and trim
+  const normalized = input.toLowerCase().trim()
+  
+  // Check if it's already a valid category
+  if (VALID_CATEGORIES.includes(normalized)) {
+    return normalized
+  }
+  
+  // Check against mappings
+  if (CATEGORY_MAPPINGS[normalized]) {
+    return CATEGORY_MAPPINGS[normalized]
+  }
+  
+  // Try converting spaces/hyphens to underscores and removing trailing 's'
+  const underscored = normalized.replace(/[\s-]+/g, '_')
+  
+  // Try exact match after underscoring
+  if (VALID_CATEGORIES.includes(underscored)) {
+    return underscored
+  }
+  
+  // Try removing trailing 's' (plural to singular)
+  const singular = underscored.replace(/s$/, '')
+  if (VALID_CATEGORIES.includes(singular)) {
+    return singular
+  }
+  
+  // Default to 'other' for unknown categories
+  console.log(`⚠️  Unknown category "${input}", defaulting to "other"`)
+  return 'other'
+}
+
+/**
  * Computes eventIdentity from event data
  * Uses canonicalKey if available, otherwise generates from address + brokerageId
  * 
@@ -78,8 +186,9 @@ export function toDiscoveryEventV1(event, options = {}) {
   discoveryEvent.eventId = event.flypost?.eventId || event.id
   discoveryEvent.eventIdentity = computeEventIdentity(event)
   
-  // Category
-  discoveryEvent.category = event.flypost?.category || 'open_house'
+  // Category (normalized to snake_case singular enum values)
+  const rawCategory = event.flypost?.category || 'open_house'
+  discoveryEvent.category = normalizeCategory(rawCategory)
   
   // Dates
   if (event.startDate) {
