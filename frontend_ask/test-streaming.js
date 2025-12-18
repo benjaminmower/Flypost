@@ -95,9 +95,9 @@ test('SSE event parsing logic implemented', () => {
 
 // Test 6: Handles token, done, and error event types
 test('Handles token, done, and error SSE events', () => {
-  return apiSource.includes("type: 'token'") || apiSource.includes('type === \'token\'') &&
-         apiSource.includes("type: 'done'") || apiSource.includes('type === \'done\'') &&
-         apiSource.includes("type: 'error'") || apiSource.includes('type === \'error\'')
+  return (apiSource.includes("type: 'token'") || apiSource.includes('type === \'token\'')) &&
+         (apiSource.includes("type: 'done'") || apiSource.includes('type === \'done\'')) &&
+         (apiSource.includes("type: 'error'") || apiSource.includes('type === \'error\''))
 })
 
 // Test 7: Main app maintains conversation history
