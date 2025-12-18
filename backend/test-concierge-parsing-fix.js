@@ -185,16 +185,16 @@ test('OLD parsing (data.data.events) would have returned empty', () => {
     }
   }
 
-  // Simulate OLD incorrect parsing
+  // Simulate OLD incorrect parsing (the bug we fixed)
   const data = mockResponse
-  const oldResult = {
+  const buggyParsingResult = {
     success: true,
     events: data.data?.events || [],  // Wrong: data.data doesn't exist
     total: data.data?.total || 0      // Wrong: data.data doesn't exist
   }
 
-  // OLD parsing would have returned empty
-  const oldWasEmpty = oldResult.events.length === 0 && oldResult.total === 0
+  // OLD buggy parsing would have returned empty
+  const oldWasEmpty = buggyParsingResult.events.length === 0 && buggyParsingResult.total === 0
 
   // NEW parsing (what we fixed) would return the events
   const newResult = {
