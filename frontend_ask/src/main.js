@@ -12,12 +12,47 @@ const chatButton = document.getElementById('chat-button')
 const chatResponse = document.getElementById('chat-response')
 const responseText = document.getElementById('response-text')
 
+// Location state
+let userLocation = null
+let locationRequested = false
+
 // Initialize app
 function init() {
   console.log('🚀 Flypost Ask - Chat Interface Starting...')
   
   if (chatForm) {
     chatForm.addEventListener('submit', handleChatSubmit)
+  }
+}
+
+// Request geolocation permission
+async function requestLocation() {
+  if (locationRequested) {
+    return // Only request once
+  }
+  locationRequested = true
+
+  if (!('geolocation' in navigator)) {
+    console.log('ℹ️ Geolocation not supported')
+    return
+  }
+
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        timeout: 10000,
+        maximumAge: 300000 // Cache for 5 minutes
+      })
+    })
+    
+    userLocation = {
+      lat: position.coords.latitude,
+      lng: position.coords.longitude
+    }
+    console.log('✅ Location obtained:', userLocation)
+  } catch (error) {
+    console.log('ℹ️ Location not available:', error.message)
+    // Don't set userLocation - will proceed without coords
   }
 }
 
@@ -29,6 +64,11 @@ async function handleChatSubmit(e) {
   if (!message) {
     showResponse('Please enter a question.', 'error')
     return
+  }
+
+  // Request location on first submission
+  if (!locationRequested) {
+    await requestLocation()
   }
 
   // Disable input during processing
@@ -43,12 +83,17 @@ async function handleChatSubmit(e) {
   showResponse('🤔 Asking Flypost AI...', 'info')
 
   try {
-    const result = await sendChatMessage(message)
+    const result = await sendChatMessage(message, userLocation)
     console.log('✅ Chat response:', result)
 
     // Display the response
     const responseContent = result.response || result.message || JSON.stringify(result, null, 2)
     showResponse(responseContent, 'success')
+
+    // Show hint if location wasn't available
+    if (!userLocation && !responseContent.includes('ZIP') && !responseContent.includes('zip')) {
+      showResponse(responseContent + '\n\n💡 Tip: For better results, include a ZIP code like 90254.', 'success')
+    }
 
     // Clear input
     if (chatInput) chatInput.value = ''
