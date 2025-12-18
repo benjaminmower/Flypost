@@ -1,0 +1,17 @@
+# Netlify configuration for Flypost Post site
+# Deploy this at post.goflypost.com
+
+[build]
+  base = "frontend_post"
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/finishSignIn"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
