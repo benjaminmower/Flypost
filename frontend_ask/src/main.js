@@ -3,21 +3,38 @@
  * Anonymous chat interface for querying events
  */
 
-import { sendChatMessage } from './api.js'
+import { sendChatMessageStream } from './api.js'
+import { marked } from 'marked'
+
+// Configure marked to disable raw HTML for security
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+  headerIds: false,
+  mangle: false
+})
+// Disable HTML rendering for XSS protection
+marked.use({
+  renderer: {
+    html: () => ''
+  }
+})
 
 // DOM elements
 const chatForm = document.getElementById('chat-form')
 const chatInput = document.getElementById('chat-input')
 const chatButton = document.getElementById('chat-button')
-const chatResponse = document.getElementById('chat-response')
-const responseText = document.getElementById('response-text')
+const chatTranscript = document.getElementById('chat-transcript')
 
-// Location state
+// State
 let userLocation = null
 let locationRequested = false
+let conversationHistory = [] // In-memory history: [{role, content}]
+let isStreaming = false
 
 // Constants
 const LOCATION_CACHE_DURATION = 5 * 60 * 1000 // 5 minutes in milliseconds
+const MAX_HISTORY_LENGTH = 10 // Trim to last 10 messages
 
 // Initialize app
 function init() {
@@ -37,6 +54,7 @@ async function requestLocation() {
 
   if (!('geolocation' in navigator)) {
     console.log('ℹ️ Geolocation not supported')
+    addSystemMessage('💡 Tip: Include your ZIP code or city for location-based results.')
     return
   }
 
@@ -55,7 +73,7 @@ async function requestLocation() {
     console.log('✅ Location obtained:', userLocation)
   } catch (error) {
     console.log('ℹ️ Location not available:', error.message)
-    // Don't set userLocation - will proceed without coords
+    addSystemMessage('💡 Tip: Include your ZIP code or city for location-based results.')
   }
 }
 
@@ -63,9 +81,13 @@ async function requestLocation() {
 async function handleChatSubmit(e) {
   e.preventDefault()
 
+  if (isStreaming) {
+    return // Prevent multiple submissions while streaming
+  }
+
   const message = chatInput?.value.trim()
   if (!message) {
-    showResponse('Please enter a question.', 'error')
+    addErrorMessage('Please enter a question.')
     return
   }
 
@@ -74,55 +96,112 @@ async function handleChatSubmit(e) {
     await requestLocation()
   }
 
-  // Disable input during processing
-  if (chatButton) {
-    chatButton.disabled = true
-    chatButton.textContent = 'Thinking...'
-  }
-  if (chatInput) {
-    chatInput.disabled = true
-  }
+  // Add user message to transcript
+  addUserMessage(message)
+  
+  // Clear input and disable form
+  if (chatInput) chatInput.value = ''
+  setFormDisabled(true)
+  isStreaming = true
 
-  showResponse('🤔 Asking Flypost AI...', 'info')
+  // Create assistant message bubble for streaming
+  const assistantBubble = createMessageBubble('assistant')
+  let assistantContent = ''
 
   try {
-    const result = await sendChatMessage(message, userLocation)
-    console.log('✅ Chat response:', result)
+    // Trim history to last 10 messages before sending
+    const trimmedHistory = conversationHistory.slice(-MAX_HISTORY_LENGTH)
 
-    // Display the response
-    const responseContent = result.response || result.message || JSON.stringify(result, null, 2)
-    showResponse(responseContent, 'success')
-
-    // Show hint if location wasn't available
-    if (!userLocation && !/zip/i.test(responseContent)) {
-      showResponse(responseContent + '\n\n💡 Tip: For better results, include a ZIP code like 90254.', 'success')
-    }
-
-    // Clear input
-    if (chatInput) chatInput.value = ''
+    await sendChatMessageStream(
+      message,
+      userLocation,
+      trimmedHistory,
+      // onToken
+      (token) => {
+        assistantContent += token
+        assistantBubble.innerHTML = marked.parse(assistantContent)
+        scrollToBottom()
+      },
+      // onError
+      (error) => {
+        console.error('❌ Streaming error:', error)
+        if (assistantContent.length === 0) {
+          // No content yet, show error in the bubble
+          assistantBubble.textContent = `Error: ${error.message}`
+          assistantBubble.classList.add('error')
+          assistantBubble.classList.remove('assistant')
+        } else {
+          // Had partial content, add error as separate message
+          addErrorMessage(`Error: ${error.message}`)
+        }
+      },
+      // onDone
+      () => {
+        console.log('✅ Streaming completed')
+        
+        // Add to conversation history
+        conversationHistory.push({ role: 'user', content: message })
+        conversationHistory.push({ role: 'assistant', content: assistantContent })
+        
+        // Re-enable form
+        isStreaming = false
+        setFormDisabled(false)
+        if (chatInput) chatInput.focus()
+      }
+    )
   } catch (error) {
     console.error('❌ Chat error:', error)
-    showResponse(`Error: ${error.message}`, 'error')
-  } finally {
-    // Re-enable input
-    if (chatButton) {
-      chatButton.disabled = false
-      chatButton.textContent = 'Ask AI'
-    }
-    if (chatInput) {
-      chatInput.disabled = false
-      chatInput.focus()
-    }
+    addErrorMessage(`Error: ${error.message}`)
+    isStreaming = false
+    setFormDisabled(false)
+    if (chatInput) chatInput.focus()
   }
 }
 
-// Show response message
-function showResponse(message, type = 'info') {
-  if (!chatResponse || !responseText) return
+// Add user message to transcript
+function addUserMessage(content) {
+  const bubble = createMessageBubble('user')
+  bubble.textContent = content
+  scrollToBottom()
+}
 
-  responseText.textContent = message
-  chatResponse.className = `response ${type}`
-  chatResponse.classList.remove('hidden')
+// Add system message to transcript
+function addSystemMessage(content) {
+  const bubble = createMessageBubble('system')
+  bubble.textContent = content
+  scrollToBottom()
+}
+
+// Add error message to transcript
+function addErrorMessage(content) {
+  const bubble = createMessageBubble('error')
+  bubble.textContent = content
+  scrollToBottom()
+}
+
+// Create a message bubble and append to transcript
+function createMessageBubble(type) {
+  if (!chatTranscript) return null
+  
+  const bubble = document.createElement('div')
+  bubble.className = `message ${type}`
+  chatTranscript.appendChild(bubble)
+  return bubble
+}
+
+// Scroll transcript to bottom
+function scrollToBottom() {
+  if (!chatTranscript) return
+  chatTranscript.scrollTop = chatTranscript.scrollHeight
+}
+
+// Enable/disable form during streaming
+function setFormDisabled(disabled) {
+  if (chatInput) chatInput.disabled = disabled
+  if (chatButton) {
+    chatButton.disabled = disabled
+    chatButton.textContent = disabled ? 'Thinking...' : 'Ask AI'
+  }
 }
 
 // Start app
