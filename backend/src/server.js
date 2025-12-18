@@ -418,8 +418,17 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
   }
 })
 
+// Dynamic rate limiting middleware based on access tier
+function applyTieredRateLimit(req, res, next) {
+  const accessTier = getAccessTier(req)
+  if (accessTier === 'public') {
+    return publicReadLimiter(req, res, next)
+  }
+  return readLimiter(req, res, next)
+}
+
 // Events near (with optional brokerage filter) - Discovery V1 Contract
-app.get('/v1/events/near', readLimiter, async (req, res) => {
+app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
   try {
     const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
     const longitude = parseFloat(
@@ -511,7 +520,7 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
 })
 
 // Get single event by ID - Discovery V1 Contract
-app.get('/v1/events/:event_id', readLimiter, async (req, res) => {
+app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
   try {
     const { event_id } = req.params
     
@@ -533,8 +542,14 @@ app.get('/v1/events/:event_id', readLimiter, async (req, res) => {
       `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${req.path} (eventId=${event_id}, tier=${accessTier})`
     )
 
-    // Try to get event from storage
-    const event = getEventById(event_id)
+    // Try to get event from storage (wrap in try-catch for safety)
+    let event = null
+    try {
+      event = getEventById(event_id)
+    } catch (storageError) {
+      console.error('❌ Storage error:', storageError)
+      throw storageError
+    }
     
     if (!event) {
       return res.status(404).json({
