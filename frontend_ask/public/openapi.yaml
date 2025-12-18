@@ -3,8 +3,8 @@ info:
   title: Flypost Ask - Public Discovery API
   description: |
     Read-only public API for discovering real estate events (open houses, garage sales, etc.).
-    This API provides two endpoints for event discovery with optional date range filtering
-    and two-tier access control (public aggregate vs brokerage-scoped).
+    This API provides two endpoints for event discovery with optional date range filtering.
+    All responses are Layer-1 registry-safe, with no Layer-2 intelligence fields.
   version: 1.0.0
   contact:
     name: Flypost Support
@@ -15,9 +15,9 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0.html
 
 servers:
-  - url: https://ask.goflypost.com
+  - url: https://api.goflypost.com/v1
     description: Production server
-  - url: http://localhost:3001
+  - url: http://localhost:3001/v1
     description: Development server
 
 tags:
@@ -25,17 +25,12 @@ tags:
     description: Event discovery endpoints (read-only)
 
 paths:
-  /v1/events/near:
+  /events/near:
     get:
       summary: Find events near a location
       description: |
         Retrieves events near a specified geographic location within a given radius.
-        Supports optional date range filtering and two-tier access control.
-        
-        **Access Tiers:**
-        - **Public**: No brokerage_id or API key. Returns approximate locations (reduced geo precision)
-          and fewer fields.
-        - **Brokerage-scoped**: With brokerage_id and/or API key. Returns full fidelity data.
+        Supports optional date range filtering for time-based queries.
       operationId: getEventsNear
       tags:
         - discovery
@@ -87,13 +82,6 @@ paths:
             type: string
             format: date-time
           example: "2025-12-31T23:59:59Z"
-        - name: brokerage_id
-          in: query
-          description: Optional brokerage identifier for scoped access (enables full fidelity)
-          required: false
-          schema:
-            type: string
-          example: "brokerage_abc123"
       responses:
         '200':
           description: Successful response with list of events
@@ -121,10 +109,6 @@ paths:
                       radiusKm:
                         type: number
                         example: 10
-                      accessTier:
-                        type: string
-                        enum: [public, brokerage]
-                        example: "public"
         '400':
           description: Bad request
           content:
@@ -144,12 +128,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /v1/events/{event_id}:
+  /events/{event_id}:
     get:
       summary: Get a single event by ID
-      description: |
-        Retrieves a single event by its unique event ID.
-        Supports two-tier access control based on brokerage_id presence.
+      description: Retrieves a single event by its unique event ID.
       operationId: getEventById
       tags:
         - discovery
@@ -161,13 +143,6 @@ paths:
           schema:
             type: string
           example: "evt_20250115_abc123"
-        - name: brokerage_id
-          in: query
-          description: Optional brokerage identifier for scoped access (enables full fidelity)
-          required: false
-          schema:
-            type: string
-          example: "brokerage_abc123"
       responses:
         '200':
           description: Successful response with event details
@@ -184,13 +159,6 @@ paths:
                     example: "discovery.v1"
                   event:
                     $ref: '#/components/schemas/DiscoveryEvent'
-                  meta:
-                    type: object
-                    properties:
-                      accessTier:
-                        type: string
-                        enum: [public, brokerage]
-                        example: "brokerage"
         '404':
           description: Event not found
           content:
@@ -214,10 +182,7 @@ components:
   schemas:
     DiscoveryEvent:
       type: object
-      description: |
-        Event in Discovery V1 format. Fields returned depend on access tier:
-        - Public tier: approximate geo, city/region only, limited metadata
-        - Brokerage tier: full precision geo, complete address, full metadata
+      description: Event in Discovery V1 format (Layer-1 registry-safe only).
       required:
         - eventId
         - eventIdentity
@@ -243,7 +208,7 @@ components:
           example: "Beautiful 4BR Home in Santa Monica"
         description:
           type: string
-          description: Event description (truncated based on access tier)
+          description: Event description (truncated to 500 chars)
           example: "Stunning modern home with ocean views..."
         startDate:
           type: string
@@ -257,11 +222,11 @@ components:
           example: "2025-01-15T14:00:00Z"
         address:
           type: object
-          description: Event address (detail level depends on access tier)
+          description: Event address
           properties:
             streetAddress:
               type: string
-              description: Street address (brokerage tier only)
+              description: Street address
               example: "123 Main Street"
             addressLocality:
               type: string
@@ -273,7 +238,7 @@ components:
               example: "CA"
             postalCode:
               type: string
-              description: Postal code (brokerage tier only)
+              description: Postal code
               example: "90001"
             addressCountry:
               type: string
@@ -281,26 +246,26 @@ components:
               example: "US"
         geo:
           type: object
-          description: Geographic coordinates (precision depends on access tier)
+          description: Geographic coordinates
           properties:
             latitude:
               type: number
               format: double
-              description: Latitude (reduced precision for public tier)
-              example: 34.05
+              description: Latitude
+              example: 34.0522
             longitude:
               type: number
               format: double
-              description: Longitude (reduced precision for public tier)
-              example: -118.24
+              description: Longitude
+              example: -118.2437
         submissionTimestamp:
           type: string
           format: date-time
-          description: When event was submitted (brokerage tier only)
+          description: When event was submitted
           example: "2025-01-01T12:00:00Z"
         updateCount:
           type: integer
-          description: Number of updates to this event (brokerage tier only)
+          description: Number of updates to this event
           example: 2
 
     Error:
@@ -315,17 +280,5 @@ components:
         details:
           type: string
           description: Additional error details (optional)
-
-  securitySchemes:
-    ApiKeyHeader:
-      type: apiKey
-      in: header
-      name: x-api-key
-      description: Optional API key for authenticated access
-    BrokerageId:
-      type: apiKey
-      in: query
-      name: brokerage_id
-      description: Optional brokerage identifier for scoped access
 
 security: []
