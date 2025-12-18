@@ -124,9 +124,13 @@ function trackAndDetectAnomaly(ip) {
   return false
 }
 
-// Request logging
+// Request logging and JSON response headers
 app.use((req, res, next) => {
   console.log(`📡 ${req.method} ${req.path}`)
+  
+  // Ensure all responses have JSON content type
+  res.setHeader('Content-Type', 'application/json')
+  
   next()
 })
 
@@ -1203,6 +1207,33 @@ if (process.env.NODE_ENV !== 'production') {
     })
   })
 }
+
+// Global error handler - ensure all errors return JSON
+app.use((err, req, res, next) => {
+  console.error('❌ Unhandled error:', err)
+  
+  // Set JSON content type
+  res.setHeader('Content-Type', 'application/json')
+  
+  // Determine status code
+  const statusCode = err.statusCode || err.status || 500
+  
+  // Return JSON error
+  res.status(statusCode).json({
+    success: false,
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+  })
+})
+
+// 404 handler - return JSON for not found routes
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Route not found',
+    path: req.path
+  })
+})
 
 app.listen(port, () => {
   console.log(
