@@ -303,12 +303,19 @@ function testLimitValidation() {
     { input: '10', expected: 10, desc: 'Valid limit: 10' },
     { input: '50', expected: 50, desc: 'Max limit: 50' },
     { input: '100', expected: 50, desc: 'Over max: clamped to 50' },
-    { input: '0', expected: 25, desc: 'Zero: defaults to 25 (parseInt("0") || 25 = 25 due to falsy)' },
+    { input: '0', expected: 1, desc: 'Zero: clamped to min 1' },
     { input: '-5', expected: 1, desc: 'Negative: clamped to 1' }
   ]
   
   for (const tc of testCases) {
-    const limit = Math.min(Math.max(parseInt(tc.input) || 25, 1), 50)
+    // Simulate the actual logic from server.js
+    let limit = 25
+    if (tc.input !== undefined && tc.input !== null && tc.input !== '') {
+      const parsedLimit = parseInt(tc.input)
+      if (!isNaN(parsedLimit)) {
+        limit = Math.min(Math.max(parsedLimit, 1), 50)
+      }
+    }
     assert(limit === tc.expected, `${tc.desc}: ${limit} === ${tc.expected}`)
   }
   

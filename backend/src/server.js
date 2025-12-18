@@ -530,7 +530,14 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
     }
 
     // Pagination parameters
-    const limit = Math.min(Math.max(parseInt(req.query.limit) || 25, 1), 50)
+    // Handle limit: if not provided or invalid, use 25; if provided, clamp to 1-50
+    let limit = 25
+    if (req.query.limit !== undefined && req.query.limit !== null && req.query.limit !== '') {
+      const parsedLimit = parseInt(req.query.limit)
+      if (!isNaN(parsedLimit)) {
+        limit = Math.min(Math.max(parsedLimit, 1), 50)
+      }
+    }
     const cursor = req.query.cursor || null
     const sort = req.query.sort || 'distance'
     
