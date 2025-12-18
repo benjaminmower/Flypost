@@ -1,4 +1,4 @@
-// v16 – Flypost forwarder with multi-token auth + tenancy mapping
+// v17 – Flypost forwarder with multi-token auth + tenancy mapping
 // - Supports multiple static write tokens (global + per brokerage)
 // - Derives brokerageId from the validated token
 // - Injects x-flypost-brokerage-id header to backend
@@ -79,6 +79,15 @@ module.exports = function createForward() {
   function extractBearer(authHeader) {
     if (!authHeader) return ''
     return authHeader.replace(/^Bearer\s+/i, '').trim()
+  }
+
+  function safeErrorSummary(err) {
+    if (!err) return null
+    return {
+      name: err.name,
+      code: err.code,
+      message: err.message,
+    }
   }
 
   async function verifyFirebaseIdToken(authHeader) {
@@ -186,6 +195,15 @@ module.exports = function createForward() {
           } else {
             setCors(res, origin)
             console.log(`🔒 Firebase auth required for ${origin} but ${firebaseAuthResult.reason}`)
+
+            // NEW: log the underlying verification error (safe, no token logged)
+            if (firebaseAuthResult.error) {
+              console.log(
+                `🔍 Firebase verify error (id=${requestId}):`,
+                JSON.stringify(safeErrorSummary(firebaseAuthResult.error))
+              )
+            }
+
             return res.status(401).json({
               success: false,
               error: 'Firebase authentication required for browser writes',
@@ -202,6 +220,14 @@ module.exports = function createForward() {
           const firebaseAuthResult = await verifyFirebaseIdToken(bearer)
           if (firebaseAuthResult.ok) {
             firebaseUser = firebaseAuthResult.decoded
+          } else if (firebaseAuthResult.reason === 'verify-failed') {
+            // NEW: log verification errors for non-browser origins too (debugging)
+            if (firebaseAuthResult.error) {
+              console.log(
+                `🔍 Firebase verify error (non-browser, id=${requestId}):`,
+                JSON.stringify(safeErrorSummary(firebaseAuthResult.error))
+              )
+            }
           }
 
           let matchedStaticToken = null
