@@ -290,72 +290,80 @@ paths:
 ```
 
 ## Authentication Instructions
-### Current Auth Setup (write-protected)
+
+### Authentication by Surface
+
+Flypost uses **origin-gated authentication** with different requirements for browser, read-only, and machine/GPT writes:
+
+#### For GPT Actions & Server-to-Server (Recommended Setup)
+
 - **Auth type:** API Key (static token)
-- **Scope:** Required for **all POST** requests under `/api/*` (currently `POST /api/parse-and-publish`). The read endpoint `GET /v1/events/near` remains public.
+- **Scope:** Required for **POST** requests to `/api/*` (e.g., `POST /api/parse-and-publish`)
 - **Header:** `X-Flypost-Write-Token`
-- **Value:** Provisioned in the Flypost Cloud Run proxy environment as `FLYPOST_WRITE_TOKEN` (fallback: `WRITE_TOKEN`).
+- **Value:** Your brokerage-specific token or global `FLYPOST_WRITE_TOKEN`
 
-In the Actions configuration:
-- Set **Authentication** to **API Key** → **Header**.
-- **Key name:** `X-Flypost-Write-Token`
-- **Value:** the write token you received (same as proxy `FLYPOST_WRITE_TOKEN`).
-- No OAuth configuration, client ID, or callback URL is required.
+**In the Actions configuration:**
+1. Set **Authentication** to **API Key** → **Header**
+2. **Key name:** `X-Flypost-Write-Token`
+3. **Value:** the write token you received (provisioned per brokerage)
+4. No OAuth, client ID, or callback URL required
 
-### Optional: Firebase Email Link (Passwordless) sign-in for writes
-If you prefer passwordless logins, you can let clients authenticate with Firebase **Email Link (Passwordless Sign-in)** and send their Firebase ID token to the proxy:
+**Read endpoints** (`GET /v1/events/near`) remain **public** and don't require authentication.
 
-1. **Enable Email Link** in Firebase Console → Authentication → Sign-in method → Email/Password → **Email link (passwordless sign-in)**.
-2. **Client snippet (web, modular SDK):**
-   ```js
-   import {
-     getAuth,
-     sendSignInLinkToEmail,
-     isSignInWithEmailLink,
-     signInWithEmailLink
-   } from 'firebase/auth'
+#### For Browser Publishing (app.goflypost.com, post.goflypost.com)
 
-   const auth = getAuth()
-   const actionCodeSettings = {
-     url: 'https://app.goflypost.com/finishSignIn',
-     handleCodeInApp: true
-   }
+Browser writes from `https://app.goflypost.com` and `https://post.goflypost.com` **require Firebase authentication**:
 
-   // Step 1: send link
-   await sendSignInLinkToEmail(auth, email, actionCodeSettings)
-   window.localStorage.setItem('flypostEmailForSignIn', email)
+- **Auth type:** Firebase ID Token (passwordless via Email Link)
+- **Header:** `Authorization: Bearer <firebase_id_token>`
+- **Static tokens NOT accepted** from these origins (security: prevents leaking secrets in browser)
 
-   // Step 2: complete sign-in when the link is opened
-   if (isSignInWithEmailLink(auth, window.location.href)) {
-     let storedEmail = window.localStorage.getItem('flypostEmailForSignIn')
-     if (!storedEmail) {
-       storedEmail = window.prompt('Please provide your email for confirmation')
-       if (!storedEmail) return
-     }
-     const result = await signInWithEmailLink(auth, storedEmail, window.location.href)
-     const idToken = await result.user.getIdToken()
+**Setup:**
+1. Enable **Email Link (passwordless sign-in)** in Firebase Console → Authentication → Sign-in method
+2. Configure `FIREBASE_PROJECT_ID` in proxy environment
+3. Client sends Firebase ID token:
 
-     await fetch('https://<your-proxy-host>/api/parse-and-publish', {
-       method: 'POST',
-       headers: {
-         'Content-Type': 'application/json',
-         Authorization: `Bearer ${idToken}`
-       },
-       // Replace with your parse-and-publish payload:
-       body: JSON.stringify({
-         naturalLanguageInput: '...',
-         userContext: { /* ... */ }
-       })
-     })
-   }
-   ```
-3. **Proxy configuration:** set `FIREBASE_PROJECT_ID` in the proxy environment. The proxy will accept either:
-   - `Authorization: Bearer <Firebase ID token>` from your Email Link sign-ins, **or**
-   - `X-Flypost-Write-Token: <shared secret>` for server-to-server calls.
-4. **Provenance:** Firebase-authenticated calls automatically include provenance hints (`firebaseUid`, `firebaseEmail`, `firebaseSignInProvider`) in `userContext.provenance`.
+```javascript
+import { getAuth, sendSignInLinkToEmail, signInWithEmailLink } from 'firebase/auth'
 
-### Provenance tagging for writes
-When calling `flypost_parse_and_publish`, include provenance in the request body to indicate the calling surface, and set a channel hint via the `X-Flypost-Source-Channel` header if you have one. Example payload snippet:
+const auth = getAuth()
+
+// Step 1: Send magic link
+await sendSignInLinkToEmail(auth, email, {
+  url: 'https://app.goflypost.com/finishSignIn',
+  handleCodeInApp: true
+})
+
+// Step 2: Complete sign-in and get token
+const result = await signInWithEmailLink(auth, email, window.location.href)
+const idToken = await result.user.getIdToken()
+
+// Step 3: Make authenticated write request
+await fetch('https://api.goflypost.com/api/parse-and-publish', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${idToken}`
+  },
+  body: JSON.stringify({
+    naturalLanguageInput: 'Open house Sunday 1-4pm...'
+  })
+})
+```
+
+Firebase-authenticated requests automatically include provenance metadata (`firebaseUid`, `firebaseEmail`, `firebaseSignInProvider`).
+
+#### For ask.goflypost.com (Read-Only)
+
+The concierge/query surface at `https://ask.goflypost.com` is **read-only**:
+- ✅ Can access `/api/chat` (no auth required)
+- ❌ Cannot publish events or write to other `/api/*` endpoints
+
+This ensures the query interface cannot be used to modify data.
+
+### Provenance Tagging
+
+When calling `flypost_parse_and_publish`, include provenance metadata to track the source:
 
 ```json
 {
@@ -372,19 +380,30 @@ When calling `flypost_parse_and_publish`, include provenance in the request body
 }
 ```
 
-The proxy will append its own provenance (request ID, origin, user agent) and pass through `X-Flypost-Source-Channel` when provided before forwarding to the backend.
+The proxy automatically enriches provenance with:
+- Request ID, origin, user agent, timestamp
+- Firebase user metadata (if authenticated via Firebase)
+- Brokerage ID (if derived from static token)
+- Auth provider type
 
-### Future Auth (for partner brokerages / venues)
-If/when you add partner-only write endpoints (e.g., brokerages pushing private calendars):
-- Introduce an API key or OAuth2 layer at the proxy.
-- Restrict parse-and-publish writes to authenticated callers.
-- Expose only `events/near` for unauthenticated queries, or filter based on scopes.
+You can also set `X-Flypost-Source-Channel` header for additional channel hints.
 
-That will require:
-- Authorization URL
-- Token URL
-- Scopes
-- Callback URL (e.g., https://chat.openai.com/aip/oauth/callback)
+### Security Notes
+
+**For GPT Actions:**
+- Use brokerage-specific tokens (e.g., `VISTA_WRITE_TOKEN`) for proper tenancy isolation
+- Tokens are mapped to brokerageId automatically by the proxy
+- Never share tokens between brokerages
+
+**For Browser Publishing:**
+- Firebase authentication ensures no static secrets are exposed in browser dev tools
+- Each user gets their own short-lived ID token
+- Browser origins (`app.goflypost.com`, `post.goflypost.com`) cannot use static tokens
+
+**For Read-Only Surface:**
+- `ask.goflypost.com` can only query, not write
+- Chat endpoints (`/api/chat`) are public for ease of use
+- Other write endpoints are blocked at origin level
 
 ## FAQ and Troubleshooting
 1. **I’m getting 404 or ENOTFOUND errors calling the API.**

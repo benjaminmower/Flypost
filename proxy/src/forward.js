@@ -105,9 +105,19 @@ module.exports = function createForward() {
   return async function forward(req, res) {
     const origin = req.headers.origin
     const requestId = ensureRequestId(req)
-    const isApiPost = req.method === 'POST' && req.path.startsWith('/api/')
+    // Use originalUrl to check path since req.path may be stripped by Express routing
+    // Extract path without query string/hash using URL parsing for robustness
+    let originalPath
+    try {
+      // Use URL parsing for reliable path extraction
+      originalPath = new URL(req.originalUrl, 'http://localhost').pathname
+    } catch {
+      // Fallback to simple split if URL parsing fails (shouldn't happen)
+      originalPath = req.originalUrl.split('?')[0].split('#')[0]
+    }
+    const isApiPost = req.method === 'POST' && originalPath.startsWith('/api/')
     const isParseAndPublish =
-      req.method === 'POST' && req.path === '/api/parse-and-publish'
+      req.method === 'POST' && originalPath === '/api/parse-and-publish'
 
     if (!BACKEND_BASE) {
       setCors(res, origin)
@@ -128,39 +138,101 @@ module.exports = function createForward() {
     try {
       //-------------------------------------
       // Write authentication + tenancy derivation
+      // Origin-gated auth policy:
+      // 1. Firebase-required browser origins: app.goflypost.com, post.goflypost.com
+      // 2. Read-only ask origin: ask.goflypost.com (only /api/chat allowed)
+      // 3. Machine/server writes: require static token in x-flypost-write-token
+      // 4. /api/chat and /api/chat/* exempt from auth (but not /api/chatbot)
       //-------------------------------------
       let firebaseUser = null
       let resolvedBrokerageId = null
 
-      if (isApiPost && WRITE_TOKENS.length) {
+      // Check if this is /api/chat or /api/chat/* (but not /api/chatbot or /api/chatbot/*)
+      // Logic: exact match OR starts with '/api/chat/' (note the trailing slash)
+      // This correctly excludes '/api/chatbot' because it doesn't start with '/api/chat/'
+      const isChatEndpoint = originalPath === '/api/chat' || originalPath.startsWith('/api/chat/')
+
+      if (isApiPost && !isChatEndpoint) {
         const bearer = req.headers.authorization || req.headers.Authorization
         const headerToken = (req.headers['x-flypost-write-token'] || '').toString().trim()
-        const bearerToken = extractBearer(bearer)
 
-        const firebaseAuthResult = await verifyFirebaseIdToken(bearer)
-        if (firebaseAuthResult.ok) {
-          firebaseUser = firebaseAuthResult.decoded
-        }
+        // Define browser origins that require Firebase auth
+        const FIREBASE_REQUIRED_ORIGINS = [
+          'https://app.goflypost.com',
+          'https://post.goflypost.com'
+        ]
 
-        let matchedStaticToken = null
-        for (const token of WRITE_TOKENS) {
-          if (!token) continue
-          if (headerToken === token || bearerToken === token) {
-            matchedStaticToken = token
-            resolvedBrokerageId = TOKEN_TENANCY[token] || null
-            break
-          }
-        }
-
-        const hasValidStaticToken = Boolean(matchedStaticToken)
-
-        if (!firebaseUser && !hasValidStaticToken) {
+        // Check if origin is ask.goflypost.com (read-only)
+        if (origin === 'https://ask.goflypost.com') {
+          // ask.goflypost.com is read-only - reject all POST except /api/chat (already handled above)
           setCors(res, origin)
+          console.log(`🔒 Read-only origin ${origin} attempted write to ${originalPath}`)
           return res.status(401).json({
             success: false,
-            error: 'unauthorized write',
+            error: 'ask.goflypost.com is read-only. Writes are not allowed.',
             requestId
           })
+        }
+
+        // Check if origin requires Firebase auth
+        const requiresFirebaseAuth = FIREBASE_REQUIRED_ORIGINS.includes(origin)
+
+        if (requiresFirebaseAuth) {
+          // Browser origins: require Firebase token, do NOT accept static tokens
+          const firebaseAuthResult = await verifyFirebaseIdToken(bearer)
+          if (firebaseAuthResult.ok) {
+            firebaseUser = firebaseAuthResult.decoded
+            console.log(`✅ Firebase auth validated for ${origin}`)
+          } else {
+            setCors(res, origin)
+            console.log(`🔒 Firebase auth required for ${origin} but ${firebaseAuthResult.reason}`)
+            return res.status(401).json({
+              success: false,
+              error: 'Firebase authentication required for browser writes',
+              detail: firebaseAuthResult.reason === 'firebase-disabled' 
+                ? 'Firebase auth not configured'
+                : firebaseAuthResult.reason === 'missing-token'
+                ? 'Missing Authorization header with Firebase token'
+                : 'Invalid or expired Firebase token',
+              requestId
+            })
+          }
+        } else {
+          // Non-browser origin or no origin: try both Firebase and static tokens
+          const firebaseAuthResult = await verifyFirebaseIdToken(bearer)
+          if (firebaseAuthResult.ok) {
+            firebaseUser = firebaseAuthResult.decoded
+          }
+
+          let matchedStaticToken = null
+          if (WRITE_TOKENS.length > 0) {
+            const bearerToken = extractBearer(bearer)
+            for (const token of WRITE_TOKENS) {
+              if (!token) continue
+              if (headerToken === token || bearerToken === token) {
+                matchedStaticToken = token
+                resolvedBrokerageId = TOKEN_TENANCY[token] || null
+                break
+              }
+            }
+          }
+
+          const hasValidStaticToken = Boolean(matchedStaticToken)
+
+          if (!firebaseUser && !hasValidStaticToken) {
+            setCors(res, origin)
+            console.log(`🔒 No valid auth for ${req.method} ${originalPath} from ${origin || 'no-origin'}`)
+            return res.status(401).json({
+              success: false,
+              error: 'Unauthorized: Missing or invalid authentication',
+              detail: 'Provide valid Firebase ID token in Authorization header or static token in x-flypost-write-token header',
+              requestId
+            })
+          }
+
+          if (hasValidStaticToken) {
+            console.log(`✅ Static write token validated for ${req.method} ${originalPath}`)
+          }
         }
       }
 
