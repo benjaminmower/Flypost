@@ -127,23 +127,42 @@ function createTestServer() {
   return { app, initialize, cleanup: () => backendServer && backendServer.close() }
 }
 
-// Mock Firebase token verification for testing
-const originalVerify = require('google-auth-library').OAuth2Client.prototype.verifyIdToken
+// Mock Firebase Admin SDK verification for testing
+const admin = require('firebase-admin')
+
+let originalVerifyIdToken = null
+let mockValidTokens = {}
 
 function mockFirebaseVerification(validTokens = {}) {
-  require('google-auth-library').OAuth2Client.prototype.verifyIdToken = async function(options) {
-    const token = options.idToken
-    if (validTokens[token]) {
-      return {
-        getPayload: () => validTokens[token]
-      }
+  mockValidTokens = validTokens
+  
+  // Mock the Firebase Admin SDK initialization and auth
+  if (!admin.apps.length) {
+    try {
+      admin.initializeApp({
+        projectId: 'test-project-id'
+      })
+    } catch (err) {
+      // Already initialized
     }
-    throw new Error('Invalid token')
+  }
+  
+  // Mock the verifyIdToken method
+  originalVerifyIdToken = admin.auth().verifyIdToken
+  admin.auth().verifyIdToken = async function(token) {
+    if (mockValidTokens[token]) {
+      return mockValidTokens[token]
+    }
+    const error = new Error('Invalid token')
+    error.code = 'auth/argument-error'
+    throw error
   }
 }
 
 function restoreFirebaseVerification() {
-  require('google-auth-library').OAuth2Client.prototype.verifyIdToken = originalVerify
+  if (originalVerifyIdToken && admin.apps.length > 0) {
+    admin.auth().verifyIdToken = originalVerifyIdToken
+  }
 }
 
 // Test runner
