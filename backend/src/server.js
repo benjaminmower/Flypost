@@ -89,6 +89,41 @@ const readLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+// Stricter rate limiter for anonymous public access (no brokerage_id or key)
+const publicReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Tighter limit for public anonymous access
+  message: { success: false, error: 'Too many anonymous requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+// Anomaly detection: track requests per IP
+const ipRequestTracker = new Map()
+const ANOMALY_THRESHOLD = 50 // requests per 5 minutes
+const ANOMALY_WINDOW_MS = 5 * 60 * 1000 // 5 minutes
+
+function trackAndDetectAnomaly(ip) {
+  const now = Date.now()
+  
+  if (!ipRequestTracker.has(ip)) {
+    ipRequestTracker.set(ip, [])
+  }
+  
+  const requests = ipRequestTracker.get(ip)
+  // Remove old requests outside the window
+  const recentRequests = requests.filter(timestamp => now - timestamp < ANOMALY_WINDOW_MS)
+  recentRequests.push(now)
+  ipRequestTracker.set(ip, recentRequests)
+  
+  if (recentRequests.length > ANOMALY_THRESHOLD) {
+    console.warn(`⚠️  ANOMALY DETECTED: IP ${ip} made ${recentRequests.length} requests in ${ANOMALY_WINDOW_MS / 1000}s`)
+    return true
+  }
+  
+  return false
+}
+
 // Request logging
 app.use((req, res, next) => {
   console.log(`📡 ${req.method} ${req.path}`)
@@ -125,6 +160,25 @@ function getBrokerageIdFromRequest(req, source) {
     return (req.query && req.query.brokerageId) || null
   }
   return null
+}
+
+// Helper: reduce geo precision for public aggregate queries
+function reduceGeoPrecision(lat, lng, precision = 2) {
+  return {
+    latitude: parseFloat(lat.toFixed(precision)),
+    longitude: parseFloat(lng.toFixed(precision))
+  }
+}
+
+// Helper: determine access tier (public vs brokerage-scoped)
+function getAccessTier(req) {
+  const brokerageId = getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId
+  const hasApiKey = req.get('x-api-key') || req.query.api_key
+  
+  if (brokerageId || hasApiKey) {
+    return 'brokerage' // Full fidelity
+  }
+  return 'public' // Reduced precision and fewer fields
 }
 
 // Health
@@ -379,10 +433,21 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
     const brokerageId =
       getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId || null
 
+    // Determine access tier for two-tier access control
+    const accessTier = getAccessTier(req)
+    
+    // Track and detect anomalies
+    const clientIp = req.ip || req.connection.remoteAddress
+    trackAndDetectAnomaly(clientIp)
+
+    // Date filtering parameters (ISO 8601 date-time strings)
+    const startFilter = req.query.start ? new Date(req.query.start) : null
+    const endFilter = req.query.end ? new Date(req.query.end) : null
+
     console.log(
       `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${
         req.path
-      } lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radius}km (brokerageId=${brokerageId || 'ALL'})`
+      } lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radius}km (brokerageId=${brokerageId || 'ALL'}, tier=${accessTier}, dateRange=${startFilter ? startFilter.toISOString() : 'none'} to ${endFilter ? endFilter.toISOString() : 'none'})`
     )
 
     const events = await getEventsNear(latitude, longitude, radius, useFirestore)
@@ -398,8 +463,26 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
       )
     }
 
+    // Date range filtering
+    if (startFilter || endFilter) {
+      filteredEvents = filteredEvents.filter(ev => {
+        const eventStart = ev.startDate ? new Date(ev.startDate) : null
+        const eventEnd = ev.endDate ? new Date(ev.endDate) : eventStart
+
+        // Event must overlap with the requested date range
+        if (startFilter && eventEnd && eventEnd < startFilter) {
+          return false // Event ends before requested start
+        }
+        if (endFilter && eventStart && eventStart > endFilter) {
+          return false // Event starts after requested end
+        }
+        return true
+      })
+    }
+
     // Map to Discovery V1 format (allowlist registry-safe fields only)
-    const discoveryEvents = toDiscoveryEventsV1(filteredEvents)
+    // Pass access tier for field restrictions
+    const discoveryEvents = toDiscoveryEventsV1(filteredEvents, { accessTier })
 
     // Build Discovery V1 response
     let response = {
@@ -408,7 +491,8 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
       events: discoveryEvents,
       meta: {
         count: discoveryEvents.length,
-        radiusKm: radius
+        radiusKm: radius,
+        accessTier
       }
     }
 
@@ -421,6 +505,86 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve events',
+      details: error.message
+    })
+  }
+})
+
+// Get single event by ID - Discovery V1 Contract
+app.get('/v1/events/:event_id', readLimiter, async (req, res) => {
+  try {
+    const { event_id } = req.params
+    
+    if (!event_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'event_id parameter is required'
+      })
+    }
+
+    // Determine access tier for two-tier access control
+    const accessTier = getAccessTier(req)
+    
+    // Track and detect anomalies
+    const clientIp = req.ip || req.connection.remoteAddress
+    trackAndDetectAnomaly(clientIp)
+
+    console.log(
+      `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${req.path} (eventId=${event_id}, tier=${accessTier})`
+    )
+
+    // Try to get event from storage
+    const event = getEventById(event_id)
+    
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found',
+        eventId: event_id
+      })
+    }
+
+    // Check brokerage isolation if brokerageId is provided
+    const brokerageId = getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId
+    if (brokerageId) {
+      if (event.brokerageId !== brokerageId && event.flypost?.brokerageId !== brokerageId) {
+        return res.status(404).json({
+          success: false,
+          error: 'Event not found',
+          eventId: event_id
+        })
+      }
+    }
+
+    // Map to Discovery V1 format (allowlist registry-safe fields only)
+    const discoveryEvent = toDiscoveryEventV1(event, { accessTier })
+
+    if (!discoveryEvent) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to format event'
+      })
+    }
+
+    // Build Discovery V1 response
+    let response = {
+      success: true,
+      schemaVersion: 'discovery.v1',
+      event: discoveryEvent,
+      meta: {
+        accessTier
+      }
+    }
+
+    // Apply runtime sanitizer to strip any forbidden keys that might have leaked
+    response = sanitizeDiscoveryResponse(response)
+
+    res.json(response)
+  } catch (error) {
+    console.error('❌ Error retrieving event:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve event',
       details: error.message
     })
   }
