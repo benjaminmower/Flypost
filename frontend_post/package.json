@@ -1,0 +1,20 @@
+{
+  "name": "flypost-frontend-post",
+  "version": "1.0.0",
+  "description": "Flypost Post - Publisher surface with Firebase auth",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/copy-assets.js",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^10.12.3"
+  },
+  "devDependencies": {
+    "vite": "^5.4.2"
+  },
+  "keywords": ["flypost", "post", "publisher", "firebase", "frontend"],
+  "author": "goflypost",
+  "license": "Apache-2.0"
+}

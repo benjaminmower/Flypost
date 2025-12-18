@@ -11,6 +11,11 @@
         body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; }
         .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% -20%, #1d3a33 0%, #060810 80%); z-index: -1; }
         .text-glow { background: linear-gradient(to right, #40c9a2, #f7f7f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .response { margin-top: 1.5rem; padding: 1.5rem; border-radius: 1rem; }
+        .response.hidden { display: none; }
+        .response.info { background-color: rgba(64, 201, 162, 0.1); border: 1px solid rgba(64, 201, 162, 0.3); }
+        .response.success { background-color: rgba(64, 201, 162, 0.2); border: 1px solid rgba(64, 201, 162, 0.5); }
+        .response.error { background-color: rgba(216, 46, 126, 0.1); border: 1px solid rgba(216, 46, 126, 0.3); }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
@@ -22,13 +27,18 @@
         <a href="https://post.goflypost.com" class="text-lg font-bold text-air_force_blue-800 opacity-40 hover:opacity-100 transition-all uppercase tracking-widest">Post</a>
     </nav>
 
-    <main class="max-w-3xl mt-20">
+    <main class="max-w-3xl mt-20 w-full">
         <h1 class="text-6xl md:text-8xl font-bold mb-6 tracking-tighter">Search with <span class="text-glow">Intelligence.</span></h1>
         <p class="text-air_force_blue-700 text-lg mb-12">The intelligent open house assistant. Ask anything about listings instantly.</p>
-        <div class="bg-white/5 border border-mint_leaf/30 p-2 rounded-2xl flex max-w-xl mx-auto">
-            <input type="text" placeholder="Find me a home..." class="bg-transparent flex-grow p-4 focus:outline-none">
-            <button class="bg-mint_leaf text-ink_black px-6 py-2 rounded-xl font-bold">Ask AI</button>
+        <form id="chat-form" class="bg-white/5 border border-mint_leaf/30 p-2 rounded-2xl flex max-w-xl mx-auto">
+            <input id="chat-input" type="text" placeholder="Find me a home..." class="bg-transparent flex-grow p-4 focus:outline-none text-white">
+            <button id="chat-button" type="submit" class="bg-mint_leaf text-ink_black px-6 py-2 rounded-xl font-bold hover:bg-mint_leaf/90 transition">Ask AI</button>
+        </form>
+        <div id="chat-response" class="response hidden max-w-xl mx-auto text-left">
+            <pre id="response-text" class="whitespace-pre-wrap text-sm"></pre>
         </div>
     </main>
+    
+    <script type="module" src="/src/main.js"></script>
 </body>
 </html>
