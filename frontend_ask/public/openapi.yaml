@@ -15,9 +15,9 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0.html
 
 servers:
-  - url: https://ask.goflypost.com
-    description: Production server
-  - url: http://localhost:3001
+  - url: https://api.goflypost.com/v1
+    description: Production API server
+  - url: http://localhost:3001/v1
     description: Development server
 
 tags:
@@ -25,17 +25,15 @@ tags:
     description: Event discovery endpoints (read-only)
 
 paths:
-  /v1/events/near:
+  /events/near:
     get:
       summary: Find events near a location
       description: |
         Retrieves events near a specified geographic location within a given radius.
-        Supports optional date range filtering and two-tier access control.
+        Supports optional date range filtering and pagination.
         
-        **Access Tiers:**
-        - **Public**: No brokerage_id or API key. Returns approximate locations (reduced geo precision)
-          and fewer fields.
-        - **Brokerage-scoped**: With brokerage_id and/or API key. Returns full fidelity data.
+        **Uniformly Layer-1**: All users receive the same data. No tiering, no redaction variations.
+        Rate limit: 500 requests per 15 minutes.
       operationId: getEventsNear
       tags:
         - discovery
@@ -73,7 +71,10 @@ paths:
           example: 5
         - name: start
           in: query
-          description: Filter events starting on or after this date (ISO 8601 date-time)
+          description: |
+            Filter events by start date (ISO 8601 date-time). 
+            Uses overlap semantics: returns events where event.endDate > start.
+            Must be before 'end' parameter if both provided.
           required: false
           schema:
             type: string
@@ -81,12 +82,41 @@ paths:
           example: "2025-01-01T00:00:00Z"
         - name: end
           in: query
-          description: Filter events ending on or before this date (ISO 8601 date-time)
+          description: |
+            Filter events by end date (ISO 8601 date-time).
+            Uses overlap semantics: returns events where event.startDate < end.
+            Must be after 'start' parameter if both provided.
           required: false
           schema:
             type: string
             format: date-time
           example: "2025-12-31T23:59:59Z"
+        - name: limit
+          in: query
+          description: Maximum number of results to return (default 25, max 50)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 25
+          example: 25
+        - name: cursor
+          in: query
+          description: Pagination cursor from previous response
+          required: false
+          schema:
+            type: string
+          example: "evt_20250115_abc123"
+        - name: sort
+          in: query
+          description: Sort order for results
+          required: false
+          schema:
+            type: string
+            enum: [distance, startDate]
+            default: distance
+          example: "distance"
         - name: brokerage_id
           in: query
           description: Optional brokerage identifier for scoped access (enables full fidelity)
@@ -117,14 +147,16 @@ paths:
                     properties:
                       count:
                         type: integer
+                        description: Number of events in this response
                         example: 5
                       radiusKm:
                         type: number
+                        description: Search radius in kilometers
                         example: 10
-                      accessTier:
+                      cursor:
                         type: string
-                        enum: [public, brokerage]
-                        example: "public"
+                        description: Cursor for next page (if more results available)
+                        example: "evt_20250115_abc123"
         '400':
           description: Bad request
           content:
@@ -144,12 +176,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /v1/events/{event_id}:
+  /events/{event_id}:
     get:
       summary: Get a single event by ID
       description: |
         Retrieves a single event by its unique event ID.
-        Supports two-tier access control based on brokerage_id presence.
+        
+        **Uniformly Layer-1**: All users receive the same data. No tiering, no redaction variations.
+        Rate limit: 500 requests per 15 minutes.
       operationId: getEventById
       tags:
         - discovery
@@ -186,11 +220,7 @@ paths:
                     $ref: '#/components/schemas/DiscoveryEvent'
                   meta:
                     type: object
-                    properties:
-                      accessTier:
-                        type: string
-                        enum: [public, brokerage]
-                        example: "brokerage"
+                    description: Response metadata (empty object, reserved for future use)
         '404':
           description: Event not found
           content:
@@ -215,9 +245,8 @@ components:
     DiscoveryEvent:
       type: object
       description: |
-        Event in Discovery V1 format. Fields returned depend on access tier:
-        - Public tier: approximate geo, city/region only, limited metadata
-        - Brokerage tier: full precision geo, complete address, full metadata
+        Event in Discovery V1 format (Layer-1 data only).
+        All users receive the same full-fidelity data. No tiering or redaction variations.
       required:
         - eventId
         - eventIdentity
@@ -243,7 +272,7 @@ components:
           example: "Beautiful 4BR Home in Santa Monica"
         description:
           type: string
-          description: Event description (truncated based on access tier)
+          description: Event description (truncated to max 500 characters)
           example: "Stunning modern home with ocean views..."
         startDate:
           type: string
@@ -257,11 +286,11 @@ components:
           example: "2025-01-15T14:00:00Z"
         address:
           type: object
-          description: Event address (detail level depends on access tier)
+          description: Event address (full address for all users)
           properties:
             streetAddress:
               type: string
-              description: Street address (brokerage tier only)
+              description: Street address
               example: "123 Main Street"
             addressLocality:
               type: string
@@ -273,7 +302,7 @@ components:
               example: "CA"
             postalCode:
               type: string
-              description: Postal code (brokerage tier only)
+              description: Postal code
               example: "90001"
             addressCountry:
               type: string
@@ -281,26 +310,31 @@ components:
               example: "US"
         geo:
           type: object
-          description: Geographic coordinates (precision depends on access tier)
+          description: Geographic coordinates (full precision for all users)
           properties:
             latitude:
               type: number
               format: double
-              description: Latitude (reduced precision for public tier)
-              example: 34.05
+              description: Latitude (full precision)
+              example: 34.052235
             longitude:
               type: number
               format: double
-              description: Longitude (reduced precision for public tier)
-              example: -118.24
+              description: Longitude (full precision)
+              example: -118.243683
+        detailsUrl:
+          type: string
+          format: uri
+          description: Canonical URL for event details (anti-parasitism)
+          example: "https://goflypost.com/events/evt_20250115_abc123"
         submissionTimestamp:
           type: string
           format: date-time
-          description: When event was submitted (brokerage tier only)
+          description: When event was submitted
           example: "2025-01-01T12:00:00Z"
         updateCount:
           type: integer
-          description: Number of updates to this event (brokerage tier only)
+          description: Number of updates to this event
           example: 2
 
     Error:

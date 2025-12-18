@@ -30,17 +30,26 @@ const FORBIDDEN_KEYS = new Set([
 ])
 
 /**
- * Check if a key is forbidden
+ * Check if a key is forbidden (case-insensitive)
  * @param {string} key - The key to check
  * @returns {boolean} True if forbidden
  */
 function isForbiddenKey(key) {
-  if (FORBIDDEN_KEYS.has(key)) {
-    return true
+  if (typeof key !== 'string') {
+    return false
   }
   
-  // Check for intelligence-prefixed keys
-  if (typeof key === 'string' && key.startsWith('intelligence')) {
+  const lowerKey = key.toLowerCase()
+  
+  // Check against lowercase forbidden keys
+  for (const forbiddenKey of FORBIDDEN_KEYS) {
+    if (lowerKey === forbiddenKey.toLowerCase()) {
+      return true
+    }
+  }
+  
+  // Check for intelligence-prefixed keys (case-insensitive)
+  if (lowerKey.startsWith('intelligence')) {
     return true
   }
   

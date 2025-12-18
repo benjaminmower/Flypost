@@ -26,17 +26,26 @@ const FORBIDDEN_KEYS = [
 
 /**
  * Check if a key is forbidden (Layer 2 intelligence field or starts with "intelligence").
+ * Case-insensitive matching to catch variations like "Attendance", "FEEDBACK", etc.
  * @param {string} key - The key to check
  * @returns {boolean} - True if the key is forbidden
  */
 function isForbiddenKey(key) {
-  // Check exact matches
-  if (FORBIDDEN_KEYS.includes(key)) {
-    return true
+  if (typeof key !== 'string') {
+    return false
   }
   
-  // Check for keys starting with "intelligence"
-  if (key.startsWith('intelligence')) {
+  const lowerKey = key.toLowerCase()
+  
+  // Check exact matches (case-insensitive)
+  for (const forbiddenKey of FORBIDDEN_KEYS) {
+    if (lowerKey === forbiddenKey.toLowerCase()) {
+      return true
+    }
+  }
+  
+  // Check for keys starting with "intelligence" (case-insensitive)
+  if (lowerKey.startsWith('intelligence')) {
     return true
   }
   

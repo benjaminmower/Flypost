@@ -61,16 +61,15 @@ function truncateDescription(description, maxLength = MAX_DESCRIPTION_LENGTH) {
  * Maps a stored event object to DiscoveryEventV1 format
  * Only includes registry-safe fields (Layer 1 data)
  * 
+ * NOTE: Tiering removed per North Star principles. All responses are uniformly Layer-1.
+ * No redaction variations, same data for all users.
+ * 
  * @param {object} event - The full stored event object
- * @param {object} options - Mapping options
- * @param {string} options.accessTier - Access tier: 'public' or 'brokerage'
+ * @param {object} options - Mapping options (for future extensibility)
  * @returns {object} DiscoveryEventV1 object with only allowlisted fields
  */
 export function toDiscoveryEventV1(event, options = {}) {
   if (!event) return null
-  
-  const { accessTier = 'brokerage' } = options
-  const isPublicTier = accessTier === 'public'
   
   const discoveryEvent = {}
   
@@ -94,62 +93,45 @@ export function toDiscoveryEventV1(event, options = {}) {
     discoveryEvent.name = event.name
   }
   
-  // Description with truncation (public tier gets shorter description)
+  // Description with truncation (max 500 chars per North Star principles)
   if (event.description) {
-    const maxLength = isPublicTier ? 200 : MAX_DESCRIPTION_LENGTH
-    discoveryEvent.description = truncateDescription(event.description, maxLength)
+    discoveryEvent.description = truncateDescription(event.description, MAX_DESCRIPTION_LENGTH)
   }
   
-  // Address (structured) - public tier gets less precise address
+  // Address (structured) - full address for all users (Layer-1 data)
   if (event.location?.address) {
     const addr = event.location.address
-    if (isPublicTier) {
-      // Public tier: only city, region, country (no street address, no postal code)
-      discoveryEvent.address = {
-        addressLocality: addr.addressLocality,
-        addressRegion: addr.addressRegion,
-        addressCountry: addr.addressCountry
-      }
-    } else {
-      // Brokerage tier: full address
-      discoveryEvent.address = {
-        streetAddress: addr.streetAddress,
-        addressLocality: addr.addressLocality,
-        addressRegion: addr.addressRegion,
-        postalCode: addr.postalCode,
-        addressCountry: addr.addressCountry
-      }
+    discoveryEvent.address = {
+      streetAddress: addr.streetAddress,
+      addressLocality: addr.addressLocality,
+      addressRegion: addr.addressRegion,
+      postalCode: addr.postalCode,
+      addressCountry: addr.addressCountry
     }
   }
   
-  // Geo coordinates (when available) - public tier gets reduced precision
+  // Geo coordinates (when available) - full precision for all users (Layer-1 data)
   if (event.location?.geo) {
     const geo = event.location.geo
     if (geo.latitude !== undefined && geo.longitude !== undefined) {
-      if (isPublicTier) {
-        // Public tier: reduce precision to ~1km accuracy (2 decimal places)
-        discoveryEvent.geo = {
-          latitude: parseFloat(geo.latitude.toFixed(2)),
-          longitude: parseFloat(geo.longitude.toFixed(2))
-        }
-      } else {
-        // Brokerage tier: full precision
-        discoveryEvent.geo = {
-          latitude: geo.latitude,
-          longitude: geo.longitude
-        }
+      discoveryEvent.geo = {
+        latitude: geo.latitude,
+        longitude: geo.longitude
       }
     }
   }
   
-  // Metadata (optional) - public tier gets limited metadata
-  if (!isPublicTier) {
-    if (event.flypost?.submissionTimestamp) {
-      discoveryEvent.submissionTimestamp = event.flypost.submissionTimestamp
-    }
-    if (event.flypost?.updateCount !== undefined) {
-      discoveryEvent.updateCount = event.flypost.updateCount
-    }
+  // Metadata (optional) - available for all users (Layer-1 data)
+  if (event.flypost?.submissionTimestamp) {
+    discoveryEvent.submissionTimestamp = event.flypost.submissionTimestamp
+  }
+  if (event.flypost?.updateCount !== undefined) {
+    discoveryEvent.updateCount = event.flypost.updateCount
+  }
+  
+  // Canonical details URL (anti-parasitism)
+  if (discoveryEvent.eventId) {
+    discoveryEvent.detailsUrl = `https://goflypost.com/events/${discoveryEvent.eventId}`
   }
   
   return discoveryEvent

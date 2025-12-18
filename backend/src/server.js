@@ -170,18 +170,8 @@ function reduceGeoPrecision(lat, lng, precision = 2) {
   }
 }
 
-// Helper: determine access tier (public vs brokerage-scoped)
-function getAccessTier(req) {
-  const brokerageId = getBrokerageIdFromRequest(req, 'query')
-  // CodeQL: api_key in query is acceptable for read-only public API
-  // Prefer header (x-api-key) but allow query param for AI plugin compatibility
-  const hasApiKey = req.get('x-api-key') || req.query.api_key
-  
-  if (brokerageId || hasApiKey) {
-    return 'brokerage' // Full fidelity
-  }
-  return 'public' // Reduced precision and fewer fields
-}
+// REMOVED: Access tier logic - all endpoints are now uniformly public Layer-1
+// No tiering, no redaction variations. All discovery endpoints return the same data.
 
 // Health
 const healthHandler = (_req, res) => {
@@ -420,17 +410,11 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
   }
 })
 
-// Dynamic rate limiting middleware based on access tier
-function applyTieredRateLimit(req, res, next) {
-  const accessTier = getAccessTier(req)
-  if (accessTier === 'public') {
-    return publicReadLimiter(req, res, next)
-  }
-  return readLimiter(req, res, next)
-}
+// REMOVED: Tiered rate limiting - all read endpoints now use uniform 500/15min rate limit
+// No distinction between public/brokerage access tiers
 
 // Events near (with optional brokerage filter) - Discovery V1 Contract
-app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
+app.get('/v1/events/near', readLimiter, async (req, res) => {
   try {
     // CodeQL: lat/lng from query params is acceptable - these are public geographic coordinates
     // Validate to prevent injection attacks
@@ -465,9 +449,6 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
     // tenancy: header wins, then query.brokerageId — but now OPTIONAL
     const brokerageId =
       getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId || null
-
-    // Determine access tier for two-tier access control
-    const accessTier = getAccessTier(req)
     
     // Track and detect anomalies
     const clientIp = req.ip || req.connection.remoteAddress
@@ -480,7 +461,7 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
     console.log(
       `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${
         req.path
-      } lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radius}km (brokerageId=${brokerageId || 'ALL'}, tier=${accessTier}, dateRange=${startFilter ? startFilter.toISOString() : 'none'} to ${endFilter ? endFilter.toISOString() : 'none'})`
+      } lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radius}km (brokerageId=${brokerageId || 'ALL'}, dateRange=${startFilter ? startFilter.toISOString() : 'none'} to ${endFilter ? endFilter.toISOString() : 'none'})`
     )
 
     const events = await getEventsNear(latitude, longitude, radius, useFirestore)
@@ -514,8 +495,8 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
     }
 
     // Map to Discovery V1 format (allowlist registry-safe fields only)
-    // Pass access tier for field restrictions
-    const discoveryEvents = toDiscoveryEventsV1(filteredEvents, { accessTier })
+    // No access tier distinction - all data is uniformly Layer-1
+    const discoveryEvents = toDiscoveryEventsV1(filteredEvents, {})
 
     // Build Discovery V1 response
     let response = {
@@ -524,8 +505,7 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
       events: discoveryEvents,
       meta: {
         count: discoveryEvents.length,
-        radiusKm: radius,
-        accessTier
+        radiusKm: radius
       }
     }
 
@@ -544,7 +524,7 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
 })
 
 // Get single event by ID - Discovery V1 Contract
-app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
+app.get('/v1/events/:event_id', readLimiter, async (req, res) => {
   try {
     const { event_id } = req.params
     
@@ -554,16 +534,13 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
         error: 'event_id parameter is required'
       })
     }
-
-    // Determine access tier for two-tier access control
-    const accessTier = getAccessTier(req)
     
     // Track and detect anomalies
     const clientIp = req.ip || req.connection.remoteAddress
     trackAndDetectAnomaly(clientIp)
 
     console.log(
-      `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${req.path} (eventId=${event_id}, tier=${accessTier})`
+      `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${req.path} (eventId=${event_id})`
     )
 
     // Try to get event from storage (wrap in try-catch for safety)
@@ -596,7 +573,8 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
     }
 
     // Map to Discovery V1 format (allowlist registry-safe fields only)
-    const discoveryEvent = toDiscoveryEventV1(event, { accessTier })
+    // No access tier distinction - all data is uniformly Layer-1
+    const discoveryEvent = toDiscoveryEventV1(event, {})
 
     if (!discoveryEvent) {
       return res.status(500).json({
@@ -610,9 +588,7 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
       success: true,
       schemaVersion: 'discovery.v1',
       event: discoveryEvent,
-      meta: {
-        accessTier
-      }
+      meta: {}
     }
 
     // Apply runtime sanitizer to strip any forbidden keys that might have leaked
