@@ -8,7 +8,8 @@ import {
   getAllEvents as getFirestoreEvents, 
   isFirestoreEnabled,
   findEventByCanonicalKey, // Legacy
-  findEventByIdentity as findEventByIdentityFirestore // New brokerage-agnostic identity
+  findEventByIdentity as findEventByIdentityFirestore, // New brokerage-agnostic identity
+  getEventByIdFromFirestore // Get event by document ID
 } from './firestoreClient.js'
 import { hasValidListPrice } from './utils/priceExtractor.js'
 
@@ -171,12 +172,44 @@ export async function getEvents(filters = {}, useFirestore = false) {
 }
 
 /**
- * Get a single event by ID
+ * Get a single event by ID (memory-only)
  * @param {string} eventId - The event ID
  * @returns {object|null} - The event or null if not found
  */
 export function getEventById(eventId) {
   const event = eventStore.get(eventId)
+  return event || null
+}
+
+/**
+ * Get a single event by ID with hybrid storage (Firestore + memory fallback)
+ * @param {string} eventId - The event ID
+ * @param {boolean} useFirestore - Whether to query Firestore
+ * @returns {Promise<object|null>} - The event or null if not found
+ */
+export async function getEventByIdAny(eventId, useFirestore = false) {
+  // If Firestore is enabled and requested, try Firestore first
+  if (useFirestore && isFirestoreEnabled()) {
+    try {
+      const event = await getEventByIdFromFirestore(eventId)
+      if (event) {
+        console.log(`📍 Found event by ID in Firestore: ${eventId}`)
+        return event
+      }
+      console.log(`📍 Event not found in Firestore, checking memory: ${eventId}`)
+    } catch (error) {
+      console.error('⚠️  Firestore getEventById failed, falling back to memory:', error.message)
+      // Fall through to memory retrieval
+    }
+  }
+  
+  // Fallback to memory store
+  const event = eventStore.get(eventId)
+  if (event) {
+    console.log(`📍 Found event by ID in memory: ${eventId}`)
+  } else {
+    console.log(`📍 Event not found in memory: ${eventId}`)
+  }
   return event || null
 }
 
