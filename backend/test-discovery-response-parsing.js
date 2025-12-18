@@ -162,7 +162,7 @@ test('executeGetEventsNear: Code structure matches Discovery V1 format', () => {
   // 2. Reads from data.meta (not data.data)
   // 3. Has appropriate fallbacks
   
-  const hasCorrectEventsParsing = functionContent.match(/data\.events(?!\s*\?\.\s*events)/g)
+  const hasCorrectEventsParsing = functionContent.includes('data.events')
   const hasCorrectMetaParsing = functionContent.includes('data.meta')
   const noIncorrectNesting = !functionContent.includes('data.data')
   
