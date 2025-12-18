@@ -568,7 +568,7 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
 
     const useFirestore = isFirestoreEnabled()
 
-    // Try to get event from storage using hybrid getter (Firestore + memory fallback)
+    // Try to get event from storage with Firestore + memory fallback
     let event = null
     try {
       event = await getEventByIdAny(event_id, useFirestore)
