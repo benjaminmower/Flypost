@@ -11,7 +11,7 @@ import dotenv from 'dotenv'
 import rateLimit from 'express-rate-limit'
 import { parseEventWithLLM } from './llmParser.js'
 import { validateEventData, getSchema } from './validation.js'
-import { storeEvent, getEventsNear, getStorageStats, clearEvents, findEventByIdentity } from './storage.js'
+import { storeEvent, getEventsNear, getStorageStats, clearEvents, findEventByIdentity, getEventById } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
 import { isFirestoreEnabled } from './firestoreClient.js'
 import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.js'
@@ -19,7 +19,7 @@ import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.
 import { sanitizeEvent } from './utils/northStarEnforcer.js'
 import { mergeSources, validateSource } from './utils/sourceProvenance.js'
 import { enrichEventMetadata, normalizeEventDates } from './utils/eventEnrichment.js'
-import { toDiscoveryEventsV1 } from './utils/discoveryMapper.js'
+import { toDiscoveryEventsV1, toDiscoveryEventV1 } from './utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
 
 dotenv.config()
@@ -154,10 +154,10 @@ function getBrokerageIdFromRequest(req, source) {
   if (headerId) return headerId
 
   if (source === 'body') {
-    return (req.body && req.body.brokerageId) || null
+    return (req.body && (req.body.brokerageId || req.body.brokerage_id)) || null
   }
   if (source === 'query') {
-    return (req.query && req.query.brokerageId) || null
+    return (req.query && (req.query.brokerageId || req.query.brokerage_id)) || null
   }
   return null
 }
@@ -172,7 +172,7 @@ function reduceGeoPrecision(lat, lng, precision = 2) {
 
 // Helper: determine access tier (public vs brokerage-scoped)
 function getAccessTier(req) {
-  const brokerageId = getBrokerageIdFromRequest(req, 'query') || req.query.brokerageId
+  const brokerageId = getBrokerageIdFromRequest(req, 'query')
   const hasApiKey = req.get('x-api-key') || req.query.api_key
   
   if (brokerageId || hasApiKey) {
