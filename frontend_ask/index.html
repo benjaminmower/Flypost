@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flypost | Ask Flypost</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { theme: { extend: { colors: { ink_black: '#060810', hot_berry: '#d82e7e', dark_amethyst: '#2f195f', mint_leaf: '#40c9a2', bright_snow: '#f7f7f7', lemon_lime: '#e0e03e', air_force_blue: '#628395' } } } }
+    </script>
+    <style>
+        body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; }
+        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% -20%, #1d3a33 0%, #060810 80%); z-index: -1; }
+        .text-glow { background: linear-gradient(to right, #40c9a2, #f7f7f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+    <div class="bg-glow"></div>
+
+    <nav class="absolute top-12 w-full flex justify-center items-center gap-6">
+        <div class="text-4xl font-black text-mint_leaf uppercase tracking-tighter transform rotate-[2deg]">ASK</div>
+        <div class="font-black text-3xl tracking-tighter text-lemon_lime">FLYPOST</div>
+        <a href="https://post.goflypost.com" class="text-lg font-bold text-air_force_blue-800 opacity-40 hover:opacity-100 transition-all uppercase tracking-widest">Post</a>
+    </nav>
+
+    <main class="max-w-3xl mt-20">
+        <h1 class="text-6xl md:text-8xl font-bold mb-6 tracking-tighter">Search with <span class="text-glow">Intelligence.</span></h1>
+        <p class="text-air_force_blue-700 text-lg mb-12">The intelligent open house assistant. Ask anything about listings instantly.</p>
+        <div class="bg-white/5 border border-mint_leaf/30 p-2 rounded-2xl flex max-w-xl mx-auto">
+            <input type="text" placeholder="Find me a home..." class="bg-transparent flex-grow p-4 focus:outline-none">
+            <button class="bg-mint_leaf text-ink_black px-6 py-2 rounded-xl font-bold">Ask AI</button>
+        </div>
+    </main>
+</body>
+</html>

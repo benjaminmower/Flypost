@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flypost | Hang a Flypost</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { theme: { extend: { colors: { ink_black: '#060810', hot_berry: '#d82e7e', dark_amethyst: '#2f195f', mint_leaf: '#40c9a2', bright_snow: '#f7f7f7', lemon_lime: '#e0e03e', air_force_blue: '#628395' } } } }
+    </script>
+    <style>
+        body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; }
+        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% -20%, #2f195f 0%, #060810 80%); z-index: -1; }
+        .text-glow { background: linear-gradient(to right, #d82e7e, #f7f7f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+    <div class="bg-glow"></div>
+
+    <nav class="absolute top-12 w-full flex justify-center items-center gap-6">
+        <a href="https://ask.goflypost.com" class="text-lg font-bold text-air_force_blue-800 opacity-40 hover:opacity-100 transition-all uppercase tracking-widest">Ask</a>
+        <div class="font-black text-3xl tracking-tighter text-lemon_lime">FLYPOST</div>
+        <div class="text-4xl font-black text-hot_berry uppercase tracking-tighter transform rotate-[-2deg]">POST</div>
+    </nav>
+
+    <main class="max-w-3xl mt-20">
+        <h1 class="text-6xl md:text-8xl font-bold mb-6 tracking-tighter italic">Market your <span class="text-glow">Listing.</span></h1>
+        <p class="text-air_force_blue-700 text-lg mb-12">The agent dashboard to capture leads and manage open houses with AI.</p>
+        <button class="bg-bright_snow text-ink_black px-12 py-5 rounded-full font-black text-lg hover:bg-hot_berry hover:text-white transition-all transform hover:scale-105">Post a Listing</button>
+    </main>
+</body>
+</html>
