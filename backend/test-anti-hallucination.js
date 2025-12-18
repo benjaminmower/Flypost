@@ -119,10 +119,14 @@ test('Prompt enforces tool results as only source', () => {
 
 // Test 7: Verify constraints in restrictions list
 test('Restrictions list updated with new constraints', () => {
-  const restrictionsSection = chatHandlerContent.substring(
-    chatHandlerContent.indexOf('## Restrictions'),
-    chatHandlerContent.indexOf('## Tone')
-  )
+  const restrictionsIdx = chatHandlerContent.indexOf('## Restrictions')
+  const toneIdx = chatHandlerContent.indexOf('## Tone')
+  
+  if (restrictionsIdx === -1 || toneIdx === -1 || restrictionsIdx >= toneIdx) {
+    return false
+  }
+  
+  const restrictionsSection = chatHandlerContent.substring(restrictionsIdx, toneIdx)
   
   const hasNoCoords = restrictionsSection.includes('no coordinates')
   const hasZeroResults = restrictionsSection.includes('zero results') ||
