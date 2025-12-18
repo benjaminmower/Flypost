@@ -243,8 +243,11 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     )
 
     // 1) Parse with LLM
-    const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
+    let parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
+
+    // 1.1) ENFORCE NORTH STAR: Strip Layer-2 intelligence fields from parsed event
+    parsedEvent = sanitizeEvent(parsedEvent)
 
     // 1.2) DETERMINISTIC PRICE EXTRACTION & ENRICHMENT
     // If LLM didn't extract price, try deterministic extraction from input text
@@ -455,8 +458,36 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
     trackAndDetectAnomaly(clientIp)
 
     // Date filtering parameters (ISO 8601 date-time strings)
-    const startFilter = req.query.start ? new Date(req.query.start) : null
-    const endFilter = req.query.end ? new Date(req.query.end) : null
+    let startFilter = null
+    let endFilter = null
+    
+    if (req.query.start) {
+      startFilter = new Date(req.query.start)
+      if (isNaN(startFilter.getTime())) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid start date: must be ISO 8601 format (e.g., 2025-01-01T00:00:00Z)'
+        })
+      }
+    }
+    
+    if (req.query.end) {
+      endFilter = new Date(req.query.end)
+      if (isNaN(endFilter.getTime())) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid end date: must be ISO 8601 format (e.g., 2025-12-31T23:59:59Z)'
+        })
+      }
+    }
+    
+    // Validate start < end
+    if (startFilter && endFilter && startFilter >= endFilter) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid date range: start date must be before end date'
+      })
+    }
 
     console.log(
       `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${
@@ -494,9 +525,39 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
       })
     }
 
+    // Pagination parameters
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 25, 1), 50)
+    const cursor = req.query.cursor || null
+    const sort = req.query.sort || 'distance'
+    
+    // Apply sorting
+    if (sort === 'startDate') {
+      filteredEvents.sort((a, b) => {
+        const dateA = a.startDate ? new Date(a.startDate) : new Date(0)
+        const dateB = b.startDate ? new Date(b.startDate) : new Date(0)
+        return dateA - dateB
+      })
+    }
+    // 'distance' sort is already applied by getEventsNear
+    
+    // Apply cursor-based pagination
+    let startIndex = 0
+    if (cursor) {
+      const cursorIndex = filteredEvents.findIndex(ev => ev.flypost?.eventId === cursor)
+      if (cursorIndex >= 0) {
+        startIndex = cursorIndex + 1
+      }
+    }
+    
+    const paginatedEvents = filteredEvents.slice(startIndex, startIndex + limit)
+    const hasMore = startIndex + limit < filteredEvents.length
+    const nextCursor = hasMore && paginatedEvents.length > 0 
+      ? paginatedEvents[paginatedEvents.length - 1].flypost?.eventId 
+      : null
+
     // Map to Discovery V1 format (allowlist registry-safe fields only)
     // No access tier distinction - all data is uniformly Layer-1
-    const discoveryEvents = toDiscoveryEventsV1(filteredEvents, {})
+    const discoveryEvents = toDiscoveryEventsV1(paginatedEvents, {})
 
     // Build Discovery V1 response
     let response = {
@@ -505,8 +566,15 @@ app.get('/v1/events/near', readLimiter, async (req, res) => {
       events: discoveryEvents,
       meta: {
         count: discoveryEvents.length,
-        radiusKm: radius
+        totalCount: filteredEvents.length,
+        radiusKm: radius,
+        limit,
+        hasMore
       }
+    }
+    
+    if (nextCursor) {
+      response.meta.cursor = nextCursor
     }
 
     // Apply runtime sanitizer to strip any forbidden keys that might have leaked

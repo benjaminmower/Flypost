@@ -263,9 +263,9 @@ components:
           example: "open_house:123-main-st:los-angeles:ca"
         category:
           type: string
-          description: Event category
-          enum: [open_house, garage_sale, estate_sale, moving_sale, yard_sale, other]
-          example: "open_house"
+          description: Event category (aligned with runtime schema)
+          enum: [apartments, garage-sales, open-houses, job-postings, live-events, community-alerts, happy-hours, missing-pets]
+          example: "open-houses"
         name:
           type: string
           description: Event name/title
