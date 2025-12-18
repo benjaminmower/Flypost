@@ -4,9 +4,10 @@
 // - Injects x-flypost-brokerage-id header to backend
 // - Keeps: ID token auth, logging, provenance enrichment
 
-const { GoogleAuth, OAuth2Client } = require('google-auth-library')
+const { GoogleAuth } = require('google-auth-library')
 const axios = require('axios')
 const crypto = require('crypto')
+const { getFirebaseAuth } = require('./firebaseAdmin')
 
 const BACKEND_BASE = (process.env.BACKEND_URL || '').replace(/\/$/, '')
 if (!BACKEND_BASE) {
@@ -74,7 +75,7 @@ function ensureRequestId(req) {
 //-------------------------------------
 module.exports = function createForward() {
   const auth = USE_ID_TOKEN ? new GoogleAuth() : null
-  const firebaseVerifier = HAS_FIREBASE_AUTH ? new OAuth2Client(FIREBASE_PROJECT_ID) : null
+  const firebaseAuth = HAS_FIREBASE_AUTH ? getFirebaseAuth() : null
 
   function extractBearer(authHeader) {
     if (!authHeader) return ''
@@ -91,21 +92,16 @@ module.exports = function createForward() {
   }
 
   async function verifyFirebaseIdToken(authHeader) {
-    if (!HAS_FIREBASE_AUTH || !firebaseVerifier) return { ok: false, reason: 'firebase-disabled' }
+    if (!HAS_FIREBASE_AUTH || !firebaseAuth) return { ok: false, reason: 'firebase-disabled' }
 
     const token = extractBearer(authHeader)
     if (!token) return { ok: false, reason: 'missing-token' }
 
-    const issuer = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`
     try {
-      const ticket = await firebaseVerifier.verifyIdToken({
-        idToken: token,
-        audience: FIREBASE_PROJECT_ID,
-        issuer,
-        certsUrl:
-          'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
-      })
-      return { ok: true, decoded: ticket.getPayload() }
+      // Firebase Admin SDK verifies: signature, exp, iat, aud, iss, sub
+      // Handles key rotation automatically by fetching current public keys
+      const decoded = await firebaseAuth.verifyIdToken(token)
+      return { ok: true, decoded }
     } catch (err) {
       return { ok: false, reason: 'verify-failed', error: err }
     }
