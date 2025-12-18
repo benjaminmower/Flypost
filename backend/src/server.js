@@ -173,6 +173,8 @@ function reduceGeoPrecision(lat, lng, precision = 2) {
 // Helper: determine access tier (public vs brokerage-scoped)
 function getAccessTier(req) {
   const brokerageId = getBrokerageIdFromRequest(req, 'query')
+  // CodeQL: api_key in query is acceptable for read-only public API
+  // Prefer header (x-api-key) but allow query param for AI plugin compatibility
   const hasApiKey = req.get('x-api-key') || req.query.api_key
   
   if (brokerageId || hasApiKey) {
@@ -430,11 +432,33 @@ function applyTieredRateLimit(req, res, next) {
 // Events near (with optional brokerage filter) - Discovery V1 Contract
 app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
   try {
+    // CodeQL: lat/lng from query params is acceptable - these are public geographic coordinates
+    // Validate to prevent injection attacks
     const latitude = parseFloat(req.query.lat || req.query.latitude || '34.0195')
     const longitude = parseFloat(
       req.query.lng || req.query.longitude || '-118.4912'
     )
     const radius = parseFloat(req.query.radius || '10')
+    
+    // Validate coordinate ranges
+    if (isNaN(latitude) || latitude < -90 || latitude > 90) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid latitude: must be between -90 and 90'
+      })
+    }
+    if (isNaN(longitude) || longitude < -180 || longitude > 180) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid longitude: must be between -180 and 180'
+      })
+    }
+    if (isNaN(radius) || radius < 0 || radius > 100) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid radius: must be between 0 and 100 km'
+      })
+    }
 
     const useFirestore = isFirestoreEnabled()
 
