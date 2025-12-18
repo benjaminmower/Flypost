@@ -1,0 +1,23 @@
+Contact: mailto:security@goflypost.com
+Contact: https://goflypost.com/security
+Expires: 2026-12-31T23:59:59.000Z
+Encryption: https://goflypost.com/pgp-key.txt
+Preferred-Languages: en
+Canonical: https://ask.goflypost.com/.well-known/security.txt
+Policy: https://goflypost.com/security-policy
+Acknowledgments: https://goflypost.com/security-acknowledgments
+
+# Security Information for Flypost Ask (ask.goflypost.com)
+# 
+# This is a read-only public API for event discovery.
+# Please report security vulnerabilities responsibly.
+#
+# What to report:
+# - Authentication/authorization bypasses
+# - Rate limiting bypasses
+# - Data exposure beyond intended scope
+# - SQL injection, XSS, or other injection attacks
+# - DDoS vulnerabilities
+# 
+# Response time: We aim to respond within 48 hours
+# Disclosure: Coordinated disclosure preferred

@@ -62,10 +62,15 @@ function truncateDescription(description, maxLength = MAX_DESCRIPTION_LENGTH) {
  * Only includes registry-safe fields (Layer 1 data)
  * 
  * @param {object} event - The full stored event object
+ * @param {object} options - Mapping options
+ * @param {string} options.accessTier - Access tier: 'public' or 'brokerage'
  * @returns {object} DiscoveryEventV1 object with only allowlisted fields
  */
-export function toDiscoveryEventV1(event) {
+export function toDiscoveryEventV1(event, options = {}) {
   if (!event) return null
+  
+  const { accessTier = 'brokerage' } = options
+  const isPublicTier = accessTier === 'public'
   
   const discoveryEvent = {}
   
@@ -89,40 +94,62 @@ export function toDiscoveryEventV1(event) {
     discoveryEvent.name = event.name
   }
   
-  // Description with truncation
+  // Description with truncation (public tier gets shorter description)
   if (event.description) {
-    discoveryEvent.description = truncateDescription(event.description)
+    const maxLength = isPublicTier ? 200 : MAX_DESCRIPTION_LENGTH
+    discoveryEvent.description = truncateDescription(event.description, maxLength)
   }
   
-  // Address (structured)
+  // Address (structured) - public tier gets less precise address
   if (event.location?.address) {
     const addr = event.location.address
-    discoveryEvent.address = {
-      streetAddress: addr.streetAddress,
-      addressLocality: addr.addressLocality,
-      addressRegion: addr.addressRegion,
-      postalCode: addr.postalCode,
-      addressCountry: addr.addressCountry
-    }
-  }
-  
-  // Geo coordinates (when available)
-  if (event.location?.geo) {
-    const geo = event.location.geo
-    if (geo.latitude !== undefined && geo.longitude !== undefined) {
-      discoveryEvent.geo = {
-        latitude: geo.latitude,
-        longitude: geo.longitude
+    if (isPublicTier) {
+      // Public tier: only city, region, country (no street address, no postal code)
+      discoveryEvent.address = {
+        addressLocality: addr.addressLocality,
+        addressRegion: addr.addressRegion,
+        addressCountry: addr.addressCountry
+      }
+    } else {
+      // Brokerage tier: full address
+      discoveryEvent.address = {
+        streetAddress: addr.streetAddress,
+        addressLocality: addr.addressLocality,
+        addressRegion: addr.addressRegion,
+        postalCode: addr.postalCode,
+        addressCountry: addr.addressCountry
       }
     }
   }
   
-  // Metadata (optional)
-  if (event.flypost?.submissionTimestamp) {
-    discoveryEvent.submissionTimestamp = event.flypost.submissionTimestamp
+  // Geo coordinates (when available) - public tier gets reduced precision
+  if (event.location?.geo) {
+    const geo = event.location.geo
+    if (geo.latitude !== undefined && geo.longitude !== undefined) {
+      if (isPublicTier) {
+        // Public tier: reduce precision to ~1km accuracy (2 decimal places)
+        discoveryEvent.geo = {
+          latitude: parseFloat(geo.latitude.toFixed(2)),
+          longitude: parseFloat(geo.longitude.toFixed(2))
+        }
+      } else {
+        // Brokerage tier: full precision
+        discoveryEvent.geo = {
+          latitude: geo.latitude,
+          longitude: geo.longitude
+        }
+      }
+    }
   }
-  if (event.flypost?.updateCount !== undefined) {
-    discoveryEvent.updateCount = event.flypost.updateCount
+  
+  // Metadata (optional) - public tier gets limited metadata
+  if (!isPublicTier) {
+    if (event.flypost?.submissionTimestamp) {
+      discoveryEvent.submissionTimestamp = event.flypost.submissionTimestamp
+    }
+    if (event.flypost?.updateCount !== undefined) {
+      discoveryEvent.updateCount = event.flypost.updateCount
+    }
   }
   
   return discoveryEvent
@@ -131,13 +158,14 @@ export function toDiscoveryEventV1(event) {
 /**
  * Maps an array of stored events to DiscoveryEventV1 format
  * @param {array} events - Array of stored event objects
+ * @param {object} options - Mapping options (passed to toDiscoveryEventV1)
  * @returns {array} Array of DiscoveryEventV1 objects
  */
-export function toDiscoveryEventsV1(events) {
+export function toDiscoveryEventsV1(events, options = {}) {
   if (!Array.isArray(events)) return []
   
   return events
-    .map(event => toDiscoveryEventV1(event))
+    .map(event => toDiscoveryEventV1(event, options))
     .filter(event => event !== null)
 }
 
