@@ -318,6 +318,36 @@ function getEventsCollection() {
 }
 
 /**
+ * Get an event by its document ID (eventId) from Firestore
+ * @param {string} eventId - The event ID
+ * @returns {Promise<object|null>} - The event or null if not found
+ */
+export async function getEventByIdFromFirestore(eventId) {
+  const db = getFirestoreClient()
+  const eventsCollection = db.collection('events')
+  
+  try {
+    const docRef = eventsCollection.doc(eventId)
+    const doc = await docRef.get()
+    
+    if (!doc.exists) {
+      console.log(`🔥 Event not found in Firestore: ${eventId}`)
+      return null
+    }
+    
+    const data = doc.data()
+    // Remove Firestore internal metadata from returned event
+    const { _firestoreMetadata, ...eventData } = data
+    
+    console.log(`🔥 Retrieved event from Firestore: ${eventId}`)
+    return eventData
+  } catch (error) {
+    console.error('❌ Firestore get by ID error:', error)
+    throw new Error(`Failed to get event from Firestore: ${error.message}`)
+  }
+}
+
+/**
  * Check if Firestore is enabled
  * @returns {boolean} - True if Firestore is configured
  */
