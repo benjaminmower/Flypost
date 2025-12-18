@@ -298,7 +298,7 @@ export async function getEventByIdFromFirestore(eventId) {
     
     const data = docSnap.data()
     // Remove Firestore internal metadata from returned event
-    const { _firestoreMetadata, ...eventData } = data
+    const { _firestoreMetadata, ...eventData } = data || {}
     
     console.log(`🔥 Retrieved event by ID from Firestore: ${eventId}`)
     return eventData
