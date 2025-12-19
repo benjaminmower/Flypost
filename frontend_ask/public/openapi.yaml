@@ -62,7 +62,7 @@ paths:
           schema:
             type: number
             format: double
-            minimum: 0.1
+            minimum: 0
             maximum: 100
             default: 10
           example: 5
