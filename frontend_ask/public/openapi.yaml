@@ -55,7 +55,7 @@ paths:
             minimum: -180
             maximum: 180
           example: -118.4912
-        - name: radius_mi
+        - name: radius
           in: query
           description: Search radius in miles (converted to km internally)
           required: false
