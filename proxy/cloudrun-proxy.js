@@ -10,7 +10,7 @@ const app = express();
 const allowedOrigins = {
   'https://ask.goflypost.com': ['GET', 'POST'], // GET + POST for chat queries
   'https://post.goflypost.com': ['GET', 'POST'], // Allow GET and POST for post
-  'https://presence.goflypost.com': ['GET', 'POST']
+  'https://presence.goflypost.com': ['GET', 'POST'],
   'https://flypost.netlify.app': ['GET'],
   'https://app.goflypost.com': ['GET'],
   'http://localhost:5173': ['GET', 'POST'],
