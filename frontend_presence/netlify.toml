@@ -1,0 +1,17 @@
+# Netlify configuration for Flypost Presence site
+# Deploy this at presence.goflypost.com
+
+[build]
+  base = "frontend-presence"
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/f/*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
