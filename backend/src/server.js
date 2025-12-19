@@ -438,8 +438,36 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
     const longitude = parseFloat(
       req.query.lng || req.query.longitude || '-118.4912'
     )
-    const radius = parseFloat(req.query.radius || '10')
-    
+
+    // Radius handling:
+    // - Preferred: radius_mi (miles) per OpenAPI
+    // - Back-compat: radius (kilometers) if radius_mi not provided
+    const MILES_TO_KM = 1.60934
+    const radiusMiRaw = req.query.radius_mi
+    const radiusKmRaw = req.query.radius
+
+    let radiusKm = 10 // default km
+
+    if (radiusMiRaw != null && radiusMiRaw !== '') {
+      const radiusMi = parseFloat(String(radiusMiRaw))
+      if (isNaN(radiusMi) || radiusMi < 0.1 || radiusMi > 50) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid radius_mi: must be between 0.1 and 50 miles'
+        })
+      }
+      radiusKm = radiusMi * MILES_TO_KM
+    } else if (radiusKmRaw != null && radiusKmRaw !== '') {
+      const radius = parseFloat(String(radiusKmRaw))
+      if (isNaN(radius) || radius < 0 || radius > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid radius: must be between 0 and 100 km'
+        })
+      }
+      radiusKm = radius
+    }
+
     // Validate coordinate ranges
     if (isNaN(latitude) || latitude < -90 || latitude > 90) {
       return res.status(400).json({
@@ -453,12 +481,6 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
         error: 'Invalid longitude: must be between -180 and 180'
       })
     }
-    if (isNaN(radius) || radius < 0 || radius > 100) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid radius: must be between 0 and 100 km'
-      })
-    }
 
     const useFirestore = isFirestoreEnabled()
 
@@ -468,7 +490,7 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
 
     // Determine access tier for two-tier access control
     const accessTier = getAccessTier(req)
-    
+
     // Track and detect anomalies
     const clientIp = req.ip || req.connection.remoteAddress
     trackAndDetectAnomaly(clientIp)
@@ -480,10 +502,16 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
     console.log(
       `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${
         req.path
-      } lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radius}km (brokerageId=${brokerageId || 'ALL'}, tier=${accessTier}, dateRange=${startFilter ? startFilter.toISOString() : 'none'} to ${endFilter ? endFilter.toISOString() : 'none'})`
+      } lat=${latitude.toFixed(4)} lng=${longitude.toFixed(
+        4
+      )} radius=${radiusKm.toFixed(4)}km (brokerageId=${
+        brokerageId || 'ALL'
+      }, tier=${accessTier}, dateRange=${
+        startFilter ? startFilter.toISOString() : 'none'
+      } to ${endFilter ? endFilter.toISOString() : 'none'})`
     )
 
-    const events = await getEventsNear(latitude, longitude, radius, useFirestore)
+    const events = await getEventsNear(latitude, longitude, radiusKm, useFirestore)
 
     let filteredEvents = events || []
 
@@ -524,7 +552,7 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
       events: discoveryEvents,
       meta: {
         count: discoveryEvents.length,
-        radiusKm: radius,
+        radiusKm: radiusKm,
         accessTier
       }
     }
