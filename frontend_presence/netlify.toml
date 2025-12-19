@@ -2,7 +2,7 @@
 # Deploy this at presence.goflypost.com
 
 [build]
-  base = "frontend-presence"
+  base = "frontend_presence"
   command = "npm install && npm run build"
   publish = "dist"
 
