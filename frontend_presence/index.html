@@ -1,107 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flypost | Presence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        ink_black: '#060810',
-                        hot_berry: '#d82e7e',
-                        dark_amethyst: '#2f195f',
-                        mint_leaf: '#40c9a2',
-                        lemon_lime: '#e0e03e',
-                        bright_snow: '#f7f7f7',
-                        air_force_blue: '#628395'
-                    }
-                }
-            }
-        }
+        tailwind.config = { theme: { extend: { colors: { ink_black: '#060810', hot_berry: '#d82e7e', dark_amethyst: '#2f195f', mint_leaf: '#40c9a2', lemon_lime: '#e0e03e', bright_snow: '#f7f7f7', air_force_blue: '#628395' } } } }
     </script>
     <style>
         body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; }
-        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% -20%, #2f195f 0%, #060810 80%); z-index: -1; }
+        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 30%, #1e1b4b 0%, #060810 70%); z-index: -1; }
         .glass-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); }
         .hidden { display: none; }
-        .rocker-active { transform: translateY(-4px); transition: all 0.3s ease; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+<body class="min-h-screen flex flex-col items-center p-6 text-center">
     <div class="bg-glow"></div>
 
-    <nav class="absolute top-12 w-full flex justify-center items-center gap-6 md:gap-12">
-        <a href="https://ask.goflypost.com" class="opacity-30 hover:opacity-100 text-sm font-bold uppercase tracking-widest transition-all">Ask</a>
-        <div class="flex flex-col items-center rocker-active">
-            <div class="font-black text-2xl tracking-tighter text-bright_snow mb-1">FLYPOST</div>
-            <div class="text-4xl font-black text-lemon_lime uppercase tracking-tighter border-t border-lemon_lime/30 pt-1">PRESENCE</div>
+    <header class="flex flex-col items-center pt-16 pb-12 w-full max-w-4xl">
+        <div class="text-white text-3xl font-black tracking-tighter mb-4 uppercase">Flypost</div>
+        <div class="w-full max-w-[280px] border-t border-white/20 mb-6"></div>
+        <div class="flex items-center justify-between w-full px-4 gap-2">
+            <a href="https://ask.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-30 hover:opacity-100 transition-all uppercase tracking-[0.2em] w-1/4 text-right">Ask</a>
+            <div class="text-5xl md:text-7xl font-black text-lemon_lime uppercase tracking-tighter w-2/4">Presence</div>
+            <a href="https://post.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-30 hover:opacity-100 transition-all uppercase tracking-[0.2em] w-1/4 text-left">Post</a>
         </div>
-        <a href="https://post.goflypost.com" class="opacity-30 hover:opacity-100 text-sm font-bold uppercase tracking-widest transition-all">Drop</a>
-    </nav>
+    </header>
 
-    <main class="max-w-xl w-full mt-24">
-        
-        <!-- Check-in View -->
-        <div id="view-checkin" class="hidden">
-            <h1 class="text-5xl font-black mb-6 tracking-tighter italic">Arrived?</h1>
-            <p class="text-air_force_blue-700 text-lg mb-10">Check in to this open house to receive property details and provide feedback.</p>
-            <button id="btn-checkin" class="w-full bg-lemon_lime text-ink_black py-6 rounded-2xl font-black text-2xl shadow-xl shadow-lemon_lime/20 hover:scale-[1.02] transition-transform">
-                CHECK IN NOW
-            </button>
-            <p id="status-msg" class="mt-4 text-xs text-air_force_blue-900 uppercase tracking-widest"></p>
+    <main class="max-w-xl w-full mt-10">
+        <div id="view-checkin" class="glass-card p-10 rounded-3xl border-lemon_lime/10">
+            <h1 class="text-3xl font-bold mb-6 italic tracking-tight">Arrived?</h1>
+            <p class="text-air_force_blue-700 mb-10">Check in to receive property details.</p>
+            <button id="btn-checkin" class="w-full bg-lemon_lime text-ink_black py-6 rounded-2xl font-black text-2xl shadow-xl shadow-lemon_lime/20 hover:scale-[1.02] transition-transform">CHECK IN NOW</button>
+            <p id="status-msg" class="mt-4 text-xs uppercase tracking-widest text-air_force_blue-900"></p>
         </div>
 
-        <!-- Success View -->
         <div id="view-success" class="hidden">
             <div class="w-20 h-20 bg-mint_leaf rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-mint_leaf/20">
                 <svg class="w-10 h-10 text-ink_black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
             </div>
-            <h1 class="text-4xl font-black mb-4 tracking-tighter">You're checked in!</h1>
-            <p class="text-air_force_blue-700 mb-10 italic">Thank you for visiting. Use the links below to share your thoughts.</p>
-            
+            <h1 class="text-4xl font-black mb-8 tracking-tighter">You're In.</h1>
             <div class="space-y-4">
-                <button id="btn-open-feedback" class="w-full bg-lemon_lime text-ink_black py-4 rounded-xl font-bold shadow-lg shadow-lemon_lime/20 hover:brightness-110 transition">
-                    Open Feedback Form
-                </button>
-                <button id="btn-copy-link" class="w-full glass-card py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-white/10 transition">
-                    <span>Copy Feedback Link</span>
-                </button>
-                <a id="sms-link" href="#" class="block w-full bg-hot_berry py-4 rounded-xl font-bold text-bright_snow shadow-lg shadow-hot_berry/20 hover:brightness-110 transition">
-                    Text me the Link
-                </a>
+                <button id="btn-copy-link" class="w-full glass-card py-4 rounded-xl font-bold">Copy Link</button>
+                <a id="sms-link" href="#" class="block w-full bg-hot_berry py-4 rounded-xl font-bold text-bright_snow">Text me the Link</a>
             </div>
         </div>
 
-        <!-- Feedback View -->
-        <div id="view-feedback" class="hidden">
-            <h1 class="text-4xl font-black mb-6 tracking-tighter">How did it feel?</h1>
-            <div class="glass-card p-6 rounded-2xl text-left space-y-6">
-                <div>
-                    <label class="block text-xs font-bold text-air_force_blue-800 uppercase tracking-widest mb-2">What did you like?</label>
-                    <textarea id="feedback-liked" rows="3" class="w-full bg-ink_black border border-white/10 rounded-xl p-4 text-bright_snow focus:border-lemon_lime outline-none" placeholder="What did you love about the property?"></textarea>
-                </div>
-                
-                <div>
-                    <label class="block text-xs font-bold text-air_force_blue-800 uppercase tracking-widest mb-2">What didn't you like?</label>
-                    <textarea id="feedback-disliked" rows="3" class="w-full bg-ink_black border border-white/10 rounded-xl p-4 text-bright_snow focus:border-lemon_lime outline-none" placeholder="What didn't work for you?"></textarea>
-                </div>
-                
-                <div class="flex items-center gap-3">
-                    <input type="checkbox" id="feedback-wants-similar" class="w-5 h-5 rounded border-white/10 text-lemon_lime focus:ring-lemon_lime">
-                    <label for="feedback-wants-similar" class="text-sm font-medium">I want to see similar properties</label>
-                </div>
-                
-                <button id="btn-submit-feedback" class="w-full mt-6 bg-lemon_lime text-ink_black py-4 rounded-xl font-black text-lg hover:brightness-110 transition">
-                    Submit Feedback
-                </button>
-            </div>
+        <div id="view-feedback" class="hidden glass-card p-8 rounded-3xl mt-4 text-left">
+             <h2 class="text-2xl font-black mb-4 uppercase">Feedback</h2>
+             <textarea id="feedback-liked" rows="3" class="w-full bg-ink_black/50 border border-white/10 rounded-xl p-4 text-white mb-4" placeholder="What did you like?"></textarea>
+             <button id="btn-submit-feedback" class="w-full bg-lemon_lime text-ink_black py-4 rounded-xl font-black">Submit</button>
         </div>
-
     </main>
-
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>
