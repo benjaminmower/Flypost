@@ -5,25 +5,11 @@
     <title>Flypost | Post</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        ink_black: '#060810',
-                        hot_berry: '#d82e7e',
-                        dark_amethyst: '#2f195f',
-                        mint_leaf: '#40c9a2',
-                        lemon_lime: '#e0e03e',
-                        bright_snow: '#f7f7f7',
-                        air_force_blue: '#628395'
-                    }
-                }
-            }
-        }
+        tailwind.config = { theme: { extend: { colors: { ink_black: '#060810', hot_berry: '#d82e7e', dark_amethyst: '#2f195f', mint_leaf: '#40c9a2', lemon_lime: '#e0e03e', bright_snow: '#f7f7f7', air_force_blue: '#628395' } } } }
     </script>
     <style>
         body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; }
-        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% -20%, #2f195f 0%, #060810 80%); z-index: -1; }
+        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 30%, #2f195f 0%, #060810 70%); z-index: -1; }
         .glass-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); }
         .text-glow { background: linear-gradient(to right, #d82e7e, #e0e03e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .status { margin-top: 1rem; padding: 1rem; border-radius: 0.5rem; }
@@ -32,18 +18,21 @@
         .hidden { display: none; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+<body class="min-h-screen flex flex-col items-center p-6 text-center">
     <div class="bg-glow"></div>
 
-    <nav class="absolute top-12 w-full flex justify-center items-center gap-4 md:gap-8 px-4">
-        <a href="https://ask.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-40 hover:opacity-100 transition-all uppercase tracking-widest">Ask</a>
-        <a href="https://presence.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-40 hover:opacity-100 transition-all uppercase tracking-widest">Presence</a>
-        <div class="font-black text-2xl tracking-tighter text-bright_snow border-x border-white/10 px-4 md:px-6">FLYPOST</div>
-        <div class="text-4xl font-black text-hot_berry uppercase tracking-tighter transform rotate-[-2deg]">POST</div>
-    </nav>
+    <header class="flex flex-col items-center pt-16 pb-12 w-full max-w-4xl">
+        <div class="text-white text-3xl font-black tracking-tighter mb-4 uppercase">Flypost</div>
+        <div class="w-full max-w-[280px] border-t border-white/20 mb-6"></div>
+        <div class="flex items-center justify-between w-full px-4 gap-2">
+            <a href="https://presence.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-30 hover:opacity-100 transition-all uppercase tracking-[0.2em] w-1/4 text-right">Presence</a>
+            <div class="text-5xl md:text-7xl font-black text-hot_berry uppercase tracking-tighter w-2/4">Post</div>
+            <a href="https://ask.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-30 hover:opacity-100 transition-all uppercase tracking-[0.2em] w-1/4 text-left">Ask</a>
+        </div>
+    </header>
 
-    <main class="max-w-2xl w-full mt-24">
-        <h1 class="text-6xl md:text-8xl font-black mb-6 tracking-tighter leading-tight italic">Market your <span class="text-glow">Listing.</span></h1>
+    <main class="max-w-2xl w-full mt-10">
+        <h1 class="text-3xl md:text-4xl font-bold mb-10 tracking-tighter italic">Market your <span class="text-glow">Listing.</span></h1>
         
         <div id="auth-section" class="max-w-xl mx-auto">
             <div class="glass-card p-8 rounded-3xl border-hot_berry/20">
@@ -57,6 +46,19 @@
             </div>
         </div>
 
-        <div id="publish-section" class="hidden max-w-xl mx-auto space-y-4">
+        <div id="publish-section" class="hidden max-w-xl mx-auto space-y-4 text-left">
             <div class="flex justify-between items-center px-2">
                 <span class="text-xs font-bold text-mint_leaf uppercase tracking-widest">● Active Session</span>
+                <button id="signout-btn" class="text-xs text-air_force_blue-700 hover:text-hot_berry transition uppercase font-bold">Sign Out</button>
+            </div>
+            <form id="event-form" class="glass-card p-8 rounded-3xl border-mint_leaf/20">
+                <textarea id="event-input" rows="4" placeholder="Describe your event..." class="bg-ink_black/50 border border-white/10 w-full p-4 rounded-xl focus:outline-none focus:border-mint_leaf text-white mb-6 resize-none"></textarea>
+                <button id="publish-btn" type="submit" class="bg-bright_snow text-ink_black w-full py-4 rounded-xl font-black text-xl hover:bg-hot_berry hover:text-white transition-all transform hover:scale-[1.02]">PUBLISH EVENT</button>
+            </form>
+            <div id="publish-status" class="status hidden"></div>
+        </div>
+    </main>
+    
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
