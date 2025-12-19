@@ -17,13 +17,35 @@ let viewCheckIn, viewSuccess, viewFeedback
 let btnCheckIn, statusMsg, feedbackText, smsLink
 
 /**
+ * Show a temporary notification message
+ */
+function showNotification(message, type = 'info') {
+  // Create notification element
+  const notification = document.createElement('div')
+  notification.className = `fixed top-4 right-4 px-6 py-4 rounded-xl font-bold shadow-lg z-50 transition-all ${
+    type === 'success' ? 'bg-mint_leaf text-ink_black' : 
+    type === 'error' ? 'bg-hot_berry text-bright_snow' :
+    'bg-lemon_lime text-ink_black'
+  }`
+  notification.textContent = message
+  
+  document.body.appendChild(notification)
+  
+  // Remove after 3 seconds
+  setTimeout(() => {
+    notification.style.opacity = '0'
+    setTimeout(() => notification.remove(), 300)
+  }, 3000)
+}
+
+/**
  * Get or generate buyer token
  */
 function getBuyerToken() {
   let token = localStorage.getItem('buyerToken')
   if (!token) {
     // Generate a simple ULID-like token
-    token = 'ulid_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36)
+    token = 'ulid_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36)
     localStorage.setItem('buyerToken', token)
   }
   return token
@@ -144,11 +166,11 @@ function copyFeedbackLink() {
   if (feedbackUrl) {
     navigator.clipboard.writeText(feedbackUrl).then(
       () => {
-        alert('Link copied to clipboard!')
+        showNotification('Link copied to clipboard!', 'success')
       },
       (err) => {
         console.error('Failed to copy:', err)
-        alert('Failed to copy link')
+        showNotification('Failed to copy link', 'error')
       }
     )
   }
@@ -172,11 +194,15 @@ async function handleFeedbackSubmit() {
   const wantsSimilar = document.getElementById('feedback-wants-similar')?.checked || false
 
   if (!currentAttendanceId) {
-    alert('No attendance ID found. Please check in first.')
+    showNotification('No attendance ID found. Please check in first.', 'error')
     return
   }
 
   try {
+    const submitBtn = document.getElementById('btn-submit-feedback')
+    submitBtn.disabled = true
+    submitBtn.textContent = 'Submitting...'
+
     const response = await submitFeedback(currentAttendanceId, {
       liked,
       disliked,
@@ -184,15 +210,22 @@ async function handleFeedbackSubmit() {
     })
 
     if (response.success) {
-      alert('Feedback sent! Thank you.')
-      // Redirect to ask site
-      window.location.href = 'https://ask.goflypost.com'
+      showNotification('Feedback sent! Thank you.', 'success')
+      // Redirect to ask site after a short delay
+      setTimeout(() => {
+        window.location.href = 'https://ask.goflypost.com'
+      }, 1500)
     } else {
-      alert('Failed to submit feedback. Please try again.')
+      showNotification('Failed to submit feedback. Please try again.', 'error')
+      submitBtn.disabled = false
+      submitBtn.textContent = 'Submit Feedback'
     }
   } catch (error) {
     console.error('Feedback submission error:', error)
-    alert(error.message || 'Failed to submit feedback')
+    showNotification(error.message || 'Failed to submit feedback', 'error')
+    const submitBtn = document.getElementById('btn-submit-feedback')
+    submitBtn.disabled = false
+    submitBtn.textContent = 'Submit Feedback'
   }
 }
 
