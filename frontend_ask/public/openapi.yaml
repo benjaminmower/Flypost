@@ -57,13 +57,13 @@ paths:
           example: -118.4912
         - name: radius
           in: query
-          description: Search radius in miles (converted to km internally)
+          description: Search radius in kilometers
           required: false
           schema:
             type: number
             format: double
             minimum: 0.1
-            maximum: 50
+            maximum: 100
             default: 10
           example: 5
         - name: start
