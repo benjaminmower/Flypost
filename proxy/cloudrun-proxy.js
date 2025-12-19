@@ -73,11 +73,26 @@ app.get('/', (req, res) => {
   res.status(200).json({ status: 'proxy running' });
 });
 
+// --- existing forward route registrations ---
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'proxy running' });
+});
+
 app.get('/health', forward);
 app.get('/v1/events/near', forward);
 app.get('/v1/events/:event_id', forward);
 app.post('/api/parse-and-publish', forward);
 app.use('/api', forward);
+
+// <-- ADD THESE LINES HERE (forward presence/feedback writes) -->
+// Forward explicit endpoints
+app.post('/v1/presence/check-in', forward);
+app.post('/v1/feedback/submit', forward);
+
+// Optionally forward entire prefixes (useful for future subpaths)
+app.use('/v1/presence', forward);
+app.use('/v1/feedback', forward);
+// -----------------------------------------------------------------
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 app.listen(PORT, '0.0.0.0', () => {
