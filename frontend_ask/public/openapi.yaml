@@ -25,7 +25,7 @@ tags:
     description: Event discovery endpoints (read-only)
 
 paths:
- v1/events/near:
+ /v1/events/near:
     get:
       summary: Find events near a location
       description: |
