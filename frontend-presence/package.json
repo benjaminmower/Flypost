@@ -1,0 +1,23 @@
+{
+  "name": "flypost-frontend-presence",
+  "version": "1.0.0",
+  "description": "Flypost Presence - Check-in and feedback for open houses",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.2"
+  },
+  "keywords": [
+    "flypost",
+    "presence",
+    "check-in",
+    "feedback",
+    "frontend"
+  ],
+  "author": "goflypost",
+  "license": "Apache-2.0"
+}
