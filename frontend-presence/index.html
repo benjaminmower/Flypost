@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flypost | Presence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -43,15 +44,17 @@
 
     <main class="max-w-xl w-full mt-24">
         
-        <div id="view-checkin">
+        <!-- Check-in View -->
+        <div id="view-checkin" class="hidden">
             <h1 class="text-5xl font-black mb-6 tracking-tighter italic">Arrived?</h1>
             <p class="text-air_force_blue-700 text-lg mb-10">Check in to this open house to receive property details and provide feedback.</p>
-            <button onclick="handleCheckIn()" id="btn-checkin" class="w-full bg-lemon_lime text-ink_black py-6 rounded-2xl font-black text-2xl shadow-xl shadow-lemon_lime/20 hover:scale-[1.02] transition-transform">
+            <button id="btn-checkin" class="w-full bg-lemon_lime text-ink_black py-6 rounded-2xl font-black text-2xl shadow-xl shadow-lemon_lime/20 hover:scale-[1.02] transition-transform">
                 CHECK IN NOW
             </button>
             <p id="status-msg" class="mt-4 text-xs text-air_force_blue-900 uppercase tracking-widest"></p>
         </div>
 
+        <!-- Success View -->
         <div id="view-success" class="hidden">
             <div class="w-20 h-20 bg-mint_leaf rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-mint_leaf/20">
                 <svg class="w-10 h-10 text-ink_black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
@@ -60,7 +63,10 @@
             <p class="text-air_force_blue-700 mb-10 italic">Thank you for visiting. Use the links below to share your thoughts.</p>
             
             <div class="space-y-4">
-                <button onclick="copyFeedbackLink()" class="w-full glass-card py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-white/10 transition">
+                <button id="btn-open-feedback" class="w-full bg-lemon_lime text-ink_black py-4 rounded-xl font-bold shadow-lg shadow-lemon_lime/20 hover:brightness-110 transition">
+                    Open Feedback Form
+                </button>
+                <button id="btn-copy-link" class="w-full glass-card py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-white/10 transition">
                     <span>Copy Feedback Link</span>
                 </button>
                 <a id="sms-link" href="#" class="block w-full bg-hot_berry py-4 rounded-xl font-bold text-bright_snow shadow-lg shadow-hot_berry/20 hover:brightness-110 transition">
@@ -69,12 +75,26 @@
             </div>
         </div>
 
+        <!-- Feedback View -->
         <div id="view-feedback" class="hidden">
             <h1 class="text-4xl font-black mb-6 tracking-tighter">How did it feel?</h1>
-            <div class="glass-card p-6 rounded-2xl text-left">
-                <label class="block text-xs font-bold text-air_force_blue-800 uppercase tracking-widest mb-4">Your Experience</label>
-                <textarea id="feedback-text" rows="4" class="w-full bg-ink_black border border-white/10 rounded-xl p-4 text-bright_snow focus:border-lemon_lime outline-none" placeholder="What did you love (or hate) about the property?"></textarea>
-                <button onclick="submitFeedback()" class="w-full mt-6 bg-lemon_lime text-ink_black py-4 rounded-xl font-black text-lg">
+            <div class="glass-card p-6 rounded-2xl text-left space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-air_force_blue-800 uppercase tracking-widest mb-2">What did you like?</label>
+                    <textarea id="feedback-liked" rows="3" class="w-full bg-ink_black border border-white/10 rounded-xl p-4 text-bright_snow focus:border-lemon_lime outline-none" placeholder="What did you love about the property?"></textarea>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-bold text-air_force_blue-800 uppercase tracking-widest mb-2">What didn't you like?</label>
+                    <textarea id="feedback-disliked" rows="3" class="w-full bg-ink_black border border-white/10 rounded-xl p-4 text-bright_snow focus:border-lemon_lime outline-none" placeholder="What didn't work for you?"></textarea>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <input type="checkbox" id="feedback-wants-similar" class="w-5 h-5 rounded border-white/10 text-lemon_lime focus:ring-lemon_lime">
+                    <label for="feedback-wants-similar" class="text-sm font-medium">I want to see similar properties</label>
+                </div>
+                
+                <button id="btn-submit-feedback" class="w-full mt-6 bg-lemon_lime text-ink_black py-4 rounded-xl font-black text-lg hover:brightness-110 transition">
                     Submit Feedback
                 </button>
             </div>
@@ -82,101 +102,6 @@
 
     </main>
 
-    <script>
-        // 1. Token Management
-        const getBuyerToken = () => {
-            let token = localStorage.getItem('buyerToken');
-            if (!token) {
-                token = 'ulid_' + Math.random().toString(36).substr(2, 9); // Simple ULID-like fallback
-                localStorage.setItem('buyerToken', token);
-            }
-            return token;
-        };
-
-        // 2. Navigation / Routing Logic
-        window.onload = () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const feedbackToken = window.location.pathname.split('/f/')[1] || urlParams.get('f');
-            
-            if (feedbackToken) {
-                showView('view-feedback');
-                window.currentFeedbackToken = feedbackToken;
-            }
-        };
-
-        const showView = (viewId) => {
-            ['view-checkin', 'view-success', 'view-feedback'].forEach(id => {
-                document.getElementById(id).classList.add('hidden');
-            });
-            document.getElementById(viewId).classList.remove('hidden');
-        };
-
-        // 3. API Actions
-        async function handleCheckIn() {
-            const status = document.getElementById('status-msg');
-            const btn = document.getElementById('btn-checkin');
-            
-            status.innerText = "Requesting location...";
-            btn.disabled = true;
-            btn.style.opacity = "0.5";
-
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                const payload = {
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    buyerToken: getBuyerToken(),
-                    method: "geo_time"
-                };
-
-                try {
-                    status.innerText = "Checking in...";
-                    const response = await fetch('https://api.goflypost.com/v1/presence/check-in', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    const data = await response.json();
-
-                    if (response.ok) {
-                        window.feedbackUrl = data.feedbackLink || `https://presence.goflypost.com/f/${data.attendanceId}`;
-                        document.getElementById('sms-link').href = `sms:&body=Here is your Flypost feedback link: ${window.feedbackUrl}`;
-                        showView('view-success');
-                    } else {
-                        status.innerText = "Check-in failed. Try again.";
-                    }
-                } catch (e) {
-                    status.innerText = "API Error. Please refresh.";
-                }
-            }, (err) => {
-                status.innerText = "Location access required.";
-                btn.disabled = false;
-                btn.style.opacity = "1";
-            });
-        }
-
-        async function submitFeedback() {
-            const feedback = document.getElementById('feedback-text').value;
-            const payload = {
-                feedbackToken: window.currentFeedbackToken,
-                content: feedback
-            };
-
-            const response = await fetch('https://api.goflypost.com/v1/presence/feedback', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (response.ok) {
-                alert("Feedback sent! Thank you.");
-                window.location.href = "https://ask.goflypost.com";
-            }
-        }
-
-        function copyFeedbackLink() {
-            navigator.clipboard.writeText(window.feedbackUrl);
-            alert("Link copied to clipboard!");
-        }
-    </script>
+    <script type="module" src="/src/main.js"></script>
 </body>
 </html>
