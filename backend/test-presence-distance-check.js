@@ -58,7 +58,7 @@ async function testCheckInWithinThreshold() {
     const eventId = await createTestEventWithCoordinates('Event At Location', eventLat, eventLng)
     
     // Try to check in 50 meters away (within 100m threshold)
-    // 50m ≈ 0.00045 degrees latitude
+    // Note: 1 degree latitude ≈ 111 km, so 50m ≈ 0.00045 degrees (approximation for testing)
     const checkInLat = eventLat + 0.00045
     const checkInLng = eventLng
 
@@ -101,7 +101,7 @@ async function testCheckInOutsideThreshold() {
     const eventId = await createTestEventWithCoordinates('Event At Location 2', eventLat, eventLng)
     
     // Try to check in 200 meters away (outside 100m threshold)
-    // 200m ≈ 0.0018 degrees latitude
+    // Note: 1 degree latitude ≈ 111 km, so 200m ≈ 0.0018 degrees (approximation for testing)
     const checkInLat = eventLat + 0.0018
     const checkInLng = eventLng
 
@@ -198,6 +198,7 @@ async function testNearestEventWithDistanceCheck() {
     await createTestEventWithCoordinates('Near Event', nearEventLat, nearEventLng)
     
     // Event 2: 300m away (outside threshold)
+    // Note: 1 degree latitude ≈ 111 km, so 300m ≈ 0.0027 degrees (approximation for testing)
     const farEventLat = checkInLat + 0.0027
     const farEventLng = checkInLng
     await createTestEventWithCoordinates('Far Event', farEventLat, farEventLng)
@@ -294,7 +295,7 @@ async function testEventWithoutGeoCoordinates() {
 // Run all tests
 async function runAllTests() {
   console.log('🧪 Presence Distance Check Integration Test Suite')
-  console.log('=' .repeat(60))
+  console.log('='.repeat(60))
   console.log('⏳ Waiting for server to be ready...')
   console.log('NOTE: Server should be started with PRESENCE_RADIUS_KM=0.1')
   
@@ -344,7 +345,7 @@ async function runAllTests() {
   const passed = results.filter(Boolean).length
   const total = results.length
 
-  console.log('\n' + '=' .repeat(60))
+  console.log('\n' + '='.repeat(60))
   console.log(`🎯 Final Results: ${passed}/${total} tests passed`)
   
   if (passed === total) {

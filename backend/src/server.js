@@ -28,7 +28,7 @@ const app = express()
 const port = process.env.PORT || 8080
 
 // Configuration constants
-const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.3') // 300 meters default
+const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.3') // 300 meters default (backward compat); recommended: 0.1 (100m)
 const FEEDBACK_RECENCY_THRESHOLD_HOURS = parseFloat(process.env.FEEDBACK_RECENCY_THRESHOLD_HOURS || '4') // 4 hours default
 const FEEDBACK_RECENCY_THRESHOLD_MS = FEEDBACK_RECENCY_THRESHOLD_HOURS * 60 * 60 * 1000
 
