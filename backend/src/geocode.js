@@ -12,6 +12,7 @@ dotenv.config()
 const GEOCODER_PROVIDER = process.env.GEOCODER_PROVIDER || 'nominatim'
 const GEOCODER_API_KEY = process.env.GEOCODER_API_KEY || ''
 const GEOCODER_CACHE_TTL_SECONDS = parseInt(process.env.GEOCODER_CACHE_TTL_SECONDS || '86400', 10)
+const LOG_ADDRESS_MAX_LENGTH = 50 // Maximum characters to show in log messages
 
 // In-memory cache: { address: { latitude, longitude, timestamp } }
 const geocodeCache = new Map()
@@ -123,11 +124,11 @@ export async function geocodeAddress(addressString) {
   cleanCache()
   const cached = geocodeCache.get(normalizedAddress)
   if (cached) {
-    console.log(`🗺️  Geocode cache hit for: ${addressString.substring(0, 50)}...`)
+    console.log(`🗺️  Geocode cache hit for: ${addressString.substring(0, LOG_ADDRESS_MAX_LENGTH)}...`)
     return { latitude: cached.latitude, longitude: cached.longitude }
   }
 
-  console.log(`🗺️  Geocoding address with ${GEOCODER_PROVIDER}: ${addressString.substring(0, 50)}...`)
+  console.log(`🗺️  Geocoding address with ${GEOCODER_PROVIDER}: ${addressString.substring(0, LOG_ADDRESS_MAX_LENGTH)}...`)
 
   let result = null
   if (GEOCODER_PROVIDER === 'google') {
