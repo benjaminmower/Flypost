@@ -21,6 +21,7 @@ import { mergeSources, validateSource } from './utils/sourceProvenance.js'
 import { enrichEventMetadata, normalizeEventDates } from './utils/eventEnrichment.js'
 import { toDiscoveryEventsV1, toDiscoveryEventV1 } from './utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
+import { geocodeAddress } from './geocode.js'
 
 dotenv.config()
 
@@ -310,6 +311,62 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
         org.phone = org.telephone
         console.log(`📱 Normalized organizer.telephone → phone: ${org.phone}`)
       }
+    }
+
+    // 3.5) GEOCODE ENRICHMENT & ENFORCEMENT
+    // Require event.location.geo for publishing to prevent false-positive presence matches
+    const hasGeo = parsedEvent.location?.geo?.latitude != null && parsedEvent.location?.geo?.longitude != null
+    
+    if (!hasGeo) {
+      console.log(`🗺️  Event missing geo coordinates, attempting geocode enrichment...`)
+      
+      // Construct address string from location fields
+      let addressParts = []
+      if (parsedEvent.location?.address) {
+        const addr = parsedEvent.location.address
+        if (addr.streetAddress) addressParts.push(addr.streetAddress)
+        if (addr.addressLocality) addressParts.push(addr.addressLocality)
+        if (addr.addressRegion) addressParts.push(addr.addressRegion)
+        if (addr.postalCode) addressParts.push(addr.postalCode)
+        if (addr.addressCountry) addressParts.push(addr.addressCountry)
+      }
+      
+      const addressString = addressParts.join(', ')
+      
+      if (addressString) {
+        // Attempt geocoding
+        const geocodeResult = await geocodeAddress(addressString)
+        
+        if (geocodeResult) {
+          // Success: attach geo coordinates
+          if (!parsedEvent.location) parsedEvent.location = { '@type': 'Place' }
+          parsedEvent.location.geo = {
+            '@type': 'GeoCoordinates',
+            latitude: geocodeResult.latitude,
+            longitude: geocodeResult.longitude
+          }
+          console.log(`✅ Geocode enrichment successful: ${geocodeResult.latitude}, ${geocodeResult.longitude}`)
+        } else {
+          // Geocoding failed - reject publish
+          console.error(`❌ Geocode enrichment failed for address: ${addressString}`)
+          return res.status(400).json({
+            success: false,
+            error: 'Validation error: event.location.geo (latitude and longitude) is required for publishing events',
+            hint: 'Provide a full address or set GEOCODER_API_KEY to enable automatic geocoding',
+            address: addressString
+          })
+        }
+      } else {
+        // No address to geocode - reject publish
+        console.error(`❌ No address available for geocoding`)
+        return res.status(400).json({
+          success: false,
+          error: 'Validation error: event.location.geo (latitude and longitude) is required for publishing events',
+          hint: 'Provide a full address or set GEOCODER_API_KEY to enable automatic geocoding'
+        })
+      }
+    } else {
+      console.log(`✅ Event has geo coordinates: ${parsedEvent.location.geo.latitude}, ${parsedEvent.location.geo.longitude}`)
     }
 
     // 4) Check for existing event by identity to determine if update

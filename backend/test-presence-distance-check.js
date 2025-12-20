@@ -235,55 +235,40 @@ async function testNearestEventWithDistanceCheck() {
   }
 }
 
-// Test 5: Event without geo coordinates should allow check-in
+// Test 5: Event without geo coordinates should be rejected at publish
 async function testEventWithoutGeoCoordinates() {
-  console.log('\n🧪 Test 5: Event Without Geo Coordinates (should allow check-in with warning)...')
+  console.log('\n🧪 Test 5: Event Without Geo Coordinates (should be rejected at publish)...')
   
   try {
-    // Create event without coordinates
-    const response = await fetchImpl(`${BASE_URL}/api/test-add-event`, {
+    // Try to create event without coordinates using parse-and-publish
+    const response = await fetchImpl(`${BASE_URL}/api/parse-and-publish`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-flypost-auth-provider': 'firebase'  // Bypass brokerage ID requirement for test
+      },
       body: JSON.stringify({
-        brokerageId: 'test-brokerage',
-        name: 'Event Without Coords',
-        description: 'Test event without geo coordinates',
-        streetAddress: '456 No Coords St',
-        city: 'Los Angeles',
-        state: 'CA',
-        postalCode: '90001',
-        startDate: new Date(Date.now() + 3600000).toISOString()
-        // No latitude/longitude provided
+        naturalLanguageInput: 'Test event at 456 No Coords St, Los Angeles, CA 90001 on ' + 
+          new Date(Date.now() + 3600000).toISOString()
       })
     })
 
-    const createData = await response.json()
-    if (!createData.success) {
-      throw new Error(`Failed to create test event: ${createData.error}`)
-    }
-    const eventId = createData.data.eventId
-
-    // Try to check in
-    const checkInResponse = await fetchImpl(`${BASE_URL}/v1/presence/check-in`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventId,
-        lat: 34.0522,
-        lng: -118.2437,
-        buyerToken: 'buyer_no_geo_event',
-        method: 'geo_time'
-      })
-    })
-
-    const checkInData = await checkInResponse.json()
+    const data = await response.json()
     
-    if (checkInResponse.ok && checkInData.success) {
-      console.log(`   ✅ Check-in allowed for event without geo coordinates: ${checkInData.attendance.attendanceId}`)
-      console.log('      (Server should log a warning about missing geo coordinates)')
+    // Should be rejected because geocoding will fail (no API key configured in test)
+    if (!response.ok && data.error && data.error.includes('location.geo')) {
+      console.log(`   ✅ Event correctly rejected for missing geo coordinates`)
+      console.log(`      Error: ${data.error}`)
+      if (data.hint) {
+        console.log(`      Hint: ${data.hint}`)
+      }
       return true
+    } else if (response.ok) {
+      console.error(`   ❌ Event was published without geo coordinates (should have been rejected)`)
+      console.error(`      This violates the new geo requirement for presence matching`)
+      return false
     } else {
-      console.error(`   ❌ Check-in rejected for event without geo: ${checkInData.error}`)
+      console.error(`   ❌ Unexpected error: ${data.error}`)
       return false
     }
   } catch (error) {
@@ -355,7 +340,7 @@ async function runAllTests() {
     console.log('  ✓ Check-ins outside threshold are rejected with distance info')
     console.log('  ✓ Check-ins at exact location are accepted')
     console.log('  ✓ Nearest event matching respects distance threshold')
-    console.log('  ✓ Events without geo coordinates allow check-in with warning')
+    console.log('  ✓ Events without geo coordinates are rejected at publish time')
     process.exit(0)
   } else {
     console.log(`❌ ${total - passed} test(s) failed`)
