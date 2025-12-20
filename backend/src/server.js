@@ -351,7 +351,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
           console.error(`❌ Geocode enrichment failed for address: ${addressString}`)
           return res.status(400).json({
             success: false,
-            error: 'Validation error: event.location.geo (latitude & longitude) is required for publishing events',
+            error: 'Validation error: event.location.geo (latitude and longitude) is required for publishing events',
             hint: 'Provide a full address or set GEOCODER_API_KEY to enable automatic geocoding',
             address: addressString
           })
@@ -361,7 +361,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
         console.error(`❌ No address available for geocoding`)
         return res.status(400).json({
           success: false,
-          error: 'Validation error: event.location.geo (latitude & longitude) is required for publishing events',
+          error: 'Validation error: event.location.geo (latitude and longitude) is required for publishing events',
           hint: 'Provide a full address or set GEOCODER_API_KEY to enable automatic geocoding'
         })
       }

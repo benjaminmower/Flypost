@@ -245,7 +245,7 @@ async function testEventWithoutGeoCoordinates() {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
-        'x-flypost-auth-provider': 'firebase'  // Bypass brokerageId requirement for test
+        'x-flypost-auth-provider': 'firebase'  // Bypass brokerage ID requirement for test
       },
       body: JSON.stringify({
         naturalLanguageInput: 'Test event at 456 No Coords St, Los Angeles, CA 90001 on ' + 
