@@ -3,7 +3,7 @@
  * Tests that check-ins are rejected when outside configured radius
  * and accepted when within threshold
  * 
- * NOTE: This test requires the server to be running on port 3001
+ * NOTE: This test requires the server to be running on port 8080
  * Run: cd backend && PRESENCE_RADIUS_KM=0.1 npm start
  * Then in another terminal: node test-presence-distance-check.js
  */
@@ -14,7 +14,7 @@ import { clearEvents } from './src/storage.js'
 // Use built-in fetch (Node 18+)
 const fetchImpl = globalThis.fetch || (await import('node-fetch').then(m => m.default))
 
-const BASE_URL = 'http://localhost:3001'
+const BASE_URL = 'http://localhost:8080'
 
 // Helper to wait
 function delay(ms) {
@@ -305,13 +305,13 @@ async function runAllTests() {
   try {
     const healthCheck = await fetchImpl(`${BASE_URL}/health`)
     if (!healthCheck.ok) {
-      console.error('❌ Server is not responding. Make sure it is running on port 3001')
+      console.error('❌ Server is not responding. Make sure it is running on port 8080')
       console.error('   Run: cd backend && PRESENCE_RADIUS_KM=0.1 npm start')
       process.exit(1)
     }
     console.log('✅ Server is ready\n')
   } catch (error) {
-    console.error('❌ Cannot connect to server. Make sure it is running on port 3001')
+    console.error('❌ Cannot connect to server. Make sure it is running on port 8080')
     console.error('   Run: cd backend && PRESENCE_RADIUS_KM=0.1 npm start')
     process.exit(1)
   }
