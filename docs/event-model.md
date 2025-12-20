@@ -82,7 +82,7 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
 
 - `endDate`: Event end datetime
 - `location.name`: Friendly location name
-- `location.geo`: Latitude/longitude coordinates
+- `location.geo`: Latitude/longitude coordinates (**Required for publishing** - events without geo coordinates will be rejected at publish time to prevent false-positive presence matches. If not provided in natural language input, the system will attempt automatic geocoding.)
 - `organizer.@type`: "Person" or "Organization" (defaults to "Person" if not specified)
 - `organizer.name`: Organizer name
 - `organizer.email`: Contact email address

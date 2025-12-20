@@ -185,6 +185,11 @@ PRESENCE_RADIUS_KM=0.1
 
 # Hours within which feedback can be submitted after check-in
 FEEDBACK_RECENCY_THRESHOLD_HOURS=4
+
+# Geocoding configuration (for automatic coordinate enrichment)
+GEOCODER_PROVIDER=nominatim  # 'google' or 'nominatim' (default: nominatim)
+GEOCODER_API_KEY=            # Required for Google Maps, optional for Nominatim
+GEOCODER_CACHE_TTL_SECONDS=86400  # Cache TTL in seconds (default: 24 hours)
 ```
 
 Added to `backend/.env.example` with sensible defaults.
@@ -194,7 +199,25 @@ Added to `backend/.env.example` with sensible defaults.
 - Rejects check-ins that exceed PRESENCE_RADIUS_KM threshold
 - Logs distance for audit trail: `📏 Distance check: 87m (threshold: 100m) for event evt_...`
 - Provides clear rejection message with actual distance
-- Handles events without geo coordinates gracefully (logs warning, allows check-in)
+- ⚠️ **BREAKING CHANGE**: Events without geo coordinates are now **rejected at publish time** (previously allowed with warning)
+
+**Geocoding Enrichment:**
+- All events **must** have `location.geo` (latitude & longitude) at publish time
+- If LLM parser doesn't extract coordinates, the system attempts automatic geocoding
+- Constructs address string from `location.address` fields (streetAddress, city, region, postal code, country)
+- Calls configured geocoding provider (Google Maps or Nominatim)
+- On success: attaches `location.geo = { '@type': 'GeoCoordinates', latitude, longitude }`
+- On failure: rejects publish with HTTP 400 and clear error message:
+  - Error: "Validation error: event.location.geo (latitude & longitude) is required for publishing events"
+  - Hint: "Provide a full address or set GEOCODER_API_KEY to enable automatic geocoding"
+- In-memory caching with configurable TTL to respect provider rate limits
+- Nominatim includes polite 1-second delay per request to respect usage policy
+
+**Operational Notes:**
+- **Before production deployment**: Set `GEOCODER_API_KEY` for Google Maps (recommended for reliability)
+- **Existing events**: Run backfill script to populate geo coordinates for events without them
+- **Monitoring**: Track geocoding success/failure rates and cache hit rates
+- **Rate limits**: Google Maps has generous free tier; Nominatim requires respectful usage (1 req/sec max)
 
 ### 5. Documentation
 
