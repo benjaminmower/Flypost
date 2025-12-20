@@ -3,7 +3,7 @@
  * Handles communication with the backend API
  */
 
-const API_BASE_URL = 'https://api.goflypost.com'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.goflypost.com';
 
 /**
  * Check in to an event
