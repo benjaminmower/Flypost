@@ -32,6 +32,25 @@ const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.3') /
 const FEEDBACK_RECENCY_THRESHOLD_HOURS = parseFloat(process.env.FEEDBACK_RECENCY_THRESHOLD_HOURS || '4') // 4 hours default
 const FEEDBACK_RECENCY_THRESHOLD_MS = FEEDBACK_RECENCY_THRESHOLD_HOURS * 60 * 60 * 1000
 
+// Helper: Calculate distance between two coordinates using Haversine formula
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371 // Earth's radius in kilometers
+  const dLat = toRadians(lat2 - lat1)
+  const dLng = toRadians(lng2 - lng1)
+  
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2)
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+function toRadians(degrees) {
+  return degrees * (Math.PI / 180)
+}
+
 // CORS
 const frontendOrigins = [
   ...((process.env.FRONTEND_URL || '')
@@ -831,6 +850,7 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
 
     let targetEventId = eventId
     let matchedBy = 'explicit'
+    let matchedEvent = null
 
     // If no eventId provided, find nearest event
     if (!targetEventId) {
@@ -852,9 +872,69 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
 
       // For now, use the first/nearest event
       // TODO: Add time window filtering based on timestamp
-      targetEventId = nearbyEvents[0].flypost.eventId
+      matchedEvent = nearbyEvents[0]
+      targetEventId = matchedEvent.flypost.eventId
       matchedBy = 'nearest'
       console.log(`📍 Matched nearest event: ${targetEventId}`)
+    } else {
+      // Explicit eventId provided - fetch the event for distance validation
+      const useFirestore = isFirestoreEnabled()
+      try {
+        matchedEvent = await getEventByIdAny(targetEventId, useFirestore)
+        if (!matchedEvent) {
+          return res.status(404).json({
+            success: false,
+            error: 'Event not found',
+            eventId: targetEventId
+          })
+        }
+      } catch (error) {
+        console.error('❌ Error fetching event for distance check:', error)
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to fetch event for validation',
+          details: error.message
+        })
+      }
+    }
+
+    // STRICT DISTANCE CHECK: Validate proximity to event location
+    // Extract event coordinates (handle common field paths)
+    let eventLat = null
+    let eventLng = null
+    
+    if (matchedEvent.location?.geo?.latitude && matchedEvent.location?.geo?.longitude) {
+      eventLat = matchedEvent.location.geo.latitude
+      eventLng = matchedEvent.location.geo.longitude
+    } else if (matchedEvent.flypost?.geo?.latitude && matchedEvent.flypost?.geo?.longitude) {
+      eventLat = matchedEvent.flypost.geo.latitude
+      eventLng = matchedEvent.flypost.geo.longitude
+    }
+
+    if (eventLat !== null && eventLng !== null) {
+      // Calculate actual distance using Haversine formula
+      const actualDistanceKm = distanceKm(
+        parseFloat(lat),
+        parseFloat(lng),
+        eventLat,
+        eventLng
+      )
+      const actualDistanceMeters = Math.round(actualDistanceKm * 1000)
+      const thresholdMeters = Math.round(PRESENCE_RADIUS_KM * 1000)
+
+      console.log(`📏 Distance check: ${actualDistanceMeters}m (threshold: ${thresholdMeters}m) for event ${targetEventId}`)
+
+      // Reject if outside configured radius
+      if (actualDistanceKm > PRESENCE_RADIUS_KM) {
+        return res.status(404).json({
+          success: false,
+          error: 'No events found within proximity for check-in',
+          hint: `Closest event is ${actualDistanceMeters} m away (threshold ${thresholdMeters} m)`
+        })
+      }
+    } else {
+      // No geo coordinates on event - log warning and allow check-in
+      console.warn(`⚠️  Event ${targetEventId} has no geo coordinates; skipping distance validation`)
     }
 
     // Create attendance record

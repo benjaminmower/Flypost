@@ -94,8 +94,20 @@ Record attendance at an event.
 
 **Features:**
 - Explicit check-in with eventId
-- Nearest event matching within configurable radius (default 0.3 km)
+- Nearest event matching within configurable radius (default 0.1 km / 100 meters)
+- **Strict distance enforcement**: After matching, computes Haversine distance and rejects check-ins outside PRESENCE_RADIUS_KM
 - Multiple check-in methods supported
+- Logs actual distance for audit trail
+- Handles events without geo coordinates gracefully (logs warning, allows check-in)
+
+**Rejection Response (distance exceeded):**
+```json
+{
+  "success": false,
+  "error": "No events found within proximity for check-in",
+  "hint": "Closest event is 250 m away (threshold 100 m)"
+}
+```
 
 #### POST /v1/feedback/submit
 Submit feedback for an event (requires recent attendance).
@@ -168,13 +180,21 @@ Get aggregated feedback insights for a brokerage.
 **New Environment Variables:**
 ```bash
 # Radius in kilometers for presence check-in matching
-PRESENCE_RADIUS_KM=0.3
+# Recommended: 0.1 (100 meters) for strict proximity enforcement
+PRESENCE_RADIUS_KM=0.1
 
 # Hours within which feedback can be submitted after check-in
 FEEDBACK_RECENCY_THRESHOLD_HOURS=4
 ```
 
 Added to `backend/.env.example` with sensible defaults.
+
+**Distance Enforcement:**
+- Uses Haversine formula to compute actual distance between check-in coordinates and event location
+- Rejects check-ins that exceed PRESENCE_RADIUS_KM threshold
+- Logs distance for audit trail: `📏 Distance check: 87m (threshold: 100m) for event evt_...`
+- Provides clear rejection message with actual distance
+- Handles events without geo coordinates gracefully (logs warning, allows check-in)
 
 ### 5. Documentation
 
