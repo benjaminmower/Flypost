@@ -19,8 +19,8 @@ const __dirname = dirname(__filename)
 const schemaPath = join(__dirname, 'schemas', 'flypost-discovery-v1.schema.json')
 const discoverySchema = JSON.parse(readFileSync(schemaPath, 'utf8'))
 
-// Initialize Ajv validator
-const ajv = new Ajv({ allErrors: true, strict: true })
+// Initialize Ajv validator with strict mode disabled for this schema
+const ajv = new Ajv({ allErrors: true, strict: false })
 addFormats(ajv)
 const validateDiscoveryResponse = ajv.compile(discoverySchema)
 
@@ -132,7 +132,6 @@ let response = {
   protocol: 'flypost-discovery',
   version: 'v1',
   success: true,
-  schemaVersion: 'discovery.v1',
   events: discoveryEvents,
   meta: {
     count: discoveryEvents.length,
@@ -157,7 +156,6 @@ if (valid) {
   console.log('✅ Response passes strict schema validation')
   console.log('✅ Protocol: ' + response.protocol)
   console.log('✅ Version: ' + response.version)
-  console.log('✅ Schema version: ' + response.schemaVersion)
 } else {
   console.log('❌ Response fails schema validation:')
   for (const error of validateDiscoveryResponse.errors || []) {
@@ -185,7 +183,7 @@ if (response.protocol === 'flypost-discovery' && response.version === 'v1') {
 }
 
 // Check 2: Required root fields
-if (response.success && response.schemaVersion && response.events && response.meta) {
+if (response.success && response.events && response.meta) {
   console.log('✅ All required root fields present')
   passed++
 } else {

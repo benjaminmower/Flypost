@@ -5,7 +5,15 @@
   "description": "Strict Machine-to-Machine (M2M) Oracle contract for Flypost Discovery API. This is a protocol-grade schema that enforces the 'What, Where, When' signal without consumer UI concerns.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["success", "schemaVersion", "events", "meta"],
+  "required": ["protocol", "version", "success", "meta"],
+  "anyOf": [
+    {
+      "required": ["events"]
+    },
+    {
+      "required": ["event"]
+    }
+  ],
   "properties": {
     "protocol": {
       "type": "string",
@@ -21,14 +29,9 @@
       "type": "boolean",
       "description": "Whether the request was successful"
     },
-    "schemaVersion": {
-      "type": "string",
-      "const": "discovery.v1",
-      "description": "Schema version identifier"
-    },
     "events": {
       "type": "array",
-      "description": "Array of discovery events",
+      "description": "Array of discovery events (used in GET /v1/events/near responses)",
       "items": {
         "$ref": "#/definitions/DiscoveryEvent"
       }

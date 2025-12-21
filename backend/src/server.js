@@ -626,7 +626,6 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
       protocol: 'flypost-discovery',
       version: 'v1',
       success: true,
-      schemaVersion: 'discovery.v1',
       events: discoveryEvents,
       meta: {
         count: discoveryEvents.length,
@@ -718,7 +717,6 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
       protocol: 'flypost-discovery',
       version: 'v1',
       success: true,
-      schemaVersion: 'discovery.v1',
       event: discoveryEvent,
       meta: {
         accessTier

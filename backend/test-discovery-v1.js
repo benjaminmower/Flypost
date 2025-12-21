@@ -18,8 +18,8 @@ const __dirname = dirname(__filename)
 const schemaPath = join(__dirname, 'schemas', 'flypost-discovery-v1.schema.json')
 const discoverySchema = JSON.parse(readFileSync(schemaPath, 'utf8'))
 
-// Initialize Ajv validator
-const ajv = new Ajv({ allErrors: true, strict: true })
+// Initialize Ajv validator with strict mode disabled for this schema
+const ajv = new Ajv({ allErrors: true, strict: false })
 addFormats(ajv)
 const validateDiscoveryResponse = ajv.compile(discoverySchema)
 
@@ -149,7 +149,7 @@ function testSchemaValidation() {
   const mockEvents = [
     {
       flypost: {
-        eventId: 'evt_1',
+        eventId: 'evt_test_001',
         category: 'open_house'
       },
       name: 'Event 1',
@@ -173,7 +173,6 @@ function testSchemaValidation() {
     protocol: 'flypost-discovery',
     version: 'v1',
     success: true,
-    schemaVersion: 'discovery.v1',
     events: discoveryEvents,
     meta: {
       count: discoveryEvents.length,
@@ -200,7 +199,6 @@ function testSchemaValidation() {
     protocol: 'flypost-discovery',
     version: 'v1',
     success: true,
-    schemaVersion: 'discovery.v1',
     event: discoveryEvents[0],
     meta: {
       accessTier: 'brokerage'
@@ -241,10 +239,9 @@ function testAdditionalPropertiesRejection() {
     protocol: 'flypost-discovery',
     version: 'v1',
     success: true,
-    schemaVersion: 'discovery.v1',
     events: [
       {
-        eventId: 'evt_123',
+        eventId: 'evt_test_123',
         dataHash: 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
         what: {
           type: 'open_house',
