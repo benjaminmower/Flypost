@@ -30,7 +30,8 @@ function testDiscoveryV1Mapping() {
       updateCount: 0
     },
     name: 'Test Open House',
-    description: 'A wonderful open house event',
+    description: 'A wonderful open house event', // Should be stripped
+    url: 'https://www.zillow.com/homedetails/123-Main-St',
     startDate: '2025-01-15T10:00:00Z',
     endDate: '2025-01-15T14:00:00Z',
     location: {
@@ -44,6 +45,12 @@ function testDiscoveryV1Mapping() {
         latitude: 34.0522,
         longitude: -118.2437
       }
+    },
+    hash: {
+      algorithm: 'SHA-256',
+      encoding: 'hex',
+      value: 'a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890',
+      canonicalVersion: 1
     }
   }
   
@@ -56,8 +63,7 @@ function testDiscoveryV1Mapping() {
     { field: 'category', expected: 'open_house', actual: discoveryEvent.category },
     { field: 'startDate', expected: '2025-01-15T10:00:00Z', actual: discoveryEvent.startDate },
     { field: 'endDate', expected: '2025-01-15T14:00:00Z', actual: discoveryEvent.endDate },
-    { field: 'name', expected: 'Test Open House', actual: discoveryEvent.name },
-    { field: 'description', expected: 'A wonderful open house event', actual: discoveryEvent.description }
+    { field: 'name', expected: 'Test Open House', actual: discoveryEvent.name }
   ]
   
   for (const check of checks) {
@@ -68,6 +74,35 @@ function testDiscoveryV1Mapping() {
       console.log(`   ❌ ${check.field}: Expected ${check.expected}, got ${check.actual}`)
       failed++
     }
+  }
+  
+  // Check NEW M2M fields
+  
+  // Check url field is present
+  if (discoveryEvent.url === 'https://www.zillow.com/homedetails/123-Main-St') {
+    console.log(`   ✅ url: ${discoveryEvent.url}`)
+    passed++
+  } else {
+    console.log(`   ❌ url: Expected https://www.zillow.com/homedetails/123-Main-St, got ${discoveryEvent.url}`)
+    failed++
+  }
+  
+  // Check dataHash field is present
+  if (discoveryEvent.dataHash === 'a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890') {
+    console.log(`   ✅ dataHash: ${discoveryEvent.dataHash.substring(0, 16)}...`)
+    passed++
+  } else {
+    console.log(`   ❌ dataHash: Missing or incorrect`)
+    failed++
+  }
+  
+  // Check description is ABSENT (hardened contract strips fluff)
+  if (!('description' in discoveryEvent)) {
+    console.log('   ✅ description: Correctly stripped (M2M hardening)')
+    passed++
+  } else {
+    console.log(`   ❌ description: Should be stripped but found: ${discoveryEvent.description}`)
+    failed++
   }
   
   // Check address structure
@@ -88,74 +123,95 @@ function testDiscoveryV1Mapping() {
     failed++
   }
   
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of ${checks.length + 2} checks`)
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of ${checks.length + 5} checks`)
   console.log('')
   
   return failed === 0
 }
 
 /**
- * Test 2: Description truncation
+ * Test 2: URL and DataHash fields (M2M hardening)
  */
-function testDescriptionTruncation() {
-  console.log('Test 2: Description Truncation')
-  console.log('-------------------------------')
+function testUrlAndDataHash() {
+  console.log('Test 2: URL and DataHash Fields (M2M Contract)')
+  console.log('------------------------------------------------')
   
   let passed = 0
   let failed = 0
   
-  // Create a long description (600 chars)
-  const longDescription = 'A'.repeat(600)
-  
-  const mockEvent = {
+  // Test with url and hash
+  const eventWithUrl = {
     flypost: {
       eventId: 'evt_test_456',
       category: 'open_house'
     },
-    description: longDescription
+    url: 'https://www.redfin.com/property/123',
+    hash: {
+      algorithm: 'SHA-256',
+      encoding: 'hex',
+      value: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      canonicalVersion: 1
+    }
   }
   
-  const discoveryEvent = toDiscoveryEventV1(mockEvent)
+  const discoveryEvent = toDiscoveryEventV1(eventWithUrl)
   
-  // Check that description is truncated to MAX_DESCRIPTION_LENGTH + "..."
-  const expectedLength = CONFIG.MAX_DESCRIPTION_LENGTH + '...'.length
-  if (discoveryEvent.description && discoveryEvent.description.length === expectedLength) {
-    console.log(`   ✅ Description truncated to ${discoveryEvent.description.length} chars (includes "...")`)
+  // Check url is present
+  if (discoveryEvent.url === 'https://www.redfin.com/property/123') {
+    console.log('   ✅ URL field preserved correctly')
     passed++
   } else {
-    console.log(`   ❌ Description not truncated correctly: ${discoveryEvent.description?.length} chars (expected ${expectedLength})`)
+    console.log(`   ❌ URL field missing or incorrect: ${discoveryEvent.url}`)
     failed++
   }
   
-  // Check ends with "..."
-  if (discoveryEvent.description && discoveryEvent.description.endsWith('...')) {
-    console.log('   ✅ Truncated description ends with "..."')
+  // Check dataHash is present
+  if (discoveryEvent.dataHash === '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef') {
+    console.log('   ✅ dataHash field mapped from hash.value')
     passed++
   } else {
-    console.log('   ❌ Truncated description does not end with "..."')
+    console.log(`   ❌ dataHash field missing or incorrect: ${discoveryEvent.dataHash}`)
     failed++
   }
   
-  // Test short description (no truncation)
-  const shortEvent = {
+  // Test without url (should not break)
+  const eventWithoutUrl = {
     flypost: {
       eventId: 'evt_test_789',
       category: 'open_house'
     },
-    description: 'Short description'
+    description: 'This should be ignored'
   }
   
-  const shortDiscoveryEvent = toDiscoveryEventV1(shortEvent)
+  const discoveryEventNoUrl = toDiscoveryEventV1(eventWithoutUrl)
   
-  if (shortDiscoveryEvent.description === 'Short description') {
-    console.log('   ✅ Short description not truncated')
+  if (!('url' in discoveryEventNoUrl)) {
+    console.log('   ✅ Missing URL handled gracefully (field absent)')
     passed++
   } else {
-    console.log('   ❌ Short description incorrectly modified')
+    console.log('   ❌ URL should not be present when not provided')
     failed++
   }
   
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 3 checks`)
+  // Test without hash (should not break)
+  if (!('dataHash' in discoveryEventNoUrl)) {
+    console.log('   ✅ Missing hash handled gracefully (field absent)')
+    passed++
+  } else {
+    console.log('   ❌ dataHash should not be present when hash not provided')
+    failed++
+  }
+  
+  // Verify description is stripped even when present
+  if (!('description' in discoveryEventNoUrl)) {
+    console.log('   ✅ Description correctly stripped (M2M hardening)')
+    passed++
+  } else {
+    console.log(`   ❌ Description should be stripped: ${discoveryEventNoUrl.description}`)
+    failed++
+  }
+  
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 5 checks`)
   console.log('')
   
   return failed === 0
@@ -458,7 +514,7 @@ function runAllTests() {
   const results = []
   
   results.push(testDiscoveryV1Mapping())
-  results.push(testDescriptionTruncation())
+  results.push(testUrlAndDataHash())
   results.push(testForbiddenKeys())
   results.push(testSanitizerStripping())
   results.push(testEventIdentityComputation())
