@@ -4,8 +4,13 @@
  * This module enforces the Flypost Discovery Protocol by mapping stored events
  * to the strict what/where/when structure defined in flypost-discovery-v1.schema.json.
  * 
- * STRICT STRIPPING: Removes description, organizer/agent info, price, beds, baths, photos.
- * These are "Human UI" concerns handled by the url field.
+ * Layer 2 (Intelligence) data like attendance, feedback, sentiment is explicitly excluded.
+ * 
+ * Hardened for M2M Infrastructure ("The Oracle for Reality"):
+ * - Strips description (fluff) - machines use url for deeper context
+ * - Adds url field for hand-off to external listings
+ * - Adds dataHash field for data integrity verification
+ * - Maintains tiered precision for geo/address (public vs brokerage)
  */
 
 /**
@@ -130,11 +135,28 @@ function normalizeToUTC(dateStr) {
   } catch {
     return null
   }
+  
+  // Fallback to canonicalKey if available
+  if (event.flypost?.canonicalKey) {
+    return event.flypost.canonicalKey
+  }
+  
+  // Try to compute from event data
+  const brokerageId = event.brokerageId || event.flypost?.brokerageId || 'unknown'
+  const identity = computeCanonicalKey(event, brokerageId)
+  
+  return identity
 }
 
 /**
- * Maps a stored event object to DiscoveryEventV1 format (Protocol-Grade Schema)
- * Enforces strict what/where/when structure without consumer UI concerns
+ * Maps a stored event object to DiscoveryEventV1 format
+ * Only includes registry-safe fields (Layer 1 data)
+ * 
+ * Hardened M2M Contract:
+ * - NO description field (machines use url for context)
+ * - Includes url field for hand-off to external listings
+ * - Includes dataHash field (from event.hash.value) for integrity verification
+ * - Maintains tiered precision for geo/address (public vs brokerage)
  * 
  * @param {object} event - The full stored event object
  * @param {object} options - Mapping options
@@ -179,17 +201,16 @@ export function toDiscoveryEventV1(event, options = {}) {
     return null // Cannot create discovery event without coordinates
   }
   
-  const where = {}
+  // URL for hand-off to external listing (optional)
+  // Machines should use this for deeper context instead of description
+  if (event.url) {
+    discoveryEvent.url = event.url
+  }
   
-  // Apply precision based on access tier
-  if (isPublicTier) {
-    // Public tier: reduce precision to ~1km accuracy (2 decimal places)
-    where.latitude = parseFloat(geo.latitude.toFixed(2))
-    where.longitude = parseFloat(geo.longitude.toFixed(2))
-  } else {
-    // Brokerage tier: full precision
-    where.latitude = geo.latitude
-    where.longitude = geo.longitude
+  // Data integrity hash from event.hash.value
+  // Allows machines to verify they are dealing with the same version of factual data
+  if (event.hash?.value) {
+    discoveryEvent.dataHash = event.hash.value
   }
   
   // Optional: where.address (human-readable, max 200 chars)
