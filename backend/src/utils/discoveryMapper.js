@@ -5,6 +5,12 @@
  * Layer 1 (Registry) data appears in discovery API responses.
  * 
  * Layer 2 (Intelligence) data like attendance, feedback, sentiment is explicitly excluded.
+ * 
+ * Hardened for M2M Infrastructure ("The Oracle for Reality"):
+ * - Strips description (fluff) - machines use url for deeper context
+ * - Adds url field for hand-off to external listings
+ * - Adds dataHash field for data integrity verification
+ * - Maintains tiered precision for geo/address (public vs brokerage)
  */
 
 import { computeCanonicalKey } from './canonicalKey.js'
@@ -169,6 +175,12 @@ function truncateDescription(description, maxLength = MAX_DESCRIPTION_LENGTH) {
  * Maps a stored event object to DiscoveryEventV1 format
  * Only includes registry-safe fields (Layer 1 data)
  * 
+ * Hardened M2M Contract:
+ * - NO description field (machines use url for context)
+ * - Includes url field for hand-off to external listings
+ * - Includes dataHash field (from event.hash.value) for integrity verification
+ * - Maintains tiered precision for geo/address (public vs brokerage)
+ * 
  * @param {object} event - The full stored event object
  * @param {object} options - Mapping options
  * @param {string} options.accessTier - Access tier: 'public' or 'brokerage'
@@ -203,10 +215,16 @@ export function toDiscoveryEventV1(event, options = {}) {
     discoveryEvent.name = event.name
   }
   
-  // Description with truncation (public tier gets shorter description)
-  if (event.description) {
-    const maxLength = isPublicTier ? 200 : MAX_DESCRIPTION_LENGTH
-    discoveryEvent.description = truncateDescription(event.description, maxLength)
+  // URL for hand-off to external listing (optional)
+  // Machines should use this for deeper context instead of description
+  if (event.url) {
+    discoveryEvent.url = event.url
+  }
+  
+  // Data integrity hash from event.hash.value
+  // Allows machines to verify they are dealing with the same version of factual data
+  if (event.hash?.value) {
+    discoveryEvent.dataHash = event.hash.value
   }
   
   // Address (structured) - public tier gets less precise address
