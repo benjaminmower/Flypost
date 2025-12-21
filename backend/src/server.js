@@ -628,9 +628,7 @@ app.get('/v1/events/near', applyTieredRateLimit, async (req, res) => {
       success: true,
       events: discoveryEvents,
       meta: {
-        count: discoveryEvents.length,
-        radiusKm: radiusKm,
-        accessTier
+        count: discoveryEvents.length
       }
     }
 
@@ -713,13 +711,14 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
     }
 
     // Build Discovery V1 response (Protocol-Grade Contract)
+    // Return as array with single event to match schema
     let response = {
       protocol: 'flypost-discovery',
       version: 'v1',
       success: true,
-      event: discoveryEvent,
+      events: [discoveryEvent],
       meta: {
-        accessTier
+        count: 1
       }
     }
 
