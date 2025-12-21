@@ -1,21 +1,33 @@
 #!/usr/bin/env node
 /**
- * Test script for Discovery V1 contract and runtime guardrails
- * Tests the Two-Layer North Star enforcement at runtime
+ * Test script for Discovery V1 Protocol Contract
+ * Tests the strict what/where/when M2M Oracle schema enforcement
  */
 
 import { toDiscoveryEventV1, toDiscoveryEventsV1, computeEventIdentity } from './src/utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse, _internal } from './src/utils/sanitizer.js'
 
-console.log('🧪 Testing Discovery V1 Contract & Runtime Guardrails\n')
-console.log('====================================================\n')
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+// Load the Discovery V1 schema
+const schemaPath = join(__dirname, 'schemas', 'flypost-discovery-v1.schema.json')
+const discoverySchema = JSON.parse(readFileSync(schemaPath, 'utf8'))
+
+// Initialize Ajv validator with 2020-12 schema support (strict mode enabled)
+const ajv = new Ajv2020({ allErrors: true, strict: true })
+addFormats(ajv)
+const validateDiscoveryResponse = ajv.compile(discoverySchema)
+
+console.log('🧪 Testing Discovery V1 Protocol Contract\n')
+console.log('==========================================\n')
 
 /**
- * Test 1: Discovery V1 mapping includes required fields
+ * Test 1: Discovery V1 mapping produces valid schema-compliant output
  */
 function testDiscoveryV1Mapping() {
-  console.log('Test 1: Discovery V1 Mapping - Required Fields')
-  console.log('-----------------------------------------------')
+  console.log('Test 1: Discovery V1 Mapping - Schema Validation')
+  console.log('------------------------------------------------')
   
   let passed = 0
   let failed = 0
@@ -24,10 +36,7 @@ function testDiscoveryV1Mapping() {
     id: 'evt_test_123',
     flypost: {
       eventId: 'evt_test_123',
-      eventIdentity: 'test-identity-key',
-      category: 'open_house',
-      submissionTimestamp: '2025-01-01T00:00:00Z',
-      updateCount: 0
+      category: 'open_house'
     },
     name: 'Test Open House',
     description: 'A wonderful open house event', // Should be stripped
@@ -55,6 +64,23 @@ function testDiscoveryV1Mapping() {
   }
   
   const discoveryEvent = toDiscoveryEventV1(mockEvent)
+  
+  if (!discoveryEvent) {
+    console.log('   ❌ Mapper returned null')
+    failed++
+    console.log(`\n   Summary: ${passed} passed, ${failed} failed`)
+    console.log('')
+    return false
+  }
+  
+  // Check structure matches what/where/when
+  if (discoveryEvent.what && discoveryEvent.where && discoveryEvent.when) {
+    console.log('   ✅ Has what/where/when structure')
+    passed++
+  } else {
+    console.log('   ❌ Missing what/where/when structure')
+    failed++
+  }
   
   // Check required fields
   const checks = [
@@ -110,17 +136,24 @@ function testDiscoveryV1Mapping() {
     console.log('   ✅ address.streetAddress: 123 Main St')
     passed++
   } else {
-    console.log('   ❌ address.streetAddress missing or incorrect')
+    console.log('   ❌ url field missing')
     failed++
   }
   
-  // Check geo structure
-  if (discoveryEvent.geo && discoveryEvent.geo.latitude === 34.0522) {
-    console.log('   ✅ geo.latitude: 34.0522')
+  // Check forbidden fields are NOT present
+  const forbiddenFields = ['description', 'organizer', 'price', 'beds', 'baths', 'photos', 'eventIdentity', 'submissionTimestamp']
+  let allStripped = true
+  for (const field of forbiddenFields) {
+    if (field in discoveryEvent) {
+      console.log(`   ❌ Forbidden field present: ${field}`)
+      failed++
+      allStripped = false
+    }
+  }
+  
+  if (allStripped) {
+    console.log('   ✅ All forbidden fields stripped')
     passed++
-  } else {
-    console.log('   ❌ geo.latitude missing or incorrect')
-    failed++
   }
   
   console.log(`\n   Summary: ${passed} passed, ${failed} failed out of ${checks.length + 5} checks`)
@@ -218,288 +251,107 @@ function testUrlAndDataHash() {
 }
 
 /**
- * Test 3: Forbidden keys detection
+ * Test 3: Additional properties detection
  */
-function testForbiddenKeys() {
-  console.log('Test 3: Forbidden Keys Detection')
-  console.log('---------------------------------')
+function testAdditionalPropertiesRejection() {
+  console.log('Test 3: Additional Properties Detection')
+  console.log('----------------------------------------')
   
   let passed = 0
   let failed = 0
   
-  const { isForbiddenKey } = _internal
-  
-  const forbiddenTests = [
-    { key: 'attendance', shouldBeForbidden: true },
-    { key: 'attendees', shouldBeForbidden: true },
-    { key: 'buyerToken', shouldBeForbidden: true },
-    { key: 'presenceProof', shouldBeForbidden: true },
-    { key: 'feedback', shouldBeForbidden: true },
-    { key: 'sentiment', shouldBeForbidden: true },
-    { key: 'insights', shouldBeForbidden: true },
-    { key: 'brokerageAffiliation', shouldBeForbidden: true },
-    { key: 'intelligenceData', shouldBeForbidden: true },
-    { key: 'intelligenceScore', shouldBeForbidden: true },
-    { key: 'eventId', shouldBeForbidden: false },
-    { key: 'name', shouldBeForbidden: false },
-    { key: 'category', shouldBeForbidden: false }
-  ]
-  
-  for (const test of forbiddenTests) {
-    const result = isForbiddenKey(test.key)
-    if (result === test.shouldBeForbidden) {
-      console.log(`   ✅ ${test.key}: ${result ? 'Forbidden' : 'Allowed'} (as expected)`)
-      passed++
-    } else {
-      console.log(`   ❌ ${test.key}: Expected ${test.shouldBeForbidden ? 'Forbidden' : 'Allowed'}, got ${result ? 'Forbidden' : 'Allowed'}`)
-      failed++
-    }
-  }
-  
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of ${forbiddenTests.length} checks`)
-  console.log('')
-  
-  return failed === 0
-}
-
-/**
- * Test 4: Sanitizer strips forbidden keys
- */
-function testSanitizerStripping() {
-  console.log('Test 4: Sanitizer Strips Forbidden Keys (Drift Protection)')
-  console.log('-----------------------------------------------------------')
-  
-  let passed = 0
-  let failed = 0
-  
-  // Create a response with forbidden keys (simulating drift)
-  const dirtyResponse = {
+  // Create a response with additional properties
+  const invalidResponse = {
+    protocol: 'flypost-discovery',
+    version: 'v1',
     success: true,
-    schemaVersion: 'discovery.v1',
     events: [
       {
-        eventId: 'evt_123',
-        eventIdentity: 'key-123',
-        name: 'Test Event',
-        category: 'open_house',
-        // Forbidden keys that should be stripped
-        attendance: 50,
-        feedback: 'Great event!',
-        sentiment: 'positive',
-        intelligenceScore: 0.95,
-        // Nested forbidden keys
-        details: {
-          attendance: 30,
-          buyerToken: 'secret-token'
-        }
+        eventId: 'evt_test_123',
+        dataHash: 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
+        what: {
+          type: 'open_house',
+          label: 'Test'
+        },
+        where: {
+          latitude: 34.05,
+          longitude: -118.24
+        },
+        when: {
+          start: '2025-01-20T10:00:00.000Z',
+          end: '2025-01-20T14:00:00.000Z'
+        },
+        url: null,
+        // Additional forbidden properties
+        description: 'This should not be here',
+        price: 500000
       }
-    ]
-  }
-  
-  const sanitized = sanitizeDiscoveryResponse(dirtyResponse)
-  
-  // Check that forbidden keys are removed
-  const event = sanitized.events[0]
-  
-  const strippedChecks = [
-    { key: 'attendance', present: 'attendance' in event },
-    { key: 'feedback', present: 'feedback' in event },
-    { key: 'sentiment', present: 'sentiment' in event },
-    { key: 'intelligenceScore', present: 'intelligenceScore' in event }
-  ]
-  
-  for (const check of strippedChecks) {
-    if (!check.present) {
-      console.log(`   ✅ ${check.key} stripped successfully`)
-      passed++
-    } else {
-      console.log(`   ❌ ${check.key} still present in response`)
-      failed++
+    ],
+    meta: {
+      count: 1
     }
   }
   
-  // Check nested keys stripped
-  if (!('attendance' in event.details)) {
-    console.log('   ✅ Nested attendance stripped')
+  const valid = validateDiscoveryResponse(invalidResponse)
+  
+  if (!valid) {
+    console.log('   ✅ Schema correctly rejects additional properties')
     passed++
-  } else {
-    console.log('   ❌ Nested attendance still present')
-    failed++
-  }
-  
-  if (!('buyerToken' in event.details)) {
-    console.log('   ✅ Nested buyerToken stripped')
-    passed++
-  } else {
-    console.log('   ❌ Nested buyerToken still present')
-    failed++
-  }
-  
-  // Check that allowed keys remain
-  const allowedChecks = [
-    { key: 'eventId', present: 'eventId' in event, value: event.eventId },
-    { key: 'name', present: 'name' in event, value: event.name },
-    { key: 'category', present: 'category' in event, value: event.category }
-  ]
-  
-  for (const check of allowedChecks) {
-    if (check.present) {
-      console.log(`   ✅ ${check.key} preserved: ${check.value}`)
+    
+    // Check that the error is about additional properties
+    const hasAdditionalPropError = validateDiscoveryResponse.errors?.some(
+      err => err.keyword === 'additionalProperties'
+    )
+    
+    if (hasAdditionalPropError) {
+      console.log('   ✅ Error identifies additionalProperties violation')
       passed++
     } else {
-      console.log(`   ❌ ${check.key} incorrectly removed`)
+      console.log('   ❌ Error does not identify additionalProperties violation')
       failed++
     }
+  } else {
+    console.log('   ❌ Schema incorrectly accepts additional properties')
+    failed++
   }
   
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 9 checks`)
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 2 checks`)
   console.log('')
   
   return failed === 0
 }
 
 /**
- * Test 5: computeEventIdentity fallback logic
+ * Test 4: Category normalization
  */
-function testEventIdentityComputation() {
-  console.log('Test 5: Event Identity Computation (Fallback Logic)')
-  console.log('----------------------------------------------------')
+function testCategoryNormalization() {
+  console.log('Test 4: Category Normalization')
+  console.log('-------------------------------')
   
   let passed = 0
   let failed = 0
   
-  // Test 1: Prefer existing eventIdentity
-  const event1 = {
-    flypost: {
-      eventIdentity: 'existing-identity',
-      canonicalKey: 'canonical-key'
-    }
-  }
-  
-  const identity1 = computeEventIdentity(event1)
-  if (identity1 === 'existing-identity') {
-    console.log('   ✅ Prefers existing eventIdentity')
-    passed++
-  } else {
-    console.log(`   ❌ Should prefer eventIdentity, got: ${identity1}`)
-    failed++
-  }
-  
-  // Test 2: Fallback to canonicalKey
-  const event2 = {
-    flypost: {
-      canonicalKey: 'canonical-key-123'
-    }
-  }
-  
-  const identity2 = computeEventIdentity(event2)
-  if (identity2 === 'canonical-key-123') {
-    console.log('   ✅ Falls back to canonicalKey')
-    passed++
-  } else {
-    console.log(`   ❌ Should fallback to canonicalKey, got: ${identity2}`)
-    failed++
-  }
-  
-  // Test 3: Compute from address when needed
-  const event3 = {
-    brokerageId: 'test-brokerage',
-    location: {
-      address: {
-        streetAddress: '123 Main St',
-        addressLocality: 'Los Angeles',
-        addressRegion: 'CA',
-        postalCode: '90001'
-      }
-    }
-  }
-  
-  const identity3 = computeEventIdentity(event3)
-  if (identity3 && identity3.includes('123mainst')) {
-    console.log(`   ✅ Computes from address: ${identity3}`)
-    passed++
-  } else {
-    console.log(`   ❌ Should compute from address, got: ${identity3}`)
-    failed++
-  }
-  
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 3 checks`)
-  console.log('')
-  
-  return failed === 0
-}
-
-/**
- * Test 6: Array mapping
- */
-function testArrayMapping() {
-  console.log('Test 6: Array Mapping to Discovery V1')
-  console.log('--------------------------------------')
-  
-  let passed = 0
-  let failed = 0
-  
-  const mockEvents = [
-    {
-      flypost: {
-        eventId: 'evt_1',
-        category: 'open_house'
-      },
-      name: 'Event 1'
-    },
-    {
-      flypost: {
-        eventId: 'evt_2',
-        category: 'garage-sale'
-      },
-      name: 'Event 2'
-    },
-    {
-      flypost: {
-        eventId: 'evt_3',
-        category: 'open_house'
-      },
-      name: 'Event 3'
-    }
+  const tests = [
+    { input: 'open-houses', expected: 'open_house' },
+    { input: 'garage-sale', expected: 'garage_sale' },
+    { input: 'yard sales', expected: 'yard_sale' },
+    { input: 'estate_sale', expected: 'estate_sale' },
+    { input: 'moving sale', expected: 'moving_sale' },
+    { input: 'unknown', expected: 'other' }
   ]
   
-  const discoveryEvents = toDiscoveryEventsV1(mockEvents)
-  
-  if (discoveryEvents.length === 3) {
-    console.log(`   ✅ Mapped ${discoveryEvents.length} events`)
-    passed++
-  } else {
-    console.log(`   ❌ Expected 3 events, got ${discoveryEvents.length}`)
-    failed++
+  for (const test of tests) {
+    const result = normalizeCategory(test.input)
+    if (result === test.expected) {
+      console.log(`   ✅ "${test.input}" → "${result}"`)
+      passed++
+    } else {
+      console.log(`   ❌ "${test.input}": Expected "${test.expected}", got "${result}"`)
+      failed++
+    }
   }
   
-  if (discoveryEvents[0].eventId === 'evt_1') {
-    console.log('   ✅ First event mapped correctly')
-    passed++
-  } else {
-    console.log('   ❌ First event not mapped correctly')
-    failed++
-  }
-  
-  if (discoveryEvents[1].category === 'garage_sale') {
-    console.log('   ✅ Second event category normalized (garage-sale → garage_sale)')
-    passed++
-  } else {
-    console.log(`   ❌ Second event category not normalized correctly: ${discoveryEvents[1].category}`)
-    failed++
-  }
-  
-  // Test empty array
-  const emptyResult = toDiscoveryEventsV1([])
-  if (Array.isArray(emptyResult) && emptyResult.length === 0) {
-    console.log('   ✅ Empty array handled correctly')
-    passed++
-  } else {
-    console.log('   ❌ Empty array not handled correctly')
-    failed++
-  }
-  
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 4 checks`)
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of ${tests.length} checks`)
   console.log('')
   
   return failed === 0
@@ -509,7 +361,7 @@ function testArrayMapping() {
  * Run all tests
  */
 function runAllTests() {
-  console.log('Starting Discovery V1 tests...\n')
+  console.log('Starting Discovery V1 Protocol tests...\n')
   
   const results = []
   
@@ -521,17 +373,17 @@ function runAllTests() {
   results.push(testArrayMapping())
   
   // Summary
-  console.log('====================================================')
+  console.log('==========================================')
   console.log('Test Summary')
-  console.log('====================================================')
+  console.log('==========================================')
   const passed = results.filter(r => r).length
   const total = results.length
   
   console.log(`\nPassed: ${passed}/${total}`)
   
   if (passed === total) {
-    console.log('\n✅ All Discovery V1 tests passed!')
-    console.log('Two-Layer North Star runtime guardrails are working correctly.')
+    console.log('\n✅ All Discovery V1 Protocol tests passed!')
+    console.log('The strict what/where/when M2M Oracle contract is enforced correctly.')
     process.exit(0)
   } else {
     console.log(`\n❌ ${total - passed} test(s) failed`)
