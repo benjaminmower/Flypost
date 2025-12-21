@@ -1,0 +1,168 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://goflypost.com/schemas/flypost-discovery-v1.schema.json",
+  "title": "Flypost Discovery Protocol v1",
+  "description": "Strict Machine-to-Machine (M2M) Oracle contract for Flypost Discovery API. This is a protocol-grade schema that enforces the 'What, Where, When' signal without consumer UI concerns.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["success", "schemaVersion", "events", "meta"],
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "const": "flypost-discovery",
+      "description": "Protocol identifier for Flypost Discovery"
+    },
+    "version": {
+      "type": "string",
+      "const": "v1",
+      "description": "Protocol version"
+    },
+    "success": {
+      "type": "boolean",
+      "description": "Whether the request was successful"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "const": "discovery.v1",
+      "description": "Schema version identifier"
+    },
+    "events": {
+      "type": "array",
+      "description": "Array of discovery events",
+      "items": {
+        "$ref": "#/definitions/DiscoveryEvent"
+      }
+    },
+    "event": {
+      "description": "Single discovery event (used in GET /v1/events/:event_id responses)",
+      "$ref": "#/definitions/DiscoveryEvent"
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Response metadata",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of events in the response"
+        },
+        "radiusKm": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Search radius in kilometers"
+        },
+        "accessTier": {
+          "type": "string",
+          "enum": ["public", "brokerage"],
+          "description": "Access tier for the request"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "DiscoveryEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "dataHash", "what", "where", "when", "url"],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "description": "The stable Flypost event ID",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "dataHash": {
+          "type": "string",
+          "description": "Deterministic hash of the canonical what/where/when payload (64-char hex)",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "what": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "open_house",
+                "garage_sale",
+                "estate_sale",
+                "moving_sale",
+                "yard_sale",
+                "other"
+              ],
+              "description": "Event type category"
+            },
+            "label": {
+              "type": "string",
+              "description": "Optional minimal title or label for the event"
+            }
+          }
+        },
+        "where": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["latitude", "longitude"],
+          "properties": {
+            "latitude": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90,
+              "description": "Latitude coordinate"
+            },
+            "longitude": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180,
+              "description": "Longitude coordinate"
+            },
+            "address": {
+              "type": "string",
+              "description": "Optional human-readable address"
+            }
+          }
+        },
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Event start time in RFC3339 UTC timestamp"
+            },
+            "end": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Event end time in RFC3339 UTC timestamp"
+            }
+          }
+        },
+        "url": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "description": "The hand-off link to Zillow or the brokerage listing. Can be null if unavailable."
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["mls", "brokerage_roster", "manual", "third_party"],
+              "description": "Source type"
+            },
+            "url": {
+              "type": ["string", "null"],
+              "format": "uri",
+              "description": "Source URL if available"
+            }
+          }
+        }
+      }
+    }
+  }
+}
