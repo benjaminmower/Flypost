@@ -19,8 +19,8 @@ const __dirname = dirname(__filename)
 const schemaPath = join(__dirname, 'schemas', 'flypost-discovery-v1.schema.json')
 const discoverySchema = JSON.parse(readFileSync(schemaPath, 'utf8'))
 
-// Initialize Ajv validator with 2020-12 schema support
-const ajv = new Ajv2020({ allErrors: true, strict: false })
+// Initialize Ajv validator with 2020-12 schema support (strict mode enabled)
+const ajv = new Ajv2020({ allErrors: true, strict: true })
 addFormats(ajv)
 const validateDiscoveryResponse = ajv.compile(discoverySchema)
 
@@ -226,6 +226,15 @@ if (valid) {
     console.log('❌ Additional properties detected')
     failed++
   }
+}
+
+// Check 5: meta.count === events.length (protocol must-have)
+if (response.meta.count === response.events.length) {
+  console.log('✅ meta.count matches events.length')
+  passed++
+} else {
+  console.log(`❌ meta.count (${response.meta.count}) does not match events.length (${response.events.length})`)
+  failed++
 }
 
 console.log('\n\nTest Summary')
