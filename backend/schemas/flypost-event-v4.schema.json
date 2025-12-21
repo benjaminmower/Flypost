@@ -310,6 +310,11 @@
         }
       },
       "additionalProperties": false
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional external URL for the event listing (e.g., Zillow, Redfin). Hand-off link for deeper context."
     }
   },
   "additionalProperties": true

@@ -5,6 +5,12 @@
  * Layer 1 (Registry) data appears in discovery API responses.
  * 
  * Layer 2 (Intelligence) data like attendance, feedback, sentiment is explicitly excluded.
+ * 
+ * Hardened for M2M Infrastructure ("The Oracle for Reality"):
+ * - Strips description (fluff) - machines use url for deeper context
+ * - Adds url field for hand-off to external listings
+ * - Adds dataHash field for data integrity verification
+ * - Maintains tiered precision for geo/address (public vs brokerage)
  */
 
 import { computeCanonicalKey } from './canonicalKey.js'
@@ -143,31 +149,14 @@ export function computeEventIdentity(event) {
 }
 
 /**
- * Maximum length for event descriptions in discovery responses
- * Prevents abuse and ensures consistent response sizes
- */
-const MAX_DESCRIPTION_LENGTH = 500
-
-/**
- * Truncates description to safe length
- * @param {string} description - The description text
- * @param {number} maxLength - Maximum length (default: MAX_DESCRIPTION_LENGTH)
- * @returns {string} Truncated description
- */
-function truncateDescription(description, maxLength = MAX_DESCRIPTION_LENGTH) {
-  if (!description) return undefined
-  if (typeof description !== 'string') return undefined
-  
-  const trimmed = description.trim()
-  if (trimmed.length <= maxLength) return trimmed
-  
-  // Truncate and add ellipsis
-  return trimmed.substring(0, maxLength) + '...'
-}
-
-/**
  * Maps a stored event object to DiscoveryEventV1 format
  * Only includes registry-safe fields (Layer 1 data)
+ * 
+ * Hardened M2M Contract:
+ * - NO description field (machines use url for context)
+ * - Includes url field for hand-off to external listings
+ * - Includes dataHash field (from event.hash.value) for integrity verification
+ * - Maintains tiered precision for geo/address (public vs brokerage)
  * 
  * @param {object} event - The full stored event object
  * @param {object} options - Mapping options
@@ -203,10 +192,16 @@ export function toDiscoveryEventV1(event, options = {}) {
     discoveryEvent.name = event.name
   }
   
-  // Description with truncation (public tier gets shorter description)
-  if (event.description) {
-    const maxLength = isPublicTier ? 200 : MAX_DESCRIPTION_LENGTH
-    discoveryEvent.description = truncateDescription(event.description, maxLength)
+  // URL for hand-off to external listing (optional)
+  // Machines should use this for deeper context instead of description
+  if (event.url) {
+    discoveryEvent.url = event.url
+  }
+  
+  // Data integrity hash from event.hash.value
+  // Allows machines to verify they are dealing with the same version of factual data
+  if (event.hash?.value) {
+    discoveryEvent.dataHash = event.hash.value
   }
   
   // Address (structured) - public tier gets less precise address
@@ -276,11 +271,4 @@ export function toDiscoveryEventsV1(events, options = {}) {
   return events
     .map(event => toDiscoveryEventV1(event, options))
     .filter(event => event !== null)
-}
-
-/**
- * Export constants for testing and configuration
- */
-export const CONFIG = {
-  MAX_DESCRIPTION_LENGTH
 }
