@@ -4,7 +4,7 @@
  * Tests the complete pipeline from stored events to validated API responses
  */
 
-import Ajv from 'ajv'
+import Ajv2020 from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
@@ -19,8 +19,8 @@ const __dirname = dirname(__filename)
 const schemaPath = join(__dirname, 'schemas', 'flypost-discovery-v1.schema.json')
 const discoverySchema = JSON.parse(readFileSync(schemaPath, 'utf8'))
 
-// Initialize Ajv validator with strict mode disabled for this schema
-const ajv = new Ajv({ allErrors: true, strict: false })
+// Initialize Ajv validator with 2020-12 schema support
+const ajv = new Ajv2020({ allErrors: true, strict: false })
 addFormats(ajv)
 const validateDiscoveryResponse = ajv.compile(discoverySchema)
 
@@ -134,9 +134,7 @@ let response = {
   success: true,
   events: discoveryEvents,
   meta: {
-    count: discoveryEvents.length,
-    radiusKm: 10,
-    accessTier: 'brokerage'
+    count: discoveryEvents.length
   }
 }
 

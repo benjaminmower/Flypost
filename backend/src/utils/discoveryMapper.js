@@ -151,9 +151,11 @@ export function toDiscoveryEventV1(event, options = {}) {
   const eventId = event.flypost?.eventId || event.id
   if (!eventId) return null
   
-  // Required: dataHash (sourced from event.hash.value)
-  const dataHash = event.hash?.value || event.flypost?.hash?.value
+  // Required: dataHash (sourced from event.hash.value, must be lowercase hex)
+  let dataHash = event.hash?.value || event.flypost?.hash?.value
   if (!dataHash) return null
+  // Ensure lowercase hex format
+  dataHash = dataHash.toLowerCase()
   
   // Required: what (event type)
   const rawCategory = event.flypost?.category || 'open_house'
@@ -163,9 +165,12 @@ export function toDiscoveryEventV1(event, options = {}) {
     type: category
   }
   
-  // Optional: what.label (minimal title)
+  // Optional: what.label (minimal title, max 80 chars)
   if (event.name && typeof event.name === 'string') {
-    what.label = event.name
+    const label = event.name.trim()
+    if (label.length > 0) {
+      what.label = label.length > 80 ? label.substring(0, 80) : label
+    }
   }
   
   // Required: where (latitude, longitude, optional address)
@@ -187,18 +192,18 @@ export function toDiscoveryEventV1(event, options = {}) {
     where.longitude = geo.longitude
   }
   
-  // Optional: where.address (human-readable)
+  // Optional: where.address (human-readable, max 200 chars)
   if (event.location?.address) {
     const addr = event.location.address
+    let addressStr = ''
+    
     if (isPublicTier) {
       // Public tier: city, region, country only
       const parts = []
       if (addr.addressLocality) parts.push(addr.addressLocality)
       if (addr.addressRegion) parts.push(addr.addressRegion)
       if (addr.addressCountry) parts.push(addr.addressCountry)
-      if (parts.length > 0) {
-        where.address = parts.join(', ')
-      }
+      addressStr = parts.join(', ')
     } else {
       // Brokerage tier: full address
       const parts = []
@@ -207,9 +212,12 @@ export function toDiscoveryEventV1(event, options = {}) {
       if (addr.addressRegion) parts.push(addr.addressRegion)
       if (addr.postalCode) parts.push(addr.postalCode)
       if (addr.addressCountry) parts.push(addr.addressCountry)
-      if (parts.length > 0) {
-        where.address = parts.join(', ')
-      }
+      addressStr = parts.join(', ')
+    }
+    
+    // Apply max length constraint
+    if (addressStr.length > 0) {
+      where.address = addressStr.length > 200 ? addressStr.substring(0, 200) : addressStr
     }
   }
   
@@ -237,28 +245,24 @@ export function toDiscoveryEventV1(event, options = {}) {
     url = event.flypost.sourceUrl
   }
   
-  // Optional: source
-  const source = {}
-  let hasSource = false
+  // Optional: source (when present, both kind and url are required per schema)
+  let sourceKind = null
+  let sourceUrl = null
   
+  // Try to get source kind
   if (event.flypost?.sourceType || event.flypost?.source?.kind) {
     const sourceType = event.flypost.source?.kind || event.flypost.sourceType
     const validSourceTypes = ['mls', 'brokerage_roster', 'manual', 'third_party']
     
     if (validSourceTypes.includes(sourceType)) {
-      source.kind = sourceType
-      hasSource = true
+      sourceKind = sourceType
     }
   }
   
+  // Try to get source URL
   if (event.flypost?.source?.url || event.flypost?.sourceUrl) {
-    const sourceUrl = event.flypost.source?.url || event.flypost.sourceUrl
-    if (sourceUrl && typeof sourceUrl === 'string') {
-      source.url = sourceUrl
-      hasSource = true
-    } else {
-      source.url = null
-    }
+    const url = event.flypost.source?.url || event.flypost.sourceUrl
+    sourceUrl = (url && typeof url === 'string') ? url : null
   }
   
   // Build the discovery event (strict schema compliance)
@@ -271,9 +275,12 @@ export function toDiscoveryEventV1(event, options = {}) {
     url
   }
   
-  // Add source only if present
-  if (hasSource) {
-    discoveryEvent.source = source
+  // Add source only if we have both kind and url (schema requires both when source is present)
+  if (sourceKind !== null && sourceUrl !== undefined) {
+    discoveryEvent.source = {
+      kind: sourceKind,
+      url: sourceUrl
+    }
   }
   
   return discoveryEvent

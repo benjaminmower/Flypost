@@ -1,87 +1,51 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://goflypost.com/schemas/flypost-discovery-v1.schema.json",
-  "title": "Flypost Discovery Protocol v1",
-  "description": "Strict Machine-to-Machine (M2M) Oracle contract for Flypost Discovery API. This is a protocol-grade schema that enforces the 'What, Where, When' signal without consumer UI concerns.",
+  "title": "Flypost Discovery v1",
+  "description": "Success response envelope for Flypost Discovery (protocol flypost-discovery, version v1). Non-2xx error responses are out of scope for this schema.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocol", "version", "success", "meta"],
-  "anyOf": [
-    {
-      "required": ["events"]
-    },
-    {
-      "required": ["event"]
-    }
-  ],
+  "required": ["protocol", "version", "success", "events", "meta"],
   "properties": {
-    "protocol": {
-      "type": "string",
-      "const": "flypost-discovery",
-      "description": "Protocol identifier for Flypost Discovery"
-    },
-    "version": {
-      "type": "string",
-      "const": "v1",
-      "description": "Protocol version"
-    },
-    "success": {
-      "type": "boolean",
-      "description": "Whether the request was successful"
-    },
+    "protocol": { "type": "string", "const": "flypost-discovery" },
+    "version": { "type": "string", "const": "v1" },
+    "success": { "type": "boolean", "const": true },
     "events": {
       "type": "array",
-      "description": "Array of discovery events (used in GET /v1/events/near responses)",
-      "items": {
-        "$ref": "#/definitions/DiscoveryEvent"
-      }
-    },
-    "event": {
-      "description": "Single discovery event (used in GET /v1/events/:event_id responses)",
-      "$ref": "#/definitions/DiscoveryEvent"
+      "minItems": 0,
+      "items": { "$ref": "#/$defs/discoveryEvent" }
     },
     "meta": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Response metadata",
+      "required": ["count"],
       "properties": {
         "count": {
           "type": "integer",
           "minimum": 0,
-          "description": "Number of events in the response"
-        },
-        "radiusKm": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Search radius in kilometers"
-        },
-        "accessTier": {
-          "type": "string",
-          "enum": ["public", "brokerage"],
-          "description": "Access tier for the request"
+          "description": "Number of events returned. Must equal events.length; enforce in server tests/runtime."
         }
       }
     }
   },
-  "definitions": {
-    "DiscoveryEvent": {
+  "$defs": {
+    "discoveryEvent": {
+      "title": "Discovery Event",
+      "description": "A single discovered event.",
       "type": "object",
       "additionalProperties": false,
       "required": ["eventId", "dataHash", "what", "where", "when", "url"],
       "properties": {
-        "eventId": {
-          "type": "string",
-          "description": "The stable Flypost event ID",
-          "minLength": 8,
-          "maxLength": 64,
-          "pattern": "^[a-zA-Z0-9_-]+$"
-        },
+        "eventId": { "type": "string", "minLength": 1 },
+
         "dataHash": {
           "type": "string",
-          "description": "Deterministic hash of the canonical what/where/when payload (64-char hex)",
-          "pattern": "^[a-fA-F0-9]{64}$"
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 of canonical payload containing only {what.type, where.latitude, where.longitude, when.start, when.end}. Excludes optional/human fields (e.g., what.label, where.address, url, source). Canonicalization and normalization (UTC handling, numeric rounding) are protocol-defined; recommend RFC 8785 JCS over UTF-8 bytes."
         },
+
         "what": {
+          "title": "What",
           "type": "object",
           "additionalProperties": false,
           "required": ["type"],
@@ -95,73 +59,57 @@
                 "moving_sale",
                 "yard_sale",
                 "other"
-              ],
-              "description": "Event type category"
+              ]
             },
-            "label": {
-              "type": "string",
-              "description": "Optional minimal title or label for the event"
-            }
+            "label": { "type": "string", "minLength": 1, "maxLength": 80 }
           }
         },
+
         "where": {
+          "title": "Where",
           "type": "object",
           "additionalProperties": false,
           "required": ["latitude", "longitude"],
           "properties": {
-            "latitude": {
-              "type": "number",
-              "minimum": -90,
-              "maximum": 90,
-              "description": "Latitude coordinate"
-            },
-            "longitude": {
-              "type": "number",
-              "minimum": -180,
-              "maximum": 180,
-              "description": "Longitude coordinate"
-            },
-            "address": {
-              "type": "string",
-              "description": "Optional human-readable address"
-            }
+            "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+            "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+            "address": { "type": "string", "maxLength": 200 }
           }
         },
+
         "when": {
+          "title": "When",
           "type": "object",
           "additionalProperties": false,
           "required": ["start", "end"],
           "properties": {
-            "start": {
-              "type": "string",
-              "format": "date-time",
-              "description": "Event start time in RFC3339 UTC timestamp"
-            },
-            "end": {
-              "type": "string",
-              "format": "date-time",
-              "description": "Event end time in RFC3339 UTC timestamp"
-            }
+            "start": { "type": "string", "format": "date-time" },
+            "end": { "type": "string", "format": "date-time" }
           }
         },
+
         "url": {
-          "type": ["string", "null"],
-          "format": "uri",
-          "description": "The hand-off link to Zillow or the brokerage listing. Can be null if unavailable."
+          "oneOf": [
+            { "type": "string", "format": "uri" },
+            { "type": "null" }
+          ]
         },
+
         "source": {
+          "description": "Optional provenance for the discovery event.",
           "type": "object",
           "additionalProperties": false,
+          "required": ["kind", "url"],
           "properties": {
             "kind": {
               "type": "string",
-              "enum": ["mls", "brokerage_roster", "manual", "third_party"],
-              "description": "Source type"
+              "enum": ["mls", "brokerage_roster", "manual", "third_party"]
             },
             "url": {
-              "type": ["string", "null"],
-              "format": "uri",
-              "description": "Source URL if available"
+              "oneOf": [
+                { "type": "string", "format": "uri" },
+                { "type": "null" }
+              ]
             }
           }
         }

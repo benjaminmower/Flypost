@@ -4,7 +4,7 @@
  * Tests the strict what/where/when M2M Oracle schema enforcement
  */
 
-import Ajv from 'ajv'
+import Ajv2020 from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
@@ -18,8 +18,8 @@ const __dirname = dirname(__filename)
 const schemaPath = join(__dirname, 'schemas', 'flypost-discovery-v1.schema.json')
 const discoverySchema = JSON.parse(readFileSync(schemaPath, 'utf8'))
 
-// Initialize Ajv validator with strict mode disabled for this schema
-const ajv = new Ajv({ allErrors: true, strict: false })
+// Initialize Ajv validator with 2020-12 schema support
+const ajv = new Ajv2020({ allErrors: true, strict: false })
 addFormats(ajv)
 const validateDiscoveryResponse = ajv.compile(discoverySchema)
 
@@ -175,9 +175,7 @@ function testSchemaValidation() {
     success: true,
     events: discoveryEvents,
     meta: {
-      count: discoveryEvents.length,
-      radiusKm: 10,
-      accessTier: 'brokerage'
+      count: discoveryEvents.length
     }
   }
   
@@ -194,31 +192,7 @@ function testSchemaValidation() {
     failed++
   }
   
-  // Test single event response (GET /v1/events/:event_id)
-  const singleEventResponse = {
-    protocol: 'flypost-discovery',
-    version: 'v1',
-    success: true,
-    event: discoveryEvents[0],
-    meta: {
-      accessTier: 'brokerage'
-    }
-  }
-  
-  const validSingle = validateDiscoveryResponse(singleEventResponse)
-  
-  if (validSingle) {
-    console.log('   ✅ Single event response passes Ajv schema validation')
-    passed++
-  } else {
-    console.log('   ❌ Single event response fails Ajv schema validation:')
-    for (const error of validateDiscoveryResponse.errors || []) {
-      console.log(`      - ${error.instancePath}: ${error.message}`)
-    }
-    failed++
-  }
-  
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 2 checks`)
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 1 checks`)
   console.log('')
   
   return failed === 0
@@ -262,8 +236,7 @@ function testAdditionalPropertiesRejection() {
       }
     ],
     meta: {
-      count: 1,
-      accessTier: 'brokerage'
+      count: 1
     }
   }
   
