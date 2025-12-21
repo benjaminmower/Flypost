@@ -23,6 +23,7 @@ const storedEvents = [
     },
     name: 'Beautiful Home Open House',
     description: 'Come see this stunning 3-bedroom home with modern updates and a spacious backyard.',
+    url: 'https://www.zillow.com/homedetails/123-Oak-Street',
     startDate: '2025-01-20T10:00:00Z',
     endDate: '2025-01-20T14:00:00Z',
     location: {
@@ -36,6 +37,12 @@ const storedEvents = [
         latitude: 34.0522,
         longitude: -118.2437
       }
+    },
+    hash: {
+      algorithm: 'SHA-256',
+      encoding: 'hex',
+      value: 'abc123def456abc123def456abc123def456abc123def456abc123def456abc123',
+      canonicalVersion: 1
     },
     
     // Layer 2 (Intelligence) data that should NOT appear in discovery
@@ -53,7 +60,8 @@ const storedEvents = [
       submissionTimestamp: '2025-01-15T11:00:00Z'
     },
     name: 'Weekend Garage Sale',
-    description: 'X'.repeat(700), // Very long description to test truncation
+    description: 'X'.repeat(700), // Should be stripped in M2M hardened contract
+    url: 'https://www.craigslist.org/garage-sale/456',
     startDate: '2025-01-21T08:00:00Z',
     endDate: '2025-01-21T16:00:00Z',
     location: {
@@ -63,6 +71,12 @@ const storedEvents = [
         addressRegion: 'CA',
         postalCode: '91101'
       }
+    },
+    hash: {
+      algorithm: 'SHA-256',
+      encoding: 'hex',
+      value: 'def789ghi012def789ghi012def789ghi012def789ghi012def789ghi012def789',
+      canonicalVersion: 1
     },
     
     // More Layer 2 data
@@ -75,8 +89,9 @@ const storedEvents = [
 
 console.log('📦 Simulating stored events with Layer 2 data leakage\n')
 console.log('Event 1 has forbidden fields: attendance, attendees, feedback, sentiment, brokerageAffiliation, intelligenceScore')
+console.log('Event 1 also has description (should be stripped in M2M contract)')
 console.log('Event 2 has forbidden field: insights')
-console.log('Event 2 also has a 700-character description\n')
+console.log('Event 2 has 700-character description (should be stripped, not truncated)\n')
 
 // Step 1: Apply Discovery V1 mapper (allowlist)
 console.log('Step 1: Apply Discovery V1 Allowlist Mapper')
@@ -90,7 +105,7 @@ console.log('Event 2 fields:', Object.keys(discoveryEvents[1]).join(', '))
 // Check for forbidden keys after mapping
 let foundForbidden = false
 for (const event of discoveryEvents) {
-  const forbiddenKeys = ['attendance', 'attendees', 'feedback', 'sentiment', 'insights', 'brokerageAffiliation', 'intelligenceScore']
+  const forbiddenKeys = ['attendance', 'attendees', 'feedback', 'sentiment', 'insights', 'brokerageAffiliation', 'intelligenceScore', 'description']
   for (const key of forbiddenKeys) {
     if (key in event) {
       console.log(`❌ WARNING: Forbidden key "${key}" found in mapped event!`)
@@ -103,13 +118,43 @@ if (!foundForbidden) {
   console.log('✅ No forbidden keys found in mapped events (as expected)')
 }
 
-// Check description truncation
-if (discoveryEvents[1].description) {
-  const descLength = discoveryEvents[1].description.length
-  console.log(`\n✅ Event 2 description truncated from 700 to ${descLength} characters`)
-  if (descLength <= 503) {
-    console.log('✅ Description is within safe limit (500 + "...")')
-  }
+// Check M2M hardening: url and dataHash present, description absent
+console.log('\n✅ Verifying M2M Contract Hardening:')
+
+if (discoveryEvents[0].url === 'https://www.zillow.com/homedetails/123-Oak-Street') {
+  console.log('   ✅ Event 1 has url field: ' + discoveryEvents[0].url)
+} else {
+  console.log('   ❌ Event 1 missing url field')
+}
+
+if (discoveryEvents[0].dataHash === 'abc123def456abc123def456abc123def456abc123def456abc123def456abc123') {
+  console.log('   ✅ Event 1 has dataHash field: ' + discoveryEvents[0].dataHash.substring(0, 16) + '...')
+} else {
+  console.log('   ❌ Event 1 missing dataHash field')
+}
+
+if (!('description' in discoveryEvents[0])) {
+  console.log('   ✅ Event 1 description correctly stripped (M2M hardening)')
+} else {
+  console.log('   ❌ Event 1 should not have description field')
+}
+
+if (discoveryEvents[1].url === 'https://www.craigslist.org/garage-sale/456') {
+  console.log('   ✅ Event 2 has url field: ' + discoveryEvents[1].url)
+} else {
+  console.log('   ❌ Event 2 missing url field')
+}
+
+if (discoveryEvents[1].dataHash === 'def789ghi012def789ghi012def789ghi012def789ghi012def789ghi012def789') {
+  console.log('   ✅ Event 2 has dataHash field: ' + discoveryEvents[1].dataHash.substring(0, 16) + '...')
+} else {
+  console.log('   ❌ Event 2 missing dataHash field')
+}
+
+if (!('description' in discoveryEvents[1])) {
+  console.log('   ✅ Event 2 description correctly stripped (M2M hardening)')
+} else {
+  console.log('   ❌ Event 2 should not have description field')
 }
 
 // Step 2: Build response and apply sanitizer (defense in depth)
@@ -172,9 +217,9 @@ if (response.meta && typeof response.meta.count === 'number' && typeof response.
   failed++
 }
 
-// Check 4: No forbidden keys in any event
+// Check 4: No forbidden keys in any event (including description)
 let allClean = true
-const forbiddenKeys = ['attendance', 'attendees', 'feedback', 'sentiment', 'insights', 'brokerageAffiliation', 'intelligenceScore', 'buyerToken', 'presenceProof']
+const forbiddenKeys = ['attendance', 'attendees', 'feedback', 'sentiment', 'insights', 'brokerageAffiliation', 'intelligenceScore', 'buyerToken', 'presenceProof', 'description']
 for (const event of response.events) {
   for (const key of forbiddenKeys) {
     if (key in event) {
@@ -186,7 +231,7 @@ for (const event of response.events) {
 }
 
 if (allClean) {
-  console.log('✅ No forbidden Layer 2 keys in any event')
+  console.log('✅ No forbidden Layer 2 keys in any event (including description)')
   passed++
 }
 
@@ -202,6 +247,28 @@ for (let i = 0; i < response.events.length; i++) {
   }
 }
 
+// Check 6: M2M Contract - url and dataHash present
+console.log('\n✅ Verifying M2M Contract Fields:')
+for (let i = 0; i < response.events.length; i++) {
+  const event = response.events[i]
+  
+  if (event.url) {
+    console.log(`✅ Event ${i + 1} has url field for hand-off`)
+    passed++
+  } else {
+    console.log(`❌ Event ${i + 1} missing url field`)
+    failed++
+  }
+  
+  if (event.dataHash) {
+    console.log(`✅ Event ${i + 1} has dataHash for integrity verification`)
+    passed++
+  } else {
+    console.log(`❌ Event ${i + 1} missing dataHash field`)
+    failed++
+  }
+}
+
 console.log('\n\nTest Summary')
 console.log('============')
 console.log(`Passed: ${passed}`)
@@ -210,6 +277,7 @@ console.log(`Failed: ${failed}`)
 if (failed === 0) {
   console.log('\n✅ All guarantees verified!')
   console.log('The Two-Layer North Star is successfully enforced at runtime.')
+  console.log('M2M Contract Hardening: ✅ url present, ✅ dataHash present, ✅ description stripped')
   process.exit(0)
 } else {
   console.log('\n❌ Some guarantees failed!')
