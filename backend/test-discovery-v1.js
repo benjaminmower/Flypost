@@ -1,21 +1,37 @@
 #!/usr/bin/env node
 /**
- * Test script for Discovery V1 contract and runtime guardrails
- * Tests the Two-Layer North Star enforcement at runtime
+ * Test script for Discovery V1 Protocol Contract
+ * Tests the strict what/where/when M2M Oracle schema enforcement
  */
 
-import { toDiscoveryEventV1, toDiscoveryEventsV1, computeEventIdentity, CONFIG } from './src/utils/discoveryMapper.js'
-import { sanitizeDiscoveryResponse, _internal } from './src/utils/sanitizer.js'
+import Ajv from 'ajv'
+import addFormats from 'ajv-formats'
+import { readFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+import { toDiscoveryEventV1, toDiscoveryEventsV1, normalizeCategory } from './src/utils/discoveryMapper.js'
 
-console.log('🧪 Testing Discovery V1 Contract & Runtime Guardrails\n')
-console.log('====================================================\n')
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+// Load the Discovery V1 schema
+const schemaPath = join(__dirname, 'schemas', 'flypost-discovery-v1.schema.json')
+const discoverySchema = JSON.parse(readFileSync(schemaPath, 'utf8'))
+
+// Initialize Ajv validator
+const ajv = new Ajv({ allErrors: true, strict: true })
+addFormats(ajv)
+const validateDiscoveryResponse = ajv.compile(discoverySchema)
+
+console.log('🧪 Testing Discovery V1 Protocol Contract\n')
+console.log('==========================================\n')
 
 /**
- * Test 1: Discovery V1 mapping includes required fields
+ * Test 1: Discovery V1 mapping produces valid schema-compliant output
  */
 function testDiscoveryV1Mapping() {
-  console.log('Test 1: Discovery V1 Mapping - Required Fields')
-  console.log('-----------------------------------------------')
+  console.log('Test 1: Discovery V1 Mapping - Schema Validation')
+  console.log('------------------------------------------------')
   
   let passed = 0
   let failed = 0
@@ -24,13 +40,9 @@ function testDiscoveryV1Mapping() {
     id: 'evt_test_123',
     flypost: {
       eventId: 'evt_test_123',
-      eventIdentity: 'test-identity-key',
-      category: 'open_house',
-      submissionTimestamp: '2025-01-01T00:00:00Z',
-      updateCount: 0
+      category: 'open_house'
     },
     name: 'Test Open House',
-    description: 'A wonderful open house event',
     startDate: '2025-01-15T10:00:00Z',
     endDate: '2025-01-15T14:00:00Z',
     location: {
@@ -44,20 +56,43 @@ function testDiscoveryV1Mapping() {
         latitude: 34.0522,
         longitude: -118.2437
       }
+    },
+    hash: {
+      algorithm: 'SHA-256',
+      encoding: 'hex',
+      value: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
     }
   }
   
   const discoveryEvent = toDiscoveryEventV1(mockEvent)
   
+  if (!discoveryEvent) {
+    console.log('   ❌ Mapper returned null')
+    failed++
+    console.log(`\n   Summary: ${passed} passed, ${failed} failed`)
+    console.log('')
+    return false
+  }
+  
+  // Check structure matches what/where/when
+  if (discoveryEvent.what && discoveryEvent.where && discoveryEvent.when) {
+    console.log('   ✅ Has what/where/when structure')
+    passed++
+  } else {
+    console.log('   ❌ Missing what/where/when structure')
+    failed++
+  }
+  
   // Check required fields
   const checks = [
     { field: 'eventId', expected: 'evt_test_123', actual: discoveryEvent.eventId },
-    { field: 'eventIdentity', expected: 'test-identity-key', actual: discoveryEvent.eventIdentity },
-    { field: 'category', expected: 'open_house', actual: discoveryEvent.category },
-    { field: 'startDate', expected: '2025-01-15T10:00:00Z', actual: discoveryEvent.startDate },
-    { field: 'endDate', expected: '2025-01-15T14:00:00Z', actual: discoveryEvent.endDate },
-    { field: 'name', expected: 'Test Open House', actual: discoveryEvent.name },
-    { field: 'description', expected: 'A wonderful open house event', actual: discoveryEvent.description }
+    { field: 'dataHash', expected: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef', actual: discoveryEvent.dataHash },
+    { field: 'what.type', expected: 'open_house', actual: discoveryEvent.what?.type },
+    { field: 'what.label', expected: 'Test Open House', actual: discoveryEvent.what?.label },
+    { field: 'where.latitude', expected: 34.0522, actual: discoveryEvent.where?.latitude },
+    { field: 'where.longitude', expected: -118.2437, actual: discoveryEvent.where?.longitude },
+    { field: 'when.start', expected: '2025-01-15T10:00:00.000Z', actual: discoveryEvent.when?.start },
+    { field: 'when.end', expected: '2025-01-15T14:00:00.000Z', actual: discoveryEvent.when?.end }
   ]
   
   for (const check of checks) {
@@ -70,315 +105,43 @@ function testDiscoveryV1Mapping() {
     }
   }
   
-  // Check address structure
-  if (discoveryEvent.address && discoveryEvent.address.streetAddress === '123 Main St') {
-    console.log('   ✅ address.streetAddress: 123 Main St')
+  // Check that url field exists (even if null)
+  if ('url' in discoveryEvent) {
+    console.log(`   ✅ url field present: ${discoveryEvent.url}`)
     passed++
   } else {
-    console.log('   ❌ address.streetAddress missing or incorrect')
+    console.log('   ❌ url field missing')
     failed++
   }
   
-  // Check geo structure
-  if (discoveryEvent.geo && discoveryEvent.geo.latitude === 34.0522) {
-    console.log('   ✅ geo.latitude: 34.0522')
-    passed++
-  } else {
-    console.log('   ❌ geo.latitude missing or incorrect')
-    failed++
-  }
-  
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of ${checks.length + 2} checks`)
-  console.log('')
-  
-  return failed === 0
-}
-
-/**
- * Test 2: Description truncation
- */
-function testDescriptionTruncation() {
-  console.log('Test 2: Description Truncation')
-  console.log('-------------------------------')
-  
-  let passed = 0
-  let failed = 0
-  
-  // Create a long description (600 chars)
-  const longDescription = 'A'.repeat(600)
-  
-  const mockEvent = {
-    flypost: {
-      eventId: 'evt_test_456',
-      category: 'open_house'
-    },
-    description: longDescription
-  }
-  
-  const discoveryEvent = toDiscoveryEventV1(mockEvent)
-  
-  // Check that description is truncated to MAX_DESCRIPTION_LENGTH + "..."
-  const expectedLength = CONFIG.MAX_DESCRIPTION_LENGTH + '...'.length
-  if (discoveryEvent.description && discoveryEvent.description.length === expectedLength) {
-    console.log(`   ✅ Description truncated to ${discoveryEvent.description.length} chars (includes "...")`)
-    passed++
-  } else {
-    console.log(`   ❌ Description not truncated correctly: ${discoveryEvent.description?.length} chars (expected ${expectedLength})`)
-    failed++
-  }
-  
-  // Check ends with "..."
-  if (discoveryEvent.description && discoveryEvent.description.endsWith('...')) {
-    console.log('   ✅ Truncated description ends with "..."')
-    passed++
-  } else {
-    console.log('   ❌ Truncated description does not end with "..."')
-    failed++
-  }
-  
-  // Test short description (no truncation)
-  const shortEvent = {
-    flypost: {
-      eventId: 'evt_test_789',
-      category: 'open_house'
-    },
-    description: 'Short description'
-  }
-  
-  const shortDiscoveryEvent = toDiscoveryEventV1(shortEvent)
-  
-  if (shortDiscoveryEvent.description === 'Short description') {
-    console.log('   ✅ Short description not truncated')
-    passed++
-  } else {
-    console.log('   ❌ Short description incorrectly modified')
-    failed++
-  }
-  
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 3 checks`)
-  console.log('')
-  
-  return failed === 0
-}
-
-/**
- * Test 3: Forbidden keys detection
- */
-function testForbiddenKeys() {
-  console.log('Test 3: Forbidden Keys Detection')
-  console.log('---------------------------------')
-  
-  let passed = 0
-  let failed = 0
-  
-  const { isForbiddenKey } = _internal
-  
-  const forbiddenTests = [
-    { key: 'attendance', shouldBeForbidden: true },
-    { key: 'attendees', shouldBeForbidden: true },
-    { key: 'buyerToken', shouldBeForbidden: true },
-    { key: 'presenceProof', shouldBeForbidden: true },
-    { key: 'feedback', shouldBeForbidden: true },
-    { key: 'sentiment', shouldBeForbidden: true },
-    { key: 'insights', shouldBeForbidden: true },
-    { key: 'brokerageAffiliation', shouldBeForbidden: true },
-    { key: 'intelligenceData', shouldBeForbidden: true },
-    { key: 'intelligenceScore', shouldBeForbidden: true },
-    { key: 'eventId', shouldBeForbidden: false },
-    { key: 'name', shouldBeForbidden: false },
-    { key: 'category', shouldBeForbidden: false }
-  ]
-  
-  for (const test of forbiddenTests) {
-    const result = isForbiddenKey(test.key)
-    if (result === test.shouldBeForbidden) {
-      console.log(`   ✅ ${test.key}: ${result ? 'Forbidden' : 'Allowed'} (as expected)`)
-      passed++
-    } else {
-      console.log(`   ❌ ${test.key}: Expected ${test.shouldBeForbidden ? 'Forbidden' : 'Allowed'}, got ${result ? 'Forbidden' : 'Allowed'}`)
+  // Check forbidden fields are NOT present
+  const forbiddenFields = ['description', 'organizer', 'price', 'beds', 'baths', 'photos', 'eventIdentity', 'submissionTimestamp']
+  let allStripped = true
+  for (const field of forbiddenFields) {
+    if (field in discoveryEvent) {
+      console.log(`   ❌ Forbidden field present: ${field}`)
       failed++
+      allStripped = false
     }
   }
   
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of ${forbiddenTests.length} checks`)
+  if (allStripped) {
+    console.log('   ✅ All forbidden fields stripped')
+    passed++
+  }
+  
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of ${checks.length + 3} checks`)
   console.log('')
   
   return failed === 0
 }
 
 /**
- * Test 4: Sanitizer strips forbidden keys
+ * Test 2: Response envelope validation with Ajv
  */
-function testSanitizerStripping() {
-  console.log('Test 4: Sanitizer Strips Forbidden Keys (Drift Protection)')
-  console.log('-----------------------------------------------------------')
-  
-  let passed = 0
-  let failed = 0
-  
-  // Create a response with forbidden keys (simulating drift)
-  const dirtyResponse = {
-    success: true,
-    schemaVersion: 'discovery.v1',
-    events: [
-      {
-        eventId: 'evt_123',
-        eventIdentity: 'key-123',
-        name: 'Test Event',
-        category: 'open_house',
-        // Forbidden keys that should be stripped
-        attendance: 50,
-        feedback: 'Great event!',
-        sentiment: 'positive',
-        intelligenceScore: 0.95,
-        // Nested forbidden keys
-        details: {
-          attendance: 30,
-          buyerToken: 'secret-token'
-        }
-      }
-    ]
-  }
-  
-  const sanitized = sanitizeDiscoveryResponse(dirtyResponse)
-  
-  // Check that forbidden keys are removed
-  const event = sanitized.events[0]
-  
-  const strippedChecks = [
-    { key: 'attendance', present: 'attendance' in event },
-    { key: 'feedback', present: 'feedback' in event },
-    { key: 'sentiment', present: 'sentiment' in event },
-    { key: 'intelligenceScore', present: 'intelligenceScore' in event }
-  ]
-  
-  for (const check of strippedChecks) {
-    if (!check.present) {
-      console.log(`   ✅ ${check.key} stripped successfully`)
-      passed++
-    } else {
-      console.log(`   ❌ ${check.key} still present in response`)
-      failed++
-    }
-  }
-  
-  // Check nested keys stripped
-  if (!('attendance' in event.details)) {
-    console.log('   ✅ Nested attendance stripped')
-    passed++
-  } else {
-    console.log('   ❌ Nested attendance still present')
-    failed++
-  }
-  
-  if (!('buyerToken' in event.details)) {
-    console.log('   ✅ Nested buyerToken stripped')
-    passed++
-  } else {
-    console.log('   ❌ Nested buyerToken still present')
-    failed++
-  }
-  
-  // Check that allowed keys remain
-  const allowedChecks = [
-    { key: 'eventId', present: 'eventId' in event, value: event.eventId },
-    { key: 'name', present: 'name' in event, value: event.name },
-    { key: 'category', present: 'category' in event, value: event.category }
-  ]
-  
-  for (const check of allowedChecks) {
-    if (check.present) {
-      console.log(`   ✅ ${check.key} preserved: ${check.value}`)
-      passed++
-    } else {
-      console.log(`   ❌ ${check.key} incorrectly removed`)
-      failed++
-    }
-  }
-  
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 9 checks`)
-  console.log('')
-  
-  return failed === 0
-}
-
-/**
- * Test 5: computeEventIdentity fallback logic
- */
-function testEventIdentityComputation() {
-  console.log('Test 5: Event Identity Computation (Fallback Logic)')
-  console.log('----------------------------------------------------')
-  
-  let passed = 0
-  let failed = 0
-  
-  // Test 1: Prefer existing eventIdentity
-  const event1 = {
-    flypost: {
-      eventIdentity: 'existing-identity',
-      canonicalKey: 'canonical-key'
-    }
-  }
-  
-  const identity1 = computeEventIdentity(event1)
-  if (identity1 === 'existing-identity') {
-    console.log('   ✅ Prefers existing eventIdentity')
-    passed++
-  } else {
-    console.log(`   ❌ Should prefer eventIdentity, got: ${identity1}`)
-    failed++
-  }
-  
-  // Test 2: Fallback to canonicalKey
-  const event2 = {
-    flypost: {
-      canonicalKey: 'canonical-key-123'
-    }
-  }
-  
-  const identity2 = computeEventIdentity(event2)
-  if (identity2 === 'canonical-key-123') {
-    console.log('   ✅ Falls back to canonicalKey')
-    passed++
-  } else {
-    console.log(`   ❌ Should fallback to canonicalKey, got: ${identity2}`)
-    failed++
-  }
-  
-  // Test 3: Compute from address when needed
-  const event3 = {
-    brokerageId: 'test-brokerage',
-    location: {
-      address: {
-        streetAddress: '123 Main St',
-        addressLocality: 'Los Angeles',
-        addressRegion: 'CA',
-        postalCode: '90001'
-      }
-    }
-  }
-  
-  const identity3 = computeEventIdentity(event3)
-  if (identity3 && identity3.includes('123mainst')) {
-    console.log(`   ✅ Computes from address: ${identity3}`)
-    passed++
-  } else {
-    console.log(`   ❌ Should compute from address, got: ${identity3}`)
-    failed++
-  }
-  
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 3 checks`)
-  console.log('')
-  
-  return failed === 0
-}
-
-/**
- * Test 6: Array mapping
- */
-function testArrayMapping() {
-  console.log('Test 6: Array Mapping to Discovery V1')
-  console.log('--------------------------------------')
+function testSchemaValidation() {
+  console.log('Test 2: Schema Validation with Ajv')
+  console.log('-----------------------------------')
   
   let passed = 0
   let failed = 0
@@ -389,61 +152,184 @@ function testArrayMapping() {
         eventId: 'evt_1',
         category: 'open_house'
       },
-      name: 'Event 1'
-    },
-    {
-      flypost: {
-        eventId: 'evt_2',
-        category: 'garage-sale'
+      name: 'Event 1',
+      startDate: '2025-01-20T10:00:00Z',
+      endDate: '2025-01-20T14:00:00Z',
+      location: {
+        geo: {
+          latitude: 34.05,
+          longitude: -118.24
+        }
       },
-      name: 'Event 2'
-    },
-    {
-      flypost: {
-        eventId: 'evt_3',
-        category: 'open_house'
-      },
-      name: 'Event 3'
+      hash: {
+        value: 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234'
+      }
     }
   ]
   
   const discoveryEvents = toDiscoveryEventsV1(mockEvents)
   
-  if (discoveryEvents.length === 3) {
-    console.log(`   ✅ Mapped ${discoveryEvents.length} events`)
+  const response = {
+    protocol: 'flypost-discovery',
+    version: 'v1',
+    success: true,
+    schemaVersion: 'discovery.v1',
+    events: discoveryEvents,
+    meta: {
+      count: discoveryEvents.length,
+      radiusKm: 10,
+      accessTier: 'brokerage'
+    }
+  }
+  
+  const valid = validateDiscoveryResponse(response)
+  
+  if (valid) {
+    console.log('   ✅ Response passes Ajv schema validation')
     passed++
   } else {
-    console.log(`   ❌ Expected 3 events, got ${discoveryEvents.length}`)
+    console.log('   ❌ Response fails Ajv schema validation:')
+    for (const error of validateDiscoveryResponse.errors || []) {
+      console.log(`      - ${error.instancePath}: ${error.message}`)
+    }
     failed++
   }
   
-  if (discoveryEvents[0].eventId === 'evt_1') {
-    console.log('   ✅ First event mapped correctly')
+  // Test single event response (GET /v1/events/:event_id)
+  const singleEventResponse = {
+    protocol: 'flypost-discovery',
+    version: 'v1',
+    success: true,
+    schemaVersion: 'discovery.v1',
+    event: discoveryEvents[0],
+    meta: {
+      accessTier: 'brokerage'
+    }
+  }
+  
+  const validSingle = validateDiscoveryResponse(singleEventResponse)
+  
+  if (validSingle) {
+    console.log('   ✅ Single event response passes Ajv schema validation')
     passed++
   } else {
-    console.log('   ❌ First event not mapped correctly')
+    console.log('   ❌ Single event response fails Ajv schema validation:')
+    for (const error of validateDiscoveryResponse.errors || []) {
+      console.log(`      - ${error.instancePath}: ${error.message}`)
+    }
     failed++
   }
   
-  if (discoveryEvents[1].category === 'garage_sale') {
-    console.log('   ✅ Second event category normalized (garage-sale → garage_sale)')
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 2 checks`)
+  console.log('')
+  
+  return failed === 0
+}
+
+/**
+ * Test 3: Additional properties detection
+ */
+function testAdditionalPropertiesRejection() {
+  console.log('Test 3: Additional Properties Detection')
+  console.log('----------------------------------------')
+  
+  let passed = 0
+  let failed = 0
+  
+  // Create a response with additional properties
+  const invalidResponse = {
+    protocol: 'flypost-discovery',
+    version: 'v1',
+    success: true,
+    schemaVersion: 'discovery.v1',
+    events: [
+      {
+        eventId: 'evt_123',
+        dataHash: 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
+        what: {
+          type: 'open_house',
+          label: 'Test'
+        },
+        where: {
+          latitude: 34.05,
+          longitude: -118.24
+        },
+        when: {
+          start: '2025-01-20T10:00:00.000Z',
+          end: '2025-01-20T14:00:00.000Z'
+        },
+        url: null,
+        // Additional forbidden properties
+        description: 'This should not be here',
+        price: 500000
+      }
+    ],
+    meta: {
+      count: 1,
+      accessTier: 'brokerage'
+    }
+  }
+  
+  const valid = validateDiscoveryResponse(invalidResponse)
+  
+  if (!valid) {
+    console.log('   ✅ Schema correctly rejects additional properties')
     passed++
+    
+    // Check that the error is about additional properties
+    const hasAdditionalPropError = validateDiscoveryResponse.errors?.some(
+      err => err.keyword === 'additionalProperties'
+    )
+    
+    if (hasAdditionalPropError) {
+      console.log('   ✅ Error identifies additionalProperties violation')
+      passed++
+    } else {
+      console.log('   ❌ Error does not identify additionalProperties violation')
+      failed++
+    }
   } else {
-    console.log(`   ❌ Second event category not normalized correctly: ${discoveryEvents[1].category}`)
+    console.log('   ❌ Schema incorrectly accepts additional properties')
     failed++
   }
   
-  // Test empty array
-  const emptyResult = toDiscoveryEventsV1([])
-  if (Array.isArray(emptyResult) && emptyResult.length === 0) {
-    console.log('   ✅ Empty array handled correctly')
-    passed++
-  } else {
-    console.log('   ❌ Empty array not handled correctly')
-    failed++
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 2 checks`)
+  console.log('')
+  
+  return failed === 0
+}
+
+/**
+ * Test 4: Category normalization
+ */
+function testCategoryNormalization() {
+  console.log('Test 4: Category Normalization')
+  console.log('-------------------------------')
+  
+  let passed = 0
+  let failed = 0
+  
+  const tests = [
+    { input: 'open-houses', expected: 'open_house' },
+    { input: 'garage-sale', expected: 'garage_sale' },
+    { input: 'yard sales', expected: 'yard_sale' },
+    { input: 'estate_sale', expected: 'estate_sale' },
+    { input: 'moving sale', expected: 'moving_sale' },
+    { input: 'unknown', expected: 'other' }
+  ]
+  
+  for (const test of tests) {
+    const result = normalizeCategory(test.input)
+    if (result === test.expected) {
+      console.log(`   ✅ "${test.input}" → "${result}"`)
+      passed++
+    } else {
+      console.log(`   ❌ "${test.input}": Expected "${test.expected}", got "${result}"`)
+      failed++
+    }
   }
   
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 4 checks`)
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of ${tests.length} checks`)
   console.log('')
   
   return failed === 0
@@ -453,29 +339,27 @@ function testArrayMapping() {
  * Run all tests
  */
 function runAllTests() {
-  console.log('Starting Discovery V1 tests...\n')
+  console.log('Starting Discovery V1 Protocol tests...\n')
   
   const results = []
   
   results.push(testDiscoveryV1Mapping())
-  results.push(testDescriptionTruncation())
-  results.push(testForbiddenKeys())
-  results.push(testSanitizerStripping())
-  results.push(testEventIdentityComputation())
-  results.push(testArrayMapping())
+  results.push(testSchemaValidation())
+  results.push(testAdditionalPropertiesRejection())
+  results.push(testCategoryNormalization())
   
   // Summary
-  console.log('====================================================')
+  console.log('==========================================')
   console.log('Test Summary')
-  console.log('====================================================')
+  console.log('==========================================')
   const passed = results.filter(r => r).length
   const total = results.length
   
   console.log(`\nPassed: ${passed}/${total}`)
   
   if (passed === total) {
-    console.log('\n✅ All Discovery V1 tests passed!')
-    console.log('Two-Layer North Star runtime guardrails are working correctly.')
+    console.log('\n✅ All Discovery V1 Protocol tests passed!')
+    console.log('The strict what/where/when M2M Oracle contract is enforced correctly.')
     process.exit(0)
   } else {
     console.log(`\n❌ ${total - passed} test(s) failed`)

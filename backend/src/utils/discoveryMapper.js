@@ -1,13 +1,12 @@
 /**
- * Discovery V1 Mapper - Allowlist mapper for registry-safe discovery responses
+ * Discovery V1 Mapper - Protocol-grade mapper for strict M2M Oracle compliance
  * 
- * This module enforces the Flypost Two-Layer North Star by ensuring only 
- * Layer 1 (Registry) data appears in discovery API responses.
+ * This module enforces the Flypost Discovery Protocol by mapping stored events
+ * to the strict what/where/when structure defined in flypost-discovery-v1.schema.json.
  * 
- * Layer 2 (Intelligence) data like attendance, feedback, sentiment is explicitly excluded.
+ * STRICT STRIPPING: Removes description, organizer/agent info, price, beds, baths, photos.
+ * These are "Human UI" concerns handled by the url field.
  */
-
-import { computeCanonicalKey } from './canonicalKey.js'
 
 /**
  * Valid Discovery API category enum values (snake_case singular)
@@ -118,61 +117,29 @@ export function normalizeCategory(input) {
 }
 
 /**
- * Computes eventIdentity from event data
- * Uses canonicalKey if available, otherwise generates from address + brokerageId
- * 
- * @param {object} event - The full event object
- * @returns {string|null} The event identity or null if cannot be computed
+ * Normalizes a date string to RFC3339 UTC format
+ * @param {string} dateStr - Date string (ISO 8601)
+ * @returns {string} RFC3339 UTC timestamp
  */
-export function computeEventIdentity(event) {
-  // Prefer existing eventIdentity
-  if (event.flypost?.eventIdentity) {
-    return event.flypost.eventIdentity
+function normalizeToUTC(dateStr) {
+  if (!dateStr) return null
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return null
+    return date.toISOString()
+  } catch {
+    return null
   }
-  
-  // Fallback to canonicalKey if available
-  if (event.flypost?.canonicalKey) {
-    return event.flypost.canonicalKey
-  }
-  
-  // Try to compute from event data
-  const brokerageId = event.brokerageId || event.flypost?.brokerageId || 'unknown'
-  const identity = computeCanonicalKey(event, brokerageId)
-  
-  return identity
 }
 
 /**
- * Maximum length for event descriptions in discovery responses
- * Prevents abuse and ensures consistent response sizes
- */
-const MAX_DESCRIPTION_LENGTH = 500
-
-/**
- * Truncates description to safe length
- * @param {string} description - The description text
- * @param {number} maxLength - Maximum length (default: MAX_DESCRIPTION_LENGTH)
- * @returns {string} Truncated description
- */
-function truncateDescription(description, maxLength = MAX_DESCRIPTION_LENGTH) {
-  if (!description) return undefined
-  if (typeof description !== 'string') return undefined
-  
-  const trimmed = description.trim()
-  if (trimmed.length <= maxLength) return trimmed
-  
-  // Truncate and add ellipsis
-  return trimmed.substring(0, maxLength) + '...'
-}
-
-/**
- * Maps a stored event object to DiscoveryEventV1 format
- * Only includes registry-safe fields (Layer 1 data)
+ * Maps a stored event object to DiscoveryEventV1 format (Protocol-Grade Schema)
+ * Enforces strict what/where/when structure without consumer UI concerns
  * 
  * @param {object} event - The full stored event object
  * @param {object} options - Mapping options
  * @param {string} options.accessTier - Access tier: 'public' or 'brokerage'
- * @returns {object} DiscoveryEventV1 object with only allowlisted fields
+ * @returns {object} DiscoveryEventV1 object conforming to flypost-discovery-v1.schema.json
  */
 export function toDiscoveryEventV1(event, options = {}) {
   if (!event) return null
@@ -180,85 +147,133 @@ export function toDiscoveryEventV1(event, options = {}) {
   const { accessTier = 'brokerage' } = options
   const isPublicTier = accessTier === 'public'
   
-  const discoveryEvent = {}
+  // Required: eventId (stable Flypost ID)
+  const eventId = event.flypost?.eventId || event.id
+  if (!eventId) return null
   
-  // Required registry identifiers
-  discoveryEvent.eventId = event.flypost?.eventId || event.id
-  discoveryEvent.eventIdentity = computeEventIdentity(event)
+  // Required: dataHash (sourced from event.hash.value)
+  const dataHash = event.hash?.value || event.flypost?.hash?.value
+  if (!dataHash) return null
   
-  // Category (normalized to snake_case singular enum values)
+  // Required: what (event type)
   const rawCategory = event.flypost?.category || 'open_house'
-  discoveryEvent.category = normalizeCategory(rawCategory)
+  const category = normalizeCategory(rawCategory)
   
-  // Dates
-  if (event.startDate) {
-    discoveryEvent.startDate = event.startDate
-  }
-  if (event.endDate) {
-    discoveryEvent.endDate = event.endDate
+  const what = {
+    type: category
   }
   
-  // Basic info (optional)
-  if (event.name) {
-    discoveryEvent.name = event.name
+  // Optional: what.label (minimal title)
+  if (event.name && typeof event.name === 'string') {
+    what.label = event.name
   }
   
-  // Description with truncation (public tier gets shorter description)
-  if (event.description) {
-    const maxLength = isPublicTier ? 200 : MAX_DESCRIPTION_LENGTH
-    discoveryEvent.description = truncateDescription(event.description, maxLength)
+  // Required: where (latitude, longitude, optional address)
+  const geo = event.location?.geo
+  if (!geo || geo.latitude === undefined || geo.longitude === undefined) {
+    return null // Cannot create discovery event without coordinates
   }
   
-  // Address (structured) - public tier gets less precise address
+  const where = {}
+  
+  // Apply precision based on access tier
+  if (isPublicTier) {
+    // Public tier: reduce precision to ~1km accuracy (2 decimal places)
+    where.latitude = parseFloat(geo.latitude.toFixed(2))
+    where.longitude = parseFloat(geo.longitude.toFixed(2))
+  } else {
+    // Brokerage tier: full precision
+    where.latitude = geo.latitude
+    where.longitude = geo.longitude
+  }
+  
+  // Optional: where.address (human-readable)
   if (event.location?.address) {
     const addr = event.location.address
     if (isPublicTier) {
-      // Public tier: only city, region, country (no street address, no postal code)
-      discoveryEvent.address = {
-        addressLocality: addr.addressLocality,
-        addressRegion: addr.addressRegion,
-        addressCountry: addr.addressCountry
+      // Public tier: city, region, country only
+      const parts = []
+      if (addr.addressLocality) parts.push(addr.addressLocality)
+      if (addr.addressRegion) parts.push(addr.addressRegion)
+      if (addr.addressCountry) parts.push(addr.addressCountry)
+      if (parts.length > 0) {
+        where.address = parts.join(', ')
       }
     } else {
       // Brokerage tier: full address
-      discoveryEvent.address = {
-        streetAddress: addr.streetAddress,
-        addressLocality: addr.addressLocality,
-        addressRegion: addr.addressRegion,
-        postalCode: addr.postalCode,
-        addressCountry: addr.addressCountry
+      const parts = []
+      if (addr.streetAddress) parts.push(addr.streetAddress)
+      if (addr.addressLocality) parts.push(addr.addressLocality)
+      if (addr.addressRegion) parts.push(addr.addressRegion)
+      if (addr.postalCode) parts.push(addr.postalCode)
+      if (addr.addressCountry) parts.push(addr.addressCountry)
+      if (parts.length > 0) {
+        where.address = parts.join(', ')
       }
     }
   }
   
-  // Geo coordinates (when available) - public tier gets reduced precision
-  if (event.location?.geo) {
-    const geo = event.location.geo
-    if (geo.latitude !== undefined && geo.longitude !== undefined) {
-      if (isPublicTier) {
-        // Public tier: reduce precision to ~1km accuracy (2 decimal places)
-        discoveryEvent.geo = {
-          latitude: parseFloat(geo.latitude.toFixed(2)),
-          longitude: parseFloat(geo.longitude.toFixed(2))
-        }
-      } else {
-        // Brokerage tier: full precision
-        discoveryEvent.geo = {
-          latitude: geo.latitude,
-          longitude: geo.longitude
-        }
-      }
+  // Required: when (start and end in UTC)
+  const startUTC = normalizeToUTC(event.startDate)
+  const endUTC = normalizeToUTC(event.endDate || event.startDate)
+  
+  if (!startUTC || !endUTC) {
+    return null // Cannot create discovery event without valid dates
+  }
+  
+  const when = {
+    start: startUTC,
+    end: endUTC
+  }
+  
+  // Required: url (nullable) - hand-off link
+  // Look for url in various places in the event object
+  let url = null
+  if (event.url && typeof event.url === 'string') {
+    url = event.url
+  } else if (event.flypost?.url && typeof event.flypost.url === 'string') {
+    url = event.flypost.url
+  } else if (event.flypost?.sourceUrl && typeof event.flypost.sourceUrl === 'string') {
+    url = event.flypost.sourceUrl
+  }
+  
+  // Optional: source
+  const source = {}
+  let hasSource = false
+  
+  if (event.flypost?.sourceType || event.flypost?.source?.kind) {
+    const sourceType = event.flypost.source?.kind || event.flypost.sourceType
+    const validSourceTypes = ['mls', 'brokerage_roster', 'manual', 'third_party']
+    
+    if (validSourceTypes.includes(sourceType)) {
+      source.kind = sourceType
+      hasSource = true
     }
   }
   
-  // Metadata (optional) - public tier gets limited metadata
-  if (!isPublicTier) {
-    if (event.flypost?.submissionTimestamp) {
-      discoveryEvent.submissionTimestamp = event.flypost.submissionTimestamp
+  if (event.flypost?.source?.url || event.flypost?.sourceUrl) {
+    const sourceUrl = event.flypost.source?.url || event.flypost.sourceUrl
+    if (sourceUrl && typeof sourceUrl === 'string') {
+      source.url = sourceUrl
+      hasSource = true
+    } else {
+      source.url = null
     }
-    if (event.flypost?.updateCount !== undefined) {
-      discoveryEvent.updateCount = event.flypost.updateCount
-    }
+  }
+  
+  // Build the discovery event (strict schema compliance)
+  const discoveryEvent = {
+    eventId,
+    dataHash,
+    what,
+    where,
+    when,
+    url
+  }
+  
+  // Add source only if present
+  if (hasSource) {
+    discoveryEvent.source = source
   }
   
   return discoveryEvent
@@ -276,11 +291,4 @@ export function toDiscoveryEventsV1(events, options = {}) {
   return events
     .map(event => toDiscoveryEventV1(event, options))
     .filter(event => event !== null)
-}
-
-/**
- * Export constants for testing and configuration
- */
-export const CONFIG = {
-  MAX_DESCRIPTION_LENGTH
 }
