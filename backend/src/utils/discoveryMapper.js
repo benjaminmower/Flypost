@@ -149,29 +149,6 @@ export function computeEventIdentity(event) {
 }
 
 /**
- * Maximum length for event descriptions in discovery responses
- * Prevents abuse and ensures consistent response sizes
- */
-const MAX_DESCRIPTION_LENGTH = 500
-
-/**
- * Truncates description to safe length
- * @param {string} description - The description text
- * @param {number} maxLength - Maximum length (default: MAX_DESCRIPTION_LENGTH)
- * @returns {string} Truncated description
- */
-function truncateDescription(description, maxLength = MAX_DESCRIPTION_LENGTH) {
-  if (!description) return undefined
-  if (typeof description !== 'string') return undefined
-  
-  const trimmed = description.trim()
-  if (trimmed.length <= maxLength) return trimmed
-  
-  // Truncate and add ellipsis
-  return trimmed.substring(0, maxLength) + '...'
-}
-
-/**
  * Maps a stored event object to DiscoveryEventV1 format
  * Only includes registry-safe fields (Layer 1 data)
  * 
@@ -294,11 +271,4 @@ export function toDiscoveryEventsV1(events, options = {}) {
   return events
     .map(event => toDiscoveryEventV1(event, options))
     .filter(event => event !== null)
-}
-
-/**
- * Export constants for testing and configuration
- */
-export const CONFIG = {
-  MAX_DESCRIPTION_LENGTH
 }

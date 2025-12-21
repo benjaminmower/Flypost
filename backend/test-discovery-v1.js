@@ -4,7 +4,7 @@
  * Tests the Two-Layer North Star enforcement at runtime
  */
 
-import { toDiscoveryEventV1, toDiscoveryEventsV1, computeEventIdentity, CONFIG } from './src/utils/discoveryMapper.js'
+import { toDiscoveryEventV1, toDiscoveryEventsV1, computeEventIdentity } from './src/utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse, _internal } from './src/utils/sanitizer.js'
 
 console.log('🧪 Testing Discovery V1 Contract & Runtime Guardrails\n')
