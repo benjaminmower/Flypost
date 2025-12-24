@@ -4,7 +4,12 @@
  * Tests the strict what/where/when M2M Oracle schema enforcement
  */
 
-import { toDiscoveryEventV1, toDiscoveryEventsV1, computeEventIdentity } from './src/utils/discoveryMapper.js'
+import Ajv2020 from 'ajv/dist/2020.js'
+import addFormats from 'ajv-formats'
+import { readFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+import { toDiscoveryEventV1, toDiscoveryEventsV1, normalizeCategory } from './src/utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse, _internal } from './src/utils/sanitizer.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -82,14 +87,13 @@ function testDiscoveryV1Mapping() {
     failed++
   }
   
-  // Check required fields
+  // Check required fields according to Discovery v1 schema
   const checks = [
     { field: 'eventId', expected: 'evt_test_123', actual: discoveryEvent.eventId },
-    { field: 'eventIdentity', expected: 'test-identity-key', actual: discoveryEvent.eventIdentity },
-    { field: 'category', expected: 'open_house', actual: discoveryEvent.category },
-    { field: 'startDate', expected: '2025-01-15T10:00:00Z', actual: discoveryEvent.startDate },
-    { field: 'endDate', expected: '2025-01-15T14:00:00Z', actual: discoveryEvent.endDate },
-    { field: 'name', expected: 'Test Open House', actual: discoveryEvent.name }
+    { field: 'what.type', expected: 'open_house', actual: discoveryEvent.what?.type },
+    { field: 'what.label', expected: 'Test Open House', actual: discoveryEvent.what?.label },
+    { field: 'when.start', expected: '2025-01-15T10:00:00.000Z', actual: discoveryEvent.when?.start },
+    { field: 'when.end', expected: '2025-01-15T14:00:00.000Z', actual: discoveryEvent.when?.end }
   ]
   
   for (const check of checks) {
@@ -104,12 +108,21 @@ function testDiscoveryV1Mapping() {
   
   // Check NEW M2M fields
   
-  // Check url field is present
-  if (discoveryEvent.url === 'https://www.zillow.com/homedetails/123-Main-St') {
-    console.log(`   ✅ url: ${discoveryEvent.url}`)
+  // Check externalListingUrl field is present
+  if (discoveryEvent.externalListingUrl === 'https://www.zillow.com/homedetails/123-Main-St') {
+    console.log(`   ✅ externalListingUrl: ${discoveryEvent.externalListingUrl}`)
     passed++
   } else {
-    console.log(`   ❌ url: Expected https://www.zillow.com/homedetails/123-Main-St, got ${discoveryEvent.url}`)
+    console.log(`   ❌ externalListingUrl: Expected https://www.zillow.com/homedetails/123-Main-St, got ${discoveryEvent.externalListingUrl}`)
+    failed++
+  }
+  
+  // Check old url field is NOT present
+  if (!('url' in discoveryEvent)) {
+    console.log('   ✅ url field correctly absent (renamed to externalListingUrl)')
+    passed++
+  } else {
+    console.log(`   ❌ url field should not exist: ${discoveryEvent.url}`)
     failed++
   }
   
@@ -131,17 +144,17 @@ function testDiscoveryV1Mapping() {
     failed++
   }
   
-  // Check address structure
-  if (discoveryEvent.address && discoveryEvent.address.streetAddress === '123 Main St') {
-    console.log('   ✅ address.streetAddress: 123 Main St')
+  // Check address structure in where
+  if (discoveryEvent.where?.address && discoveryEvent.where.address.includes('123 Main St')) {
+    console.log('   ✅ where.address includes street address')
     passed++
   } else {
-    console.log('   ❌ url field missing')
+    console.log('   ❌ where.address missing street address')
     failed++
   }
   
   // Check forbidden fields are NOT present
-  const forbiddenFields = ['description', 'organizer', 'price', 'beds', 'baths', 'photos', 'eventIdentity', 'submissionTimestamp']
+  const forbiddenFields = ['description', 'organizer', 'price', 'beds', 'baths', 'photos', 'eventIdentity', 'submissionTimestamp', 'category', 'startDate', 'endDate', 'name']
   let allStripped = true
   for (const field of forbiddenFields) {
     if (field in discoveryEvent) {
@@ -163,11 +176,11 @@ function testDiscoveryV1Mapping() {
 }
 
 /**
- * Test 2: URL and DataHash fields (M2M hardening)
+ * Test 2: externalListingUrl and DataHash fields (M2M hardening)
  */
 function testUrlAndDataHash() {
-  console.log('Test 2: URL and DataHash Fields (M2M Contract)')
-  console.log('------------------------------------------------')
+  console.log('Test 2: externalListingUrl and DataHash Fields (M2M Contract)')
+  console.log('-------------------------------------------------------------')
   
   let passed = 0
   let failed = 0
@@ -179,6 +192,14 @@ function testUrlAndDataHash() {
       category: 'open_house'
     },
     url: 'https://www.redfin.com/property/123',
+    startDate: '2025-01-15T10:00:00Z',
+    endDate: '2025-01-15T14:00:00Z',
+    location: {
+      geo: {
+        latitude: 34.0522,
+        longitude: -118.2437
+      }
+    },
     hash: {
       algorithm: 'SHA-256',
       encoding: 'hex',
@@ -189,12 +210,21 @@ function testUrlAndDataHash() {
   
   const discoveryEvent = toDiscoveryEventV1(eventWithUrl)
   
-  // Check url is present
-  if (discoveryEvent.url === 'https://www.redfin.com/property/123') {
-    console.log('   ✅ URL field preserved correctly')
+  // Check externalListingUrl is present
+  if (discoveryEvent.externalListingUrl === 'https://www.redfin.com/property/123') {
+    console.log('   ✅ externalListingUrl field preserved correctly')
     passed++
   } else {
-    console.log(`   ❌ URL field missing or incorrect: ${discoveryEvent.url}`)
+    console.log(`   ❌ externalListingUrl field missing or incorrect: ${discoveryEvent.externalListingUrl}`)
+    failed++
+  }
+  
+  // Check old url field does NOT exist
+  if (!('url' in discoveryEvent)) {
+    console.log('   ✅ url field correctly absent (renamed to externalListingUrl)')
+    passed++
+  } else {
+    console.log(`   ❌ url field should not exist: ${discoveryEvent.url}`)
     failed++
   }
   
@@ -207,31 +237,55 @@ function testUrlAndDataHash() {
     failed++
   }
   
-  // Test without url (should not break)
+  // Test without url (should not break, but field must still exist as null)
   const eventWithoutUrl = {
     flypost: {
       eventId: 'evt_test_789',
       category: 'open_house'
+    },
+    startDate: '2025-01-15T10:00:00Z',
+    endDate: '2025-01-15T14:00:00Z',
+    location: {
+      geo: {
+        latitude: 34.0522,
+        longitude: -118.2437
+      }
+    },
+    hash: {
+      algorithm: 'SHA-256',
+      encoding: 'hex',
+      value: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      canonicalVersion: 1
     },
     description: 'This should be ignored'
   }
   
   const discoveryEventNoUrl = toDiscoveryEventV1(eventWithoutUrl)
   
-  if (!('url' in discoveryEventNoUrl)) {
-    console.log('   ✅ Missing URL handled gracefully (field absent)')
+  // externalListingUrl must exist even when null (required field)
+  if ('externalListingUrl' in discoveryEventNoUrl && discoveryEventNoUrl.externalListingUrl === null) {
+    console.log('   ✅ externalListingUrl field exists as null when not provided')
     passed++
   } else {
-    console.log('   ❌ URL should not be present when not provided')
+    console.log('   ❌ externalListingUrl field must exist (even as null)')
     failed++
   }
   
-  // Test without hash (should not break)
-  if (!('dataHash' in discoveryEventNoUrl)) {
-    console.log('   ✅ Missing hash handled gracefully (field absent)')
+  // url field should NOT exist
+  if (!('url' in discoveryEventNoUrl)) {
+    console.log('   ✅ url field correctly absent')
     passed++
   } else {
-    console.log('   ❌ dataHash should not be present when hash not provided')
+    console.log('   ❌ url field should not exist')
+    failed++
+  }
+  
+  // dataHash should be present since hash was provided
+  if ('dataHash' in discoveryEventNoUrl && discoveryEventNoUrl.dataHash === 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890') {
+    console.log('   ✅ dataHash field present and correct')
+    passed++
+  } else {
+    console.log('   ❌ dataHash field missing or incorrect')
     failed++
   }
   
@@ -244,7 +298,7 @@ function testUrlAndDataHash() {
     failed++
   }
   
-  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 5 checks`)
+  console.log(`\n   Summary: ${passed} passed, ${failed} failed out of 7 checks`)
   console.log('')
   
   return failed === 0
@@ -281,7 +335,7 @@ function testAdditionalPropertiesRejection() {
           start: '2025-01-20T10:00:00.000Z',
           end: '2025-01-20T14:00:00.000Z'
         },
-        url: null,
+        externalListingUrl: null,
         // Additional forbidden properties
         description: 'This should not be here',
         price: 500000
@@ -367,10 +421,8 @@ function runAllTests() {
   
   results.push(testDiscoveryV1Mapping())
   results.push(testUrlAndDataHash())
-  results.push(testForbiddenKeys())
-  results.push(testSanitizerStripping())
-  results.push(testEventIdentityComputation())
-  results.push(testArrayMapping())
+  results.push(testAdditionalPropertiesRejection())
+  results.push(testCategoryNormalization())
   
   // Summary
   console.log('==========================================')

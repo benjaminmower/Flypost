@@ -125,11 +125,10 @@ if (discoveryEvents.length > 0) {
   console.log('  - what.label:', discoveryEvents[0].what.label)
   console.log('  - where:', `lat ${discoveryEvents[0].where.latitude}, lng ${discoveryEvents[0].where.longitude}`)
   console.log('  - when.start:', discoveryEvents[0].when.start)
-  console.log('  - url:', discoveryEvents[0].url)
+  console.log('  - externalListingUrl:', discoveryEvents[0].externalListingUrl)
 }
 
 // Check for forbidden keys after mapping
-const forbiddenKeys = ['description', 'organizer', 'price', 'beds', 'baths', 'photos', 'attendance', 'feedback', 'sentiment']
 let foundForbidden = false
 for (const event of discoveryEvents) {
   const forbiddenKeys = ['attendance', 'attendees', 'feedback', 'sentiment', 'insights', 'brokerageAffiliation', 'intelligenceScore', 'description']
@@ -145,13 +144,19 @@ if (!foundForbidden) {
   console.log('\n✅ No forbidden keys found in mapped events (strict stripping enforced)')
 }
 
-// Check M2M hardening: url and dataHash present, description absent
+// Check M2M hardening: externalListingUrl and dataHash present, description absent, url field absent
 console.log('\n✅ Verifying M2M Contract Hardening:')
 
-if (discoveryEvents[0].url === 'https://www.zillow.com/homedetails/123-Oak-Street') {
-  console.log('   ✅ Event 1 has url field: ' + discoveryEvents[0].url)
+if (discoveryEvents[0].externalListingUrl === 'https://www.zillow.com/homedetails/123-Oak-Street') {
+  console.log('   ✅ Event 1 has externalListingUrl field: ' + discoveryEvents[0].externalListingUrl)
 } else {
-  console.log('   ❌ Event 1 missing url field')
+  console.log('   ❌ Event 1 missing externalListingUrl field')
+}
+
+if (!('url' in discoveryEvents[0])) {
+  console.log('   ✅ Event 1 url field correctly absent (renamed to externalListingUrl)')
+} else {
+  console.log('   ❌ Event 1 should not have url field')
 }
 
 if (discoveryEvents[0].dataHash === 'abc123def456abc123def456abc123def456abc123def456abc123def456abc123') {
@@ -166,10 +171,16 @@ if (!('description' in discoveryEvents[0])) {
   console.log('   ❌ Event 1 should not have description field')
 }
 
-if (discoveryEvents[1].url === 'https://www.craigslist.org/garage-sale/456') {
-  console.log('   ✅ Event 2 has url field: ' + discoveryEvents[1].url)
+if (discoveryEvents[1].externalListingUrl === 'https://www.craigslist.org/garage-sale/456') {
+  console.log('   ✅ Event 2 has externalListingUrl field: ' + discoveryEvents[1].externalListingUrl)
 } else {
-  console.log('   ❌ Event 2 missing url field')
+  console.log('   ❌ Event 2 missing externalListingUrl field')
+}
+
+if (!('url' in discoveryEvents[1])) {
+  console.log('   ✅ Event 2 url field correctly absent (renamed to externalListingUrl)')
+} else {
+  console.log('   ❌ Event 2 should not have url field')
 }
 
 if (discoveryEvents[1].dataHash === 'def789ghi012def789ghi012def789ghi012def789ghi012def789ghi012def789') {
@@ -251,7 +262,7 @@ if (response.success && response.events && response.meta) {
 
 // Check 4: No forbidden keys in any event (including description)
 let allClean = true
-const forbiddenKeys = ['attendance', 'attendees', 'feedback', 'sentiment', 'insights', 'brokerageAffiliation', 'intelligenceScore', 'buyerToken', 'presenceProof', 'description']
+const forbiddenKeys = ['attendance', 'attendees', 'feedback', 'sentiment', 'insights', 'brokerageAffiliation', 'intelligenceScore', 'buyerToken', 'presenceProof', 'description', 'url']
 for (const event of response.events) {
   if (!event.what || !event.where || !event.when) {
     console.log(`❌ Event ${event.eventId} missing what/where/when structure`)
@@ -263,10 +274,21 @@ for (const event of response.events) {
     allEventsValid = false
     failed++
   }
-  if (!('url' in event)) {
-    console.log(`❌ Event ${event.eventId} missing url field`)
+  if (!('externalListingUrl' in event)) {
+    console.log(`❌ Event ${event.eventId} missing externalListingUrl field`)
     allEventsValid = false
     failed++
+  }
+  if ('url' in event) {
+    console.log(`❌ Event ${event.eventId} has old url field (should be externalListingUrl)`)
+    allClean = false
+    failed++
+  }
+  for (const key of forbiddenKeys) {
+    if (key in event) {
+      console.log(`❌ Event ${event.eventId} has forbidden key: ${key}`)
+      allClean = false
+    }
   }
 }
 
@@ -289,16 +311,24 @@ if (valid) {
   }
 }
 
-// Check 6: M2M Contract - url and dataHash present
+// Check 6: M2M Contract - externalListingUrl and dataHash present, url absent
 console.log('\n✅ Verifying M2M Contract Fields:')
 for (let i = 0; i < response.events.length; i++) {
   const event = response.events[i]
   
-  if (event.url) {
-    console.log(`✅ Event ${i + 1} has url field for hand-off`)
+  if (event.externalListingUrl) {
+    console.log(`✅ Event ${i + 1} has externalListingUrl field for hand-off`)
     passed++
   } else {
-    console.log(`❌ Event ${i + 1} missing url field`)
+    console.log(`❌ Event ${i + 1} missing externalListingUrl field`)
+    failed++
+  }
+  
+  if (!('url' in event)) {
+    console.log(`✅ Event ${i + 1} url field correctly absent`)
+    passed++
+  } else {
+    console.log(`❌ Event ${i + 1} has old url field (should be externalListingUrl)`)
     failed++
   }
   
@@ -319,7 +349,7 @@ console.log(`Failed: ${failed}`)
 if (failed === 0) {
   console.log('\n✅ All guarantees verified!')
   console.log('The Two-Layer North Star is successfully enforced at runtime.')
-  console.log('M2M Contract Hardening: ✅ url present, ✅ dataHash present, ✅ description stripped')
+  console.log('M2M Contract Hardening: ✅ externalListingUrl present, ✅ dataHash present, ✅ description stripped')
   process.exit(0)
 } else {
   console.log('\n❌ Some guarantees failed or schema validation failed!')
