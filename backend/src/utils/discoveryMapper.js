@@ -7,8 +7,8 @@
  * Layer 2 (Intelligence) data like attendance, feedback, sentiment is explicitly excluded.
  *
  * Hardened for M2M Infrastructure ("The Oracle for Reality"):
- * - Strips consumer/UI fields (machines use url for deeper context)
- * - Adds url field for hand-off to external listings (nullable but required key)
+ * - Strips consumer/UI fields (machines use externalListingUrl for deeper context)
+ * - Adds externalListingUrl field for hand-off to external listings (nullable but required key)
  * - Adds dataHash field for data integrity verification (lowercase hex)
  * - Maintains tiered precision for geo/address (public vs brokerage)
  */
@@ -205,17 +205,17 @@ export function toDiscoveryEventV1(event, options = {}) {
 
   const when = { start: startUTC, end: endUTC }
 
-  // Required: url key must exist (nullable)
-  let url = null
+  // Required: externalListingUrl key must exist (nullable)
+  let externalListingUrl = null
   if (event.url && typeof event.url === 'string') {
-    url = event.url
+    externalListingUrl = event.url
   } else if (event.flypost?.url && typeof event.flypost.url === 'string') {
-    url = event.flypost.url
+    externalListingUrl = event.flypost.url
   } else if (
     event.flypost?.sourceUrl &&
     typeof event.flypost.sourceUrl === 'string'
   ) {
-    url = event.flypost.sourceUrl
+    externalListingUrl = event.flypost.sourceUrl
   }
 
   // Optional: source (if present, must include kind + url per schema)
@@ -235,7 +235,7 @@ export function toDiscoveryEventV1(event, options = {}) {
     sourceUrl = u && typeof u === 'string' ? u : null
   }
 
-  const discoveryEvent = { eventId, dataHash, what, where, when, url }
+  const discoveryEvent = { eventId, dataHash, what, where, when, externalListingUrl }
 
   // Add source only if kind is known (url may be null; schema allows null)
   if (sourceKind !== null) {
