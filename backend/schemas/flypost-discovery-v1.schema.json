@@ -34,14 +34,14 @@
       "description": "A single discovered event.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["eventId", "dataHash", "what", "where", "when", "url"],
+      "required": ["eventId", "dataHash", "what", "where", "when", "externalListingUrl"],
       "properties": {
         "eventId": { "type": "string", "minLength": 1 },
 
         "dataHash": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$",
-          "description": "SHA-256 of canonical payload containing only {what.type, where.latitude, where.longitude, when.start, when.end}. Excludes optional/human fields (e.g., what.label, where.address, url, source). Canonicalization and normalization (UTC handling, numeric rounding) are protocol-defined; recommend RFC 8785 JCS over UTF-8 bytes."
+          "description": "SHA-256 of canonical payload containing only {what.type, where.latitude, where.longitude, when.start, when.end}. Excludes optional/human fields (e.g., what.label, where.address, externalListingUrl, source). Canonicalization and normalization (UTC handling, numeric rounding) are protocol-defined; recommend RFC 8785 JCS over UTF-8 bytes."
         },
 
         "what": {
@@ -88,7 +88,7 @@
           }
         },
 
-        "url": {
+        "externalListingUrl": {
           "oneOf": [
             { "type": "string", "format": "uri" },
             { "type": "null" }
