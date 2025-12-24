@@ -2,6 +2,10 @@
 /**
  * Integration test for organizer field sanitization in the full parse-and-validate flow
  * Tests that events with invalid organizer fields are properly sanitized before validation
+ * 
+ * NOTE: This test duplicates the sanitization logic from llmParser.js
+ * to test the integration flow without requiring actual LLM API calls.
+ * The duplication is intentional to keep tests fast and deterministic.
  */
 
 import { validateEventData } from './src/validation.js'

@@ -3,6 +3,10 @@
  * Test script to validate organizer field sanitization
  * Tests that invalid types in optional organizer fields are removed
  * and valid string values are preserved
+ * 
+ * NOTE: This test duplicates the sanitization logic from llmParser.js
+ * to test it independently without requiring actual LLM API calls.
+ * The duplication is intentional to keep tests fast and deterministic.
  */
 
 import { parseEventWithLLM } from './src/llmParser.js'
