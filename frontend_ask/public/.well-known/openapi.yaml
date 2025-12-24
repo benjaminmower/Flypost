@@ -215,93 +215,114 @@ components:
     DiscoveryEvent:
       type: object
       description: |
-        Event in Discovery V1 format. Fields returned depend on access tier:
-        - Public tier: approximate geo, city/region only, limited metadata
-        - Brokerage tier: full precision geo, complete address, full metadata
+        Event in Discovery V1 format with strict what/where/when structure (M2M Oracle contract).
+        Field detail depends on access tier:
+        - Public tier: approximate geo (2 decimal places), city/region only in address
+        - Brokerage tier: full precision geo, complete address with street
       required:
         - eventId
-        - eventIdentity
-        - category
-        - startDate
+        - dataHash
+        - what
+        - where
+        - when
+        - externalListingUrl
       properties:
         eventId:
           type: string
           description: Unique event identifier
           example: "evt_20250115_abc123"
-        eventIdentity:
+        dataHash:
           type: string
-          description: Brokerage-agnostic event identity (canonical key)
-          example: "open_house:123-main-st:los-angeles:ca"
-        category:
-          type: string
-          description: Event category
-          enum: [open_house, garage_sale, estate_sale, moving_sale, yard_sale, other]
-          example: "open_house"
-        name:
-          type: string
-          description: Event name/title
-          example: "Beautiful 4BR Home in Santa Monica"
-        description:
-          type: string
-          description: Event description (truncated based on access tier)
-          example: "Stunning modern home with ocean views..."
-        startDate:
-          type: string
-          format: date-time
-          description: Event start date and time (ISO 8601)
-          example: "2025-01-15T10:00:00Z"
-        endDate:
-          type: string
-          format: date-time
-          description: Event end date and time (ISO 8601)
-          example: "2025-01-15T14:00:00Z"
-        address:
+          pattern: "^[a-f0-9]{64}$"
+          description: SHA-256 hash of canonical event data for integrity verification
+          example: "a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890"
+        what:
           type: object
-          description: Event address (detail level depends on access tier)
+          description: What is happening (event type and optional label)
+          required:
+            - type
           properties:
-            streetAddress:
+            type:
               type: string
-              description: Street address (brokerage tier only)
-              example: "123 Main Street"
-            addressLocality:
+              description: Event category
+              enum: [open_house, garage_sale, estate_sale, moving_sale, yard_sale, other]
+              example: "open_house"
+            label:
               type: string
-              description: City
-              example: "Los Angeles"
-            addressRegion:
-              type: string
-              description: State/region
-              example: "CA"
-            postalCode:
-              type: string
-              description: Postal code (brokerage tier only)
-              example: "90001"
-            addressCountry:
-              type: string
-              description: Country code
-              example: "US"
-        geo:
+              description: Optional human-readable event name/title (max 80 chars)
+              maxLength: 80
+              example: "Beautiful 4BR Home"
+        where:
           type: object
-          description: Geographic coordinates (precision depends on access tier)
+          description: Where is it happening (coordinates and optional address, precision depends on tier)
+          required:
+            - latitude
+            - longitude
           properties:
             latitude:
               type: number
               format: double
-              description: Latitude (reduced precision for public tier)
+              minimum: -90
+              maximum: 90
+              description: Latitude coordinate (reduced precision for public tier)
               example: 34.05
             longitude:
               type: number
               format: double
-              description: Longitude (reduced precision for public tier)
+              minimum: -180
+              maximum: 180
+              description: Longitude coordinate (reduced precision for public tier)
               example: -118.24
-        submissionTimestamp:
-          type: string
-          format: date-time
-          description: When event was submitted (brokerage tier only)
-          example: "2025-01-01T12:00:00Z"
-        updateCount:
-          type: integer
-          description: Number of updates to this event (brokerage tier only)
-          example: 2
+            address:
+              type: string
+              description: Optional flattened address string (max 200 chars, detail level depends on access tier)
+              maxLength: 200
+              example: "Los Angeles, CA, US"
+        when:
+          type: object
+          description: When is it happening (start and end times)
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+              description: Event start date and time (ISO 8601 UTC)
+              example: "2025-01-15T10:00:00.000Z"
+            end:
+              type: string
+              format: date-time
+              description: Event end date and time (ISO 8601 UTC)
+              example: "2025-01-15T14:00:00.000Z"
+        externalListingUrl:
+          oneOf:
+            - type: string
+              format: uri
+              description: URL to external listing or detail page
+              example: "https://www.zillow.com/homedetails/123-Main-St"
+            - type: "null"
+          description: External listing URL (required field, can be null)
+        source:
+          type: object
+          description: Optional source provenance information
+          required:
+            - kind
+            - url
+          properties:
+            kind:
+              type: string
+              enum: [mls, brokerage_roster, manual, third_party]
+              description: Source type
+              example: "mls"
+            url:
+              oneOf:
+                - type: string
+                  format: uri
+                  description: Source URL
+                  example: "https://api.mls.com/listings/123"
+                - type: "null"
+              description: Source URL (can be null)
 
     Error:
       type: object
