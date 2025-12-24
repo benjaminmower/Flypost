@@ -882,7 +882,7 @@ app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
 /**
  * POST /v1/presence/check-in
  * Create an attendance record for presence at an event
- * 
+ *
  * Body:
  * - eventId (optional): Specific event ID, or will match nearest event
  * - lat (required): Latitude
@@ -902,7 +902,10 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
       })
     }
 
-    if (!lat || !lng) {
+    const latNum = Number(lat)
+    const lngNum = Number(lng)
+
+    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
       return res.status(400).json({
         success: false,
         error: 'lat and lng are required for presence verification'
@@ -917,8 +920,8 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
     if (!targetEventId) {
       const useFirestore = isFirestoreEnabled()
       const nearbyEvents = await getEventsNear(
-        parseFloat(lat),
-        parseFloat(lng),
+        latNum,
+        lngNum,
         PRESENCE_RADIUS_KM,
         useFirestore
       )
@@ -963,27 +966,30 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
     // Extract event coordinates (handle common field paths)
     let eventLat = null
     let eventLng = null
-    
-    if (matchedEvent.location?.geo?.latitude && matchedEvent.location?.geo?.longitude) {
+
+    if (
+      matchedEvent.location?.geo?.latitude &&
+      matchedEvent.location?.geo?.longitude
+    ) {
       eventLat = matchedEvent.location.geo.latitude
       eventLng = matchedEvent.location.geo.longitude
-    } else if (matchedEvent.flypost?.geo?.latitude && matchedEvent.flypost?.geo?.longitude) {
+    } else if (
+      matchedEvent.flypost?.geo?.latitude &&
+      matchedEvent.flypost?.geo?.longitude
+    ) {
       eventLat = matchedEvent.flypost.geo.latitude
       eventLng = matchedEvent.flypost.geo.longitude
     }
 
     if (eventLat !== null && eventLng !== null) {
       // Calculate actual distance using Haversine formula
-      const actualDistanceKm = distanceKm(
-        parseFloat(lat),
-        parseFloat(lng),
-        eventLat,
-        eventLng
-      )
+      const actualDistanceKm = distanceKm(latNum, lngNum, eventLat, eventLng)
       const actualDistanceMeters = Math.round(actualDistanceKm * 1000)
       const thresholdMeters = Math.round(PRESENCE_RADIUS_KM * 1000)
 
-      console.log(`📏 Distance check: ${actualDistanceMeters}m (threshold: ${thresholdMeters}m) for event ${targetEventId}`)
+      console.log(
+        `📏 Distance check: ${actualDistanceMeters}m (threshold: ${thresholdMeters}m) for event ${targetEventId}`
+      )
 
       // Reject if outside configured radius
       if (actualDistanceKm > PRESENCE_RADIUS_KM) {
@@ -995,20 +1001,22 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
       }
     } else {
       // No geo coordinates on event - log warning and allow check-in
-      console.warn(`⚠️  Event ${targetEventId} has no geo coordinates; skipping distance validation`)
+      console.warn(
+        `⚠️  Event ${targetEventId} has no geo coordinates; skipping distance validation`
+      )
     }
 
     // Create attendance record
     const { storeAttendance } = await import('./intelligenceStorage.js')
-    
+
     const attendance = await storeAttendance({
       eventId: targetEventId,
       buyerToken,
       checkInTime: timestamp || new Date().toISOString(),
       presenceProof: {
         method: method || 'geo_time',
-        lat: parseFloat(lat),
-        lng: parseFloat(lng),
+        lat: latNum,
+        lng: lngNum,
         matchedBy
       }
     })
