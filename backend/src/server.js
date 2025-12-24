@@ -428,17 +428,22 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
 
     const validatedEvent = validation.data
 
-    // 8) ENFORCE PRICE REQUIREMENT
-    // After parsing, extraction, and normalization, enforce that a valid list price exists
+   // 8) OPTIONAL PRICE VALIDATION
+  // Price is optional. If present, it must be valid.
+  if (
+    validatedEvent?.offers?.price != null ||
+    validatedEvent?.flypost?.listPrice != null ||
+    validatedEvent?.flypost?.listPriceDisplay != null
+  ) {
     if (!hasValidListPrice(validatedEvent)) {
-      console.error('❌ Price validation failed: No valid list price found')
+      console.error('❌ Price validation failed: Invalid list price')
       return res.status(400).json({
         success: false,
-        error: 'List price is required for published events',
-        message: 'Please include the list price in your event description (e.g., "List Price: $1,250,000" or "$2.5 million").',
-        hint: 'Supported formats: $1,250,000 | $1250000 | $2.5M | $2.5 million'
+        error: 'Invalid list price',
+        message: 'If you include a price, it must be a valid list price (e.g., "$1,250,000" or "$2.5M").'
       })
     }
+  }
 
     // 9) Compute hash over the validated event
     const eventHash = computeEventHash(validatedEvent)
