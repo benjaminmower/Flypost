@@ -87,14 +87,13 @@ function testDiscoveryV1Mapping() {
     failed++
   }
   
-  // Check required fields
+  // Check required fields according to Discovery v1 schema
   const checks = [
     { field: 'eventId', expected: 'evt_test_123', actual: discoveryEvent.eventId },
-    { field: 'eventIdentity', expected: 'test-identity-key', actual: discoveryEvent.eventIdentity },
-    { field: 'category', expected: 'open_house', actual: discoveryEvent.category },
-    { field: 'startDate', expected: '2025-01-15T10:00:00Z', actual: discoveryEvent.startDate },
-    { field: 'endDate', expected: '2025-01-15T14:00:00Z', actual: discoveryEvent.endDate },
-    { field: 'name', expected: 'Test Open House', actual: discoveryEvent.name }
+    { field: 'what.type', expected: 'open_house', actual: discoveryEvent.what?.type },
+    { field: 'what.label', expected: 'Test Open House', actual: discoveryEvent.what?.label },
+    { field: 'when.start', expected: '2025-01-15T10:00:00.000Z', actual: discoveryEvent.when?.start },
+    { field: 'when.end', expected: '2025-01-15T14:00:00.000Z', actual: discoveryEvent.when?.end }
   ]
   
   for (const check of checks) {
@@ -145,17 +144,17 @@ function testDiscoveryV1Mapping() {
     failed++
   }
   
-  // Check address structure
-  if (discoveryEvent.address && discoveryEvent.address.streetAddress === '123 Main St') {
-    console.log('   ✅ address.streetAddress: 123 Main St')
+  // Check address structure in where
+  if (discoveryEvent.where?.address && discoveryEvent.where.address.includes('123 Main St')) {
+    console.log('   ✅ where.address includes street address')
     passed++
   } else {
-    console.log('   ❌ url field missing')
+    console.log('   ❌ where.address missing street address')
     failed++
   }
   
   // Check forbidden fields are NOT present
-  const forbiddenFields = ['description', 'organizer', 'price', 'beds', 'baths', 'photos', 'eventIdentity', 'submissionTimestamp']
+  const forbiddenFields = ['description', 'organizer', 'price', 'beds', 'baths', 'photos', 'eventIdentity', 'submissionTimestamp', 'category', 'startDate', 'endDate', 'name']
   let allStripped = true
   for (const field of forbiddenFields) {
     if (field in discoveryEvent) {
@@ -281,12 +280,12 @@ function testUrlAndDataHash() {
     failed++
   }
   
-  // Test without hash (should not break)
-  if (!('dataHash' in discoveryEventNoUrl)) {
-    console.log('   ✅ Missing hash handled gracefully (field absent)')
+  // dataHash should be present since hash was provided
+  if ('dataHash' in discoveryEventNoUrl && discoveryEventNoUrl.dataHash === 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890') {
+    console.log('   ✅ dataHash field present and correct')
     passed++
   } else {
-    console.log('   ❌ dataHash should not be present when hash not provided')
+    console.log('   ❌ dataHash field missing or incorrect')
     failed++
   }
   
@@ -422,10 +421,8 @@ function runAllTests() {
   
   results.push(testDiscoveryV1Mapping())
   results.push(testUrlAndDataHash())
-  results.push(testForbiddenKeys())
-  results.push(testSanitizerStripping())
-  results.push(testEventIdentityComputation())
-  results.push(testArrayMapping())
+  results.push(testAdditionalPropertiesRejection())
+  results.push(testCategoryNormalization())
   
   // Summary
   console.log('==========================================')

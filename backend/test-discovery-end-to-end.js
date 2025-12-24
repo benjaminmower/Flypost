@@ -129,7 +129,6 @@ if (discoveryEvents.length > 0) {
 }
 
 // Check for forbidden keys after mapping
-const forbiddenKeys = ['description', 'organizer', 'price', 'beds', 'baths', 'photos', 'attendance', 'feedback', 'sentiment']
 let foundForbidden = false
 for (const event of discoveryEvents) {
   const forbiddenKeys = ['attendance', 'attendees', 'feedback', 'sentiment', 'insights', 'brokerageAffiliation', 'intelligenceScore', 'description']
