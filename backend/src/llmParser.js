@@ -249,6 +249,21 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
     parsedEvent.organizer['@type'] = 'Person'
   }
 
+  // Sanitize optional organizer fields - remove fields with invalid types
+  // LLM sometimes outputs these fields with non-string values (null, numbers, booleans)
+  // which causes AJV validation to fail. We prefer deletion over coercion.
+  const organizerFieldsToSanitize = ['email', 'phone', 'licenseId', 'mlsNumber']
+  for (const field of organizerFieldsToSanitize) {
+    if (field in parsedEvent.organizer) {
+      const value = parsedEvent.organizer[field]
+      // Keep only non-empty strings; remove everything else
+      if (typeof value !== 'string' || value.trim() === '') {
+        delete parsedEvent.organizer[field]
+        console.log(`🧹 Sanitized organizer.${field}: removed invalid value (type: ${typeof value})`)
+      }
+    }
+  }
+
   // Validate and normalize dates
   if (!parsedEvent.startDate) {
     throw new Error('Parsed event missing required startDate field')
