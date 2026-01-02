@@ -93,8 +93,8 @@ export function normalizeOpenHouseTimestamps(event, hasExplicitTz, inferredTimez
   }
 
   // Reinterpret occurrences timestamps if present
-  if (event.flypost?.occurrences && Array.isArray(event.flypost.occurrences)) {
-    for (const occ of event.flypost.occurrences) {
+  if (event.occurrences && Array.isArray(event.occurrences)) {
+    for (const occ of event.occurrences) {
       if (occ.startDate) {
         const originalStart = occ.startDate
         occ.startDate = reinterpretTimestampInTimezone(occ.startDate, inferredTimezone)
@@ -170,9 +170,9 @@ export function validateOpenHouseEndDate(event) {
   }
 
   // Check for endDate on occurrences or top-level
-  if (event.flypost?.occurrences && event.flypost.occurrences.length > 0) {
+  if (event.occurrences && event.occurrences.length > 0) {
     // Validate each occurrence has endDate
-    for (const occ of event.flypost.occurrences) {
+    for (const occ of event.occurrences) {
       if (!occ.endDate) {
         return {
           valid: false,

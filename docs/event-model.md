@@ -78,15 +78,15 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
 - `flypost.queryable`: Boolean flag for API access
 - `flypost.submissionTimestamp`: UTC timestamp of submission
 - `flypost.timezone`: IANA timezone identifier inferred from location (e.g., "America/Los_Angeles"). Used to correctly interpret timestamps for events where the raw input doesn't specify explicit timezone information.
-- `flypost.occurrences`: Array of occurrence objects for multi-slot events (e.g., open houses with multiple time windows). Each occurrence has:
-  - `occurrenceId`: Stable identifier (hash of canonicalKey + startDate + endDate)
-  - `startDate`: Start time in UTC ISO 8601
-  - `endDate`: End time in UTC ISO 8601
-  - `label`: Optional human-readable label (e.g., "Saturday Morning")
 
 ## Optional Fields
 
 - `endDate`: Event end datetime (**Required for `open-houses` category** to enable presence gating - can be provided at the top level OR within all occurrences if using multi-slot format)
+- `occurrences`: Array of occurrence objects for multi-slot events (e.g., open houses with multiple time windows). Each occurrence has:
+  - `occurrenceId`: Stable identifier (hash of canonicalKey + startDate + endDate)
+  - `startDate`: Start time in UTC ISO 8601
+  - `endDate`: End time in UTC ISO 8601
+  - `label`: Optional human-readable label (e.g., "Saturday Morning")
 - `location.name`: Friendly location name
 - `location.geo`: Latitude/longitude coordinates (**Required for publishing** - events without geo coordinates will be rejected at publish time to prevent false-positive presence matches. If not provided in natural language input, the system will attempt automatic geocoding.)
 - `organizer.@type`: "Person" or "Organization" (defaults to "Person" if not specified)

@@ -41,10 +41,12 @@ This implementation ensures Rick's presence → feedback loop is truthful by mak
 
 ## Schema Changes
 
-### New Fields in `flypost` object:
+### New Fields in event object:
 ```json
 {
-  "timezone": "America/Los_Angeles",
+  "flypost": {
+    "timezone": "America/Los_Angeles"
+  },
   "occurrences": [
     {
       "occurrenceId": "occ_4ce7b8deccfa6bc9",

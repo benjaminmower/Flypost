@@ -35,12 +35,12 @@ console.assert(result2.error.includes('end time'), '✅ Error message is helpful
 console.log('\nTest 3: Open house with occurrences (all valid)')
 const multiSlotValid = {
   flypost: {
-    category: 'open-houses',
-    occurrences: [
-      { occurrenceId: 'occ_1', startDate: '2025-01-15T14:00:00Z', endDate: '2025-01-15T16:00:00Z' },
-      { occurrenceId: 'occ_2', startDate: '2025-01-16T14:00:00Z', endDate: '2025-01-16T16:00:00Z' }
-    ]
-  }
+    category: 'open-houses'
+  },
+  occurrences: [
+    { occurrenceId: 'occ_1', startDate: '2025-01-15T14:00:00Z', endDate: '2025-01-15T16:00:00Z' },
+    { occurrenceId: 'occ_2', startDate: '2025-01-16T14:00:00Z', endDate: '2025-01-16T16:00:00Z' }
+  ]
 }
 const result3 = validateOpenHouseEndDate(multiSlotValid)
 console.log(`  Valid: ${result3.valid}`)
@@ -50,12 +50,12 @@ console.assert(result3.valid === true, '✅ Multi-slot with all endDates passes'
 console.log('\nTest 4: Open house with occurrences (one missing endDate)')
 const multiSlotInvalid = {
   flypost: {
-    category: 'open-houses',
-    occurrences: [
-      { occurrenceId: 'occ_1', startDate: '2025-01-15T14:00:00Z', endDate: '2025-01-15T16:00:00Z' },
-      { occurrenceId: 'occ_2', startDate: '2025-01-16T14:00:00Z' } // Missing endDate
-    ]
-  }
+    category: 'open-houses'
+  },
+  occurrences: [
+    { occurrenceId: 'occ_1', startDate: '2025-01-15T14:00:00Z', endDate: '2025-01-15T16:00:00Z' },
+    { occurrenceId: 'occ_2', startDate: '2025-01-16T14:00:00Z' } // Missing endDate
+  ]
 }
 const result4 = validateOpenHouseEndDate(multiSlotInvalid)
 console.log(`  Valid: ${result4.valid}`)

@@ -61,6 +61,50 @@ function toRadians(degrees) {
   return degrees * (Math.PI / 180)
 }
 
+// Helper: Detect if input text describes multiple time slots
+// Uses heuristics to identify multiple day/date/time patterns
+function detectMultipleTimeSlots(text) {
+  if (!text || typeof text !== 'string') {
+    return false
+  }
+  
+  const lowerText = text.toLowerCase()
+  
+  // Count distinct weekday mentions (Mon, Tue, Wed, Thu, Fri, Sat, Sun)
+  const weekdayPattern = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/gi
+  const weekdays = text.match(weekdayPattern) || []
+  const uniqueWeekdays = new Set(weekdays.map(d => d.toLowerCase().substring(0, 3)))
+  
+  if (uniqueWeekdays.size >= 2) {
+    return true
+  }
+  
+  // Count time range patterns (e.g., "11-1", "2:30-5:30", "10am-2pm")
+  const timeRangePattern = /\b\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?\s*[-–—to]\s*\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?\b/gi
+  const timeRanges = text.match(timeRangePattern) || []
+  
+  if (timeRanges.length >= 2) {
+    return true
+  }
+  
+  // Count date-like patterns (e.g., "Jan 3", "1/3", "January 3rd")
+  const datePattern = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(st|nd|rd|th)?\b|\b\d{1,2}\/\d{1,2}\b/gi
+  const dates = text.match(datePattern) || []
+  
+  if (dates.length >= 2) {
+    return true
+  }
+  
+  // Check for explicit "and" between time indicators
+  // e.g., "Saturday 11-1 and Sunday 2-4"
+  const andPattern = /\b(morning|afternoon|evening|\d{1,2}\s*(am|pm)?)\s+and\s+(morning|afternoon|evening|\d{1,2}\s*(am|pm)?)\b/i
+  if (andPattern.test(text)) {
+    return true
+  }
+  
+  return false
+}
+
 // CORS
 const frontendOrigins = [
   ...((process.env.FRONTEND_URL || '')
@@ -429,14 +473,29 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       })
     }
 
+    // 3.85) MULTI-SLOT DETECTION FOR OPEN-HOUSES
+    // Detect if input describes multiple slots but LLM didn't output occurrences
+    if (parsedEvent.flypost?.category === 'open-houses') {
+      const hasMultipleSlots = detectMultipleTimeSlots(naturalLanguageInput)
+      const hasOccurrences = parsedEvent.occurrences && Array.isArray(parsedEvent.occurrences) && parsedEvent.occurrences.length > 0
+      
+      if (hasMultipleSlots && !hasOccurrences) {
+        console.error(`❌ Multi-slot open house detected but occurrences missing`)
+        return res.status(400).json({
+          success: false,
+          error: 'Multiple open house time slots detected. Please include all slots explicitly or submit one slot per publish.'
+        })
+      }
+    }
+
     // 3.9) PROCESS OCCURRENCES FOR MULTI-SLOT EVENTS
     // If LLM provided occurrences, generate stable IDs and set top-level dates
-    if (parsedEvent.flypost?.occurrences && Array.isArray(parsedEvent.flypost.occurrences)) {
-      console.log(`📅 Processing ${parsedEvent.flypost.occurrences.length} occurrences`)
+    if (parsedEvent.occurrences && Array.isArray(parsedEvent.occurrences)) {
+      console.log(`📅 Processing ${parsedEvent.occurrences.length} occurrences`)
       
       // Generate stable occurrence IDs
       const canonicalKeyForOcc = computeCanonicalKey(parsedEvent, brokerageId) || 'unknown'
-      for (const occ of parsedEvent.flypost.occurrences) {
+      for (const occ of parsedEvent.occurrences) {
         if (!occ.occurrenceId && occ.startDate && occ.endDate) {
           occ.occurrenceId = generateOccurrenceId(canonicalKeyForOcc, occ.startDate, occ.endDate)
           console.log(`  Generated occurrence ID: ${occ.occurrenceId}`)
@@ -444,7 +503,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
       
       // Set top-level startDate/endDate to next upcoming occurrence
-      const selectedOcc = selectUpcomingOccurrence(parsedEvent.flypost.occurrences)
+      const selectedOcc = selectUpcomingOccurrence(parsedEvent.occurrences)
       if (selectedOcc) {
         parsedEvent.startDate = selectedOcc.startDate
         parsedEvent.endDate = selectedOcc.endDate
@@ -1052,11 +1111,11 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
     let matchedOccurrenceId = null
     let eventStart, eventEnd
     
-    if (matchedEvent.flypost?.occurrences && matchedEvent.flypost.occurrences.length > 0) {
-      console.log(`📅 Event has ${matchedEvent.flypost.occurrences.length} occurrences - checking for active window`)
+    if (matchedEvent.occurrences && matchedEvent.occurrences.length > 0) {
+      console.log(`📅 Event has ${matchedEvent.occurrences.length} occurrences - checking for active window`)
       
       // Find any occurrence that is currently active
-      const activeOccurrences = matchedEvent.flypost.occurrences.filter(occ => {
+      const activeOccurrences = matchedEvent.occurrences.filter(occ => {
         try {
           const occStart = new Date(occ.startDate)
           const occEnd = new Date(occ.endDate)
@@ -1077,7 +1136,7 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
         console.log(`⏰ Check-in rejected: No active occurrence windows for event ${targetEventId}`)
         
         // Find next upcoming occurrence for helpful error message
-        const upcomingOccurrences = matchedEvent.flypost.occurrences
+        const upcomingOccurrences = matchedEvent.occurrences
           .filter(occ => {
             try {
               const occStart = new Date(occ.startDate)
@@ -1096,7 +1155,7 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
           message: nextOcc 
             ? `This event is not currently active. Next occurrence starts at ${nextOcc.startDate}.`
             : 'This event has no active or upcoming occurrences.',
-          occurrences: matchedEvent.flypost.occurrences.map(occ => ({
+          occurrences: matchedEvent.occurrences.map(occ => ({
             startDate: occ.startDate,
             endDate: occ.endDate,
             label: occ.label
