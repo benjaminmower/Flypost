@@ -32,22 +32,22 @@ const testEvent = {
     crawlable: true,
     queryable: true,
     submissionTimestamp: now.toISOString(),
-    timezone: 'America/Los_Angeles',
-    occurrences: [
-      {
-        occurrenceId: 'occ_test_1',
-        startDate: future1Start.toISOString(),
-        endDate: future1End.toISOString(),
-        label: 'Saturday Morning'
-      },
-      {
-        occurrenceId: 'occ_test_2',
-        startDate: future2Start.toISOString(),
-        endDate: future2End.toISOString(),
-        label: 'Sunday Afternoon'
-      }
-    ]
+    timezone: 'America/Los_Angeles'
   },
+  occurrences: [
+    {
+      occurrenceId: 'occ_test_1',
+      startDate: future1Start.toISOString(),
+      endDate: future1End.toISOString(),
+      label: 'Saturday Morning'
+    },
+    {
+      occurrenceId: 'occ_test_2',
+      startDate: future2Start.toISOString(),
+      endDate: future2End.toISOString(),
+      label: 'Sunday Afternoon'
+    }
+  ],
   name: 'Multi-Slot Open House Test',
   description: 'Test event for multi-slot presence check-in',
   startDate: future1Start.toISOString(),
@@ -116,16 +116,16 @@ const activeEvent = {
   ...testEvent,
   flypost: {
     ...testEvent.flypost,
-    eventId: 'evt_test_active',
-    occurrences: [
-      {
-        occurrenceId: 'occ_active',
-        startDate: activeStart.toISOString(),
-        endDate: activeEnd.toISOString(),
-        label: 'Currently Active'
-      }
-    ]
+    eventId: 'evt_test_active'
   },
+  occurrences: [
+    {
+      occurrenceId: 'occ_active',
+      startDate: activeStart.toISOString(),
+      endDate: activeEnd.toISOString(),
+      label: 'Currently Active'
+    }
+  ],
   startDate: activeStart.toISOString(),
   endDate: activeEnd.toISOString()
 }
@@ -177,13 +177,12 @@ const simpleEvent = {
   ...testEvent,
   flypost: {
     ...testEvent.flypost,
-    eventId: 'evt_test_simple',
-    occurrences: undefined
+    eventId: 'evt_test_simple'
   },
   startDate: activeStart.toISOString(),
   endDate: activeEnd.toISOString()
 }
-delete simpleEvent.flypost.occurrences
+delete simpleEvent.occurrences
 
 await storeEvent(simpleEvent)
 
