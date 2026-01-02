@@ -174,8 +174,27 @@ async function callLLM(model, messages, maxTokens = 1200) {
 /**
  * Determine if an open-house event should trigger fallback to gpt-4o
  * 
+ * This function validates open-house specific requirements that may be
+ * missing from gpt-4o-mini output, triggering a fallback to the stronger model.
+ * 
  * @param {object} parsedEvent - The parsed event object to validate
- * @returns {boolean} - True if fallback is needed, false otherwise
+ * @param {object} parsedEvent.flypost - Flypost metadata
+ * @param {string} parsedEvent.flypost.category - Event category (must be "open-houses" for validation)
+ * @param {string} [parsedEvent.startDate] - Top-level start date (ISO 8601)
+ * @param {string} [parsedEvent.endDate] - Top-level end date (ISO 8601)
+ * @param {Array} [parsedEvent.occurrences] - Array of occurrence objects for multi-slot events
+ * @param {string} parsedEvent.occurrences[].startDate - Start date for this occurrence
+ * @param {string} parsedEvent.occurrences[].endDate - End date for this occurrence
+ * 
+ * @returns {boolean} - True if fallback to gpt-4o is needed, false otherwise
+ * 
+ * Returns true when:
+ * - (A) No endDate and no occurrences array
+ * - (B) Any occurrence missing startDate or endDate
+ * - (C) Root startDate missing when occurrences exist
+ * - (D) Root endDate missing when occurrences exist
+ * 
+ * Returns false for non-open-house categories.
  */
 export function shouldFallbackOpenHouse(parsedEvent) {
   // Only applies to open-houses category
@@ -345,6 +364,10 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
   }
 
   // Auto-populate top-level dates from occurrences for open-houses if needed
+  // This normalization prevents downstream 400 errors when the model provides
+  // valid occurrences but forgets to set root startDate/endDate.
+  // Kept inline here rather than extracted to maintain clarity of the
+  // post-parse normalization flow.
   if (parsedEvent.flypost?.category === 'open-houses' && 
       Array.isArray(parsedEvent.occurrences) && 
       parsedEvent.occurrences.length > 0) {
