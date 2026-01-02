@@ -1,8 +1,10 @@
-/* v12
+/* v13
  * Flypost v4 - Minimal Backend Server (tenancy, brokerageId added after validation)
  * Endpoints: /health, POST /api/parse-and-publish, GET /v1/events/near
  * - Multi-tenant via brokerageId
  * - brokerageId comes from x-flypost-brokerage-id header (proxy) or body/query fallback
+ * - Timezone-aware timestamp handling for open-houses
+ * - Multi-slot open houses via occurrences[]
  */
 
 import express from 'express'
@@ -22,6 +24,13 @@ import { enrichEventMetadata, normalizeEventDates } from './utils/eventEnrichmen
 import { toDiscoveryEventsV1, toDiscoveryEventV1 } from './utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
 import { geocodeAddress } from './geocode.js'
+import { inferTimezoneFromCoordinates, hasExplicitTimezone } from './utils/timezone.js'
+import { 
+  normalizeOpenHouseTimestamps, 
+  generateOccurrenceId, 
+  selectUpcomingOccurrence,
+  validateOpenHouseEndDate
+} from './utils/timeNormalization.js'
 
 dotenv.config()
 
@@ -367,6 +376,80 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
     } else {
       console.log(`✅ Event has geo coordinates: ${parsedEvent.location.geo.latitude}, ${parsedEvent.location.geo.longitude}`)
+    }
+
+    // 3.75) TIMEZONE INFERENCE & TIMESTAMP NORMALIZATION
+    // Infer timezone from geo coordinates and store on event
+    const latitude = parsedEvent.location.geo.latitude
+    const longitude = parsedEvent.location.geo.longitude
+    const inferredTimezone = inferTimezoneFromCoordinates(latitude, longitude)
+    
+    if (inferredTimezone) {
+      // Store timezone on event
+      parsedEvent.flypost = parsedEvent.flypost || {}
+      parsedEvent.flypost.timezone = inferredTimezone
+      console.log(`🌍 Inferred timezone: ${inferredTimezone}`)
+    } else {
+      console.warn(`⚠️  Could not infer timezone for coordinates: ${latitude}, ${longitude}`)
+    }
+
+    // Check if raw input has explicit timezone markers
+    const hasExplicitTz = hasExplicitTimezone(naturalLanguageInput)
+    
+    // For open-houses category, apply timestamp normalization rule
+    if (parsedEvent.flypost?.category === 'open-houses') {
+      if (!inferredTimezone && !hasExplicitTz) {
+        // Cannot infer timezone and no explicit timezone in input
+        // Check if timestamps already have explicit timezone info
+        const timestampsHaveTz = (parsedEvent.startDate && /[Z]|[+-]\d{2}:\d{2}$/.test(parsedEvent.startDate)) ||
+                                  (parsedEvent.endDate && /[Z]|[+-]\d{2}:\d{2}$/.test(parsedEvent.endDate))
+        
+        if (!timestampsHaveTz) {
+          console.error(`❌ Cannot determine timezone for open house: no inferred timezone and no explicit timezone in input or timestamps`)
+          return res.status(400).json({
+            success: false,
+            error: 'Cannot determine timezone for this open house',
+            hint: 'Either include timezone information in your input (e.g., "2pm PT") or ensure the address can be geocoded to infer timezone'
+          })
+        }
+      } else if (inferredTimezone) {
+        // Apply timestamp normalization for open-houses
+        normalizeOpenHouseTimestamps(parsedEvent, hasExplicitTz, inferredTimezone)
+      }
+    }
+
+    // 3.8) VALIDATE ENDDDATE FOR OPEN-HOUSES
+    // Open houses require endDate for presence gating
+    const endDateValidation = validateOpenHouseEndDate(parsedEvent)
+    if (!endDateValidation.valid) {
+      console.error(`❌ Open house validation failed: ${endDateValidation.error}`)
+      return res.status(400).json({
+        success: false,
+        error: endDateValidation.error
+      })
+    }
+
+    // 3.9) PROCESS OCCURRENCES FOR MULTI-SLOT EVENTS
+    // If LLM provided occurrences, generate stable IDs and set top-level dates
+    if (parsedEvent.flypost?.occurrences && Array.isArray(parsedEvent.flypost.occurrences)) {
+      console.log(`📅 Processing ${parsedEvent.flypost.occurrences.length} occurrences`)
+      
+      // Generate stable occurrence IDs
+      const canonicalKeyForOcc = computeCanonicalKey(parsedEvent, brokerageId) || 'unknown'
+      for (const occ of parsedEvent.flypost.occurrences) {
+        if (!occ.occurrenceId && occ.startDate && occ.endDate) {
+          occ.occurrenceId = generateOccurrenceId(canonicalKeyForOcc, occ.startDate, occ.endDate)
+          console.log(`  Generated occurrence ID: ${occ.occurrenceId}`)
+        }
+      }
+      
+      // Set top-level startDate/endDate to next upcoming occurrence
+      const selectedOcc = selectUpcomingOccurrence(parsedEvent.flypost.occurrences)
+      if (selectedOcc) {
+        parsedEvent.startDate = selectedOcc.startDate
+        parsedEvent.endDate = selectedOcc.endDate
+        console.log(`  Set top-level dates to ${selectedOcc.occurrenceId}: ${selectedOcc.startDate} - ${selectedOcc.endDate}`)
+      }
     }
 
     // 4) Check for existing event by identity to determine if update
@@ -965,71 +1048,140 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
     // Use server time (not client-provided timestamp) for gate checks
     const now = new Date()
     
-    // Check if event has startDate
-    if (!matchedEvent.startDate) {
-      console.error(`❌ Event ${targetEventId} missing startDate (cannot time-gate)`)
-      return res.status(400).json({
-        success: false,
-        error: 'EVENT_NOT_TIME_GATABLE',
-        message: 'This event is missing startDate and cannot be checked into.'
-      })
-    }
-
-    // Check if event has endDate (required for time gating)
-    if (!matchedEvent.endDate) {
-      console.error(`❌ Event ${targetEventId} missing endDate (cannot time-gate)`)
-      return res.status(400).json({
-        success: false,
-        error: 'EVENT_NOT_TIME_GATABLE',
-        message: 'This event is missing endDate and cannot be checked into.'
-      })
-    }
-
-    // Parse event time window
+    // Check for occurrences-based multi-slot events
+    let matchedOccurrenceId = null
     let eventStart, eventEnd
-    try {
-      eventStart = new Date(matchedEvent.startDate)
-      eventEnd = new Date(matchedEvent.endDate)
+    
+    if (matchedEvent.flypost?.occurrences && matchedEvent.flypost.occurrences.length > 0) {
+      console.log(`📅 Event has ${matchedEvent.flypost.occurrences.length} occurrences - checking for active window`)
       
-      if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
-        throw new Error('Invalid date format')
+      // Find any occurrence that is currently active
+      const activeOccurrences = matchedEvent.flypost.occurrences.filter(occ => {
+        try {
+          const occStart = new Date(occ.startDate)
+          const occEnd = new Date(occ.endDate)
+          
+          if (isNaN(occStart.getTime()) || isNaN(occEnd.getTime())) {
+            console.warn(`⚠️  Invalid occurrence dates for ${occ.occurrenceId}`)
+            return false
+          }
+          
+          return now >= occStart && now <= occEnd
+        } catch (error) {
+          console.warn(`⚠️  Error checking occurrence ${occ.occurrenceId}:`, error.message)
+          return false
+        }
+      })
+      
+      if (activeOccurrences.length === 0) {
+        console.log(`⏰ Check-in rejected: No active occurrence windows for event ${targetEventId}`)
+        
+        // Find next upcoming occurrence for helpful error message
+        const upcomingOccurrences = matchedEvent.flypost.occurrences
+          .filter(occ => {
+            try {
+              const occStart = new Date(occ.startDate)
+              return occStart > now
+            } catch {
+              return false
+            }
+          })
+          .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+        
+        const nextOcc = upcomingOccurrences[0]
+        
+        return res.status(400).json({
+          success: false,
+          error: 'EVENT_NOT_ACTIVE',
+          message: nextOcc 
+            ? `This event is not currently active. Next occurrence starts at ${nextOcc.startDate}.`
+            : 'This event has no active or upcoming occurrences.',
+          occurrences: matchedEvent.flypost.occurrences.map(occ => ({
+            startDate: occ.startDate,
+            endDate: occ.endDate,
+            label: occ.label
+          }))
+        })
       }
-    } catch (error) {
-      console.error(`❌ Failed to parse event times for ${targetEventId}:`, error.message)
-      return res.status(500).json({
-        success: false,
-        error: 'Invalid event time data',
-        message: 'Event has malformed time information.'
-      })
-    }
+      
+      // Select the occurrence with earliest endDate if multiple match (edge case)
+      const selectedOcc = activeOccurrences.sort((a, b) => 
+        new Date(a.endDate) - new Date(b.endDate)
+      )[0]
+      
+      matchedOccurrenceId = selectedOcc.occurrenceId
+      eventStart = new Date(selectedOcc.startDate)
+      eventEnd = new Date(selectedOcc.endDate)
+      
+      console.log(`✅ Matched active occurrence: ${matchedOccurrenceId} (${selectedOcc.startDate} - ${selectedOcc.endDate})`)
+      
+    } else {
+      // Fallback to top-level startDate/endDate
+      // Check if event has startDate
+      if (!matchedEvent.startDate) {
+        console.error(`❌ Event ${targetEventId} missing startDate (cannot time-gate)`)
+        return res.status(400).json({
+          success: false,
+          error: 'EVENT_NOT_TIME_GATABLE',
+          message: 'This event is missing startDate and cannot be checked into.'
+        })
+      }
 
-    // Check if current time is within event window
-    if (now < eventStart) {
-      const minutesUntilStart = Math.round((eventStart - now) / 60000)
-      console.log(`⏰ Check-in rejected: Event ${targetEventId} has not started yet (starts in ${minutesUntilStart} minutes)`)
-      return res.status(400).json({
-        success: false,
-        error: 'EVENT_NOT_STARTED',
-        message: 'This event has not started yet.',
-        eventStart: matchedEvent.startDate,
-        eventEnd: matchedEvent.endDate
-      })
-    }
+      // Check if event has endDate (required for time gating)
+      if (!matchedEvent.endDate) {
+        console.error(`❌ Event ${targetEventId} missing endDate (cannot time-gate)`)
+        return res.status(400).json({
+          success: false,
+          error: 'EVENT_NOT_TIME_GATABLE',
+          message: 'This event is missing endDate and cannot be checked into.'
+        })
+      }
 
-    if (now > eventEnd) {
-      const minutesSinceEnd = Math.round((now - eventEnd) / 60000)
-      console.log(`⏰ Check-in rejected: Event ${targetEventId} has already ended (ended ${minutesSinceEnd} minutes ago)`)
-      return res.status(400).json({
-        success: false,
-        error: 'EVENT_ALREADY_ENDED',
-        message: 'This event has already ended.',
-        eventStart: matchedEvent.startDate,
-        eventEnd: matchedEvent.endDate
-      })
-    }
+      // Parse event time window
+      try {
+        eventStart = new Date(matchedEvent.startDate)
+        eventEnd = new Date(matchedEvent.endDate)
+        
+        if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
+          throw new Error('Invalid date format')
+        }
+      } catch (error) {
+        console.error(`❌ Failed to parse event times for ${targetEventId}:`, error.message)
+        return res.status(500).json({
+          success: false,
+          error: 'Invalid event time data',
+          message: 'Event has malformed time information.'
+        })
+      }
 
-    // Event is active - log success
-    console.log(`✅ Time gate passed: Event ${targetEventId} is active (${eventStart.toISOString()} - ${eventEnd.toISOString()})`)
+      // Check if current time is within event window
+      if (now < eventStart) {
+        const minutesUntilStart = Math.round((eventStart - now) / 60000)
+        console.log(`⏰ Check-in rejected: Event ${targetEventId} has not started yet (starts in ${minutesUntilStart} minutes)`)
+        return res.status(400).json({
+          success: false,
+          error: 'EVENT_NOT_STARTED',
+          message: 'This event has not started yet.',
+          eventStart: matchedEvent.startDate,
+          eventEnd: matchedEvent.endDate
+        })
+      }
+
+      if (now > eventEnd) {
+        const minutesSinceEnd = Math.round((now - eventEnd) / 60000)
+        console.log(`⏰ Check-in rejected: Event ${targetEventId} has already ended (ended ${minutesSinceEnd} minutes ago)`)
+        return res.status(400).json({
+          success: false,
+          error: 'EVENT_ALREADY_ENDED',
+          message: 'This event has already ended.',
+          eventStart: matchedEvent.startDate,
+          eventEnd: matchedEvent.endDate
+        })
+      }
+
+      // Event is active - log success
+      console.log(`✅ Time gate passed: Event ${targetEventId} is active (${eventStart.toISOString()} - ${eventEnd.toISOString()})`)
+    }
 
     // STRICT DISTANCE CHECK: Validate proximity to event location
     // Extract event coordinates (handle common field paths)
@@ -1078,7 +1230,7 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
     // Create attendance record
     const { storeAttendance } = await import('./intelligenceStorage.js')
 
-    const attendance = await storeAttendance({
+    const attendanceData = {
       eventId: targetEventId,
       buyerToken,
       checkInTime: timestamp || new Date().toISOString(),
@@ -1088,9 +1240,17 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
         lng: lngNum,
         matchedBy
       }
-    })
+    }
+    
+    // Include occurrenceId if matched to a specific occurrence
+    if (matchedOccurrenceId) {
+      attendanceData.occurrenceId = matchedOccurrenceId
+      attendanceData.presenceProof.occurrenceId = matchedOccurrenceId
+    }
 
-    res.json({
+    const attendance = await storeAttendance(attendanceData)
+
+    const response = {
       success: true,
       attendance: {
         attendanceId: attendance.attendanceId,
@@ -1098,7 +1258,14 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
         checkInTime: attendance.checkInTime,
         matchedBy
       }
-    })
+    }
+    
+    // Include occurrenceId in response if present
+    if (matchedOccurrenceId) {
+      response.attendance.occurrenceId = matchedOccurrenceId
+    }
+
+    res.json(response)
   } catch (error) {
     console.error('❌ Check-in error:', error)
     res.status(500).json({
