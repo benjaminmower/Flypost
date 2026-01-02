@@ -77,10 +77,16 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
 - `flypost.crawlable`: Boolean flag for automated crawling
 - `flypost.queryable`: Boolean flag for API access
 - `flypost.submissionTimestamp`: UTC timestamp of submission
+- `flypost.timezone`: IANA timezone identifier inferred from location (e.g., "America/Los_Angeles"). Used to correctly interpret timestamps for events where the raw input doesn't specify explicit timezone information.
+- `flypost.occurrences`: Array of occurrence objects for multi-slot events (e.g., open houses with multiple time windows). Each occurrence has:
+  - `occurrenceId`: Stable identifier (hash of canonicalKey + startDate + endDate)
+  - `startDate`: Start time in UTC ISO 8601
+  - `endDate`: End time in UTC ISO 8601
+  - `label`: Optional human-readable label (e.g., "Saturday Morning")
 
 ## Optional Fields
 
-- `endDate`: Event end datetime
+- `endDate`: Event end datetime (**Required for `open-houses` category** to enable presence gating)
 - `location.name`: Friendly location name
 - `location.geo`: Latitude/longitude coordinates (**Required for publishing** - events without geo coordinates will be rejected at publish time to prevent false-positive presence matches. If not provided in natural language input, the system will attempt automatic geocoding.)
 - `organizer.@type`: "Person" or "Organization" (defaults to "Person" if not specified)
@@ -110,6 +116,39 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
 - `community-alerts`: Public safety, notifications
 - `happy-hours`: Social gatherings, networking
 - `missing-pets`: Lost pet alerts
+
+## Validation
+
+Events are validated against the JSON Schema at `backend/schemas/flypost-event-v4.schema.json` using AJV validation.
+
+## Timezone Handling
+
+Flypost v4 uses offline timezone inference to ensure accurate timestamp interpretation:
+
+1. **Timezone Inference**: When an event is published, the system infers the IANA timezone from `location.geo` coordinates using an offline library (no network calls, no API costs).
+
+2. **Explicit Override Rule** (for `open-houses` category):
+   - If raw input text contains explicit timezone markers (ISO Z/offset, or named markers like PT, PST, EDT), timestamps are honored as-is.
+   - If raw input text does NOT contain explicit timezone markers, LLM-provided timestamps are reinterpreted as local wall-clock times in the inferred timezone, even if the LLM included 'Z'.
+
+3. **Fallback Policy**: If timezone cannot be inferred and timestamps lack explicit timezone info, the publish request is rejected with a clear error message.
+
+4. **Cache**: Timezone lookups are cached in memory (keyed by lat/lng rounded to 3 decimals) for performance.
+
+## Multi-Slot Events (Occurrences)
+
+Events can have multiple time slots (e.g., an open house on both Saturday and Sunday):
+
+1. **Structure**: Multi-slot events use the `flypost.occurrences[]` array, where each occurrence has:
+   - Stable `occurrenceId` (SHA-1 hash of canonicalKey + startDate + endDate)
+   - UTC `startDate` and `endDate`
+   - Optional descriptive `label`
+
+2. **Top-level Compatibility**: For backward compatibility, top-level `startDate` and `endDate` are set to the next upcoming occurrence (or most recent past occurrence if all are past).
+
+3. **Presence Gating**: The `/v1/presence/check-in` endpoint validates against any active occurrence window and stores the matched `occurrenceId` on the attendance record.
+
+4. **Update Semantics**: When updating an event, the occurrences array is replaced atomically with the new set.
 
 ## Validation
 

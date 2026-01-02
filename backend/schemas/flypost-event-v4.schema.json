@@ -96,6 +96,40 @@
         "priceType": {
           "type": "string",
           "description": "The type of price being listed (e.g., 'LIST_PRICE', 'RENTAL_RATE'). Optional."
+        },
+        "timezone": {
+          "type": "string",
+          "description": "IANA timezone identifier inferred from event location (e.g., 'America/Los_Angeles'). Used for correct timestamp interpretation."
+        },
+        "occurrences": {
+          "type": "array",
+          "description": "For multi-slot events (e.g., open houses with multiple time windows), stores each occurrence with stable identity.",
+          "items": {
+            "type": "object",
+            "required": ["occurrenceId", "startDate", "endDate"],
+            "properties": {
+              "occurrenceId": {
+                "type": "string",
+                "description": "Stable identifier for this occurrence (hash of canonicalKey + startDate + endDate).",
+                "minLength": 1
+              },
+              "startDate": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Start time of this occurrence in UTC ISO 8601 format."
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date-time",
+                "description": "End time of this occurrence in UTC ISO 8601 format."
+              },
+              "label": {
+                "type": "string",
+                "description": "Optional human-readable label for this occurrence (e.g., 'Saturday Morning')."
+              }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": true
