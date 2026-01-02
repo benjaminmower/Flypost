@@ -55,15 +55,18 @@ PARSING RULES:
 
 2. DATE/TIME HANDLING:
    - startDate: REQUIRED. Parse to ISO 8601 (YYYY-MM-DDTHH:MM:SS.000Z)
-   - endDate: Optional for most categories. REQUIRED for open-houses when a time range is present
+   - endDate: REQUIRED for open-houses. Optional for other categories
+   - For open-houses:
+     * If a time range is present (e.g., "2-4pm"), endDate MUST be provided
+     * If multiple time slots exist, use top-level occurrences[] (see section 3)
    - If only date given (no time), default to 09:00:00.000Z
    - If relative dates ("tomorrow", "next Saturday"), calculate from current time
 
 3. MULTI-SLOT OPEN HOUSES:
    - If input describes multiple time slots for an open house (e.g., Saturday 11am-1pm AND Sunday 2pm-4pm),
-     use the TOP-LEVEL occurrences[] array (NOT flypost.occurrences)
+     you MUST use the TOP-LEVEL occurrences[] array (NOT flypost.occurrences)
    - Each occurrence MUST include:
-     * startDate: ISO 8601 timestamp for this slot's start
+     * startDate: ISO 8601 timestamp for this slot's start (REQUIRED)
      * endDate: ISO 8601 timestamp for this slot's end (REQUIRED)
      * label: Short human-readable label (e.g., "Saturday", "Sunday", "Morning", "Afternoon")
    - Example occurrences structure:
@@ -79,9 +82,10 @@ PARSING RULES:
          "label": "Sunday"
        }
      ]
+   - IMPORTANT: When outputting occurrences[], you MUST ALSO set top-level startDate and endDate:
+     * Set top-level startDate to the first occurrence's startDate
+     * Set top-level endDate to the first occurrence's endDate
    - For multi-slot open houses, ALWAYS include occurrences[] with all slots
-   - Set top-level startDate to the first slot's start time
-   - Set top-level endDate to the first slot's end time
 
 4. LOCATION (REQUIRED):
    - location.@type: Always "Place"
@@ -167,6 +171,50 @@ async function callLLM(model, messages, maxTokens = 1200) {
   return completion.choices[0].message.content
 }
 
+/**
+ * Determine if an open-house event should trigger fallback to gpt-4o
+ * 
+ * @param {object} parsedEvent - The parsed event object to validate
+ * @returns {boolean} - True if fallback is needed, false otherwise
+ */
+export function shouldFallbackOpenHouse(parsedEvent) {
+  // Only applies to open-houses category
+  if (parsedEvent.flypost?.category !== 'open-houses') {
+    return false
+  }
+
+  const hasOccurrences = Array.isArray(parsedEvent.occurrences) && parsedEvent.occurrences.length > 0
+  const hasTopLevelEndDate = Boolean(parsedEvent.endDate)
+  const hasTopLevelStartDate = Boolean(parsedEvent.startDate)
+
+  // A) No end boundary at all (neither top-level endDate nor occurrences)
+  if (!hasTopLevelEndDate && !hasOccurrences) {
+    return true
+  }
+
+  // If occurrences exist, validate their structure
+  if (hasOccurrences) {
+    // B) Any occurrence missing startDate or endDate
+    const hasInvalidOccurrence = parsedEvent.occurrences.some(occ => !occ.startDate || !occ.endDate)
+    if (hasInvalidOccurrence) {
+      return true
+    }
+
+    // C) Root startDate missing (required for all events)
+    if (!hasTopLevelStartDate) {
+      return true
+    }
+
+    // D) Root endDate missing when occurrences exist
+    // (Should be set from first occurrence, but if missing, trigger fallback)
+    if (!hasTopLevelEndDate) {
+      return true
+    }
+  }
+
+  return false
+}
+
 // Main parser
 export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
   if (!openai) initializeOpenAI()
@@ -212,27 +260,10 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
       if (!parsedMini['@context']) missingFields.push('@context')
       if (!parsedMini['@type']) missingFields.push('@type')
       
-      // Validate open-houses specific requirements
-      if (parsedMini.flypost?.category === 'open-houses') {
-        const hasOccurrences = parsedMini.occurrences && Array.isArray(parsedMini.occurrences) && parsedMini.occurrences.length > 0
-        const hasTopLevelEndDate = parsedMini.endDate
-        
-        // Check if endDate is completely missing (neither in occurrences nor top-level)
-        if (!hasTopLevelEndDate && !hasOccurrences) {
-          console.log(`⚠️ Mini model: open-houses missing both endDate and occurrences[]`)
-          needsFallback = true
-        }
-        
-        // If occurrences exist, validate each has both startDate and endDate
-        if (hasOccurrences && parsedMini.occurrences.some((occ, i) => {
-          if (!occ.startDate || !occ.endDate) {
-            console.log(`⚠️ Mini model: occurrence[${i}] missing startDate or endDate`)
-            return true
-          }
-          return false
-        })) {
-          needsFallback = true
-        }
+      // Validate open-houses specific requirements using the helper
+      if (shouldFallbackOpenHouse(parsedMini)) {
+        console.log(`⚠️ Mini model: open-houses validation failed`)
+        needsFallback = true
       }
       
       if (missingFields.length > 0) {
@@ -310,6 +341,26 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
         delete parsedEvent.organizer[field]
         console.log(`🧹 Sanitized organizer.${field}: removed invalid value (type: ${typeof value})`)
       }
+    }
+  }
+
+  // Auto-populate top-level dates from occurrences for open-houses if needed
+  if (parsedEvent.flypost?.category === 'open-houses' && 
+      Array.isArray(parsedEvent.occurrences) && 
+      parsedEvent.occurrences.length > 0) {
+    
+    const firstOccurrence = parsedEvent.occurrences[0]
+    
+    // Set startDate from first occurrence if missing
+    if (!parsedEvent.startDate && firstOccurrence.startDate) {
+      parsedEvent.startDate = firstOccurrence.startDate
+      console.log(`📅 Auto-populated startDate from first occurrence: ${parsedEvent.startDate}`)
+    }
+    
+    // Set endDate from first occurrence if missing
+    if (!parsedEvent.endDate && firstOccurrence.endDate) {
+      parsedEvent.endDate = firstOccurrence.endDate
+      console.log(`📅 Auto-populated endDate from first occurrence: ${parsedEvent.endDate}`)
     }
   }
 
