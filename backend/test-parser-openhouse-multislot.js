@@ -7,6 +7,10 @@
  * - Ensures fallback logic triggers when required fields are missing
  * 
  * This test does NOT require OPENAI_API_KEY - it tests validation logic only.
+ * 
+ * Note: The validation logic is intentionally duplicated from llmParser.js
+ * to ensure we're testing the exact behavior. This provides test independence
+ * and documents the expected validation behavior.
  */
 
 console.log('🧪 Testing LLM Parser Open House Multi-Slot Support\n')

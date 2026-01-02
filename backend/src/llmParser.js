@@ -224,15 +224,14 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
         }
         
         // If occurrences exist, validate each has both startDate and endDate
-        if (hasOccurrences) {
-          for (let i = 0; i < parsedMini.occurrences.length; i++) {
-            const occ = parsedMini.occurrences[i]
-            if (!occ.startDate || !occ.endDate) {
-              console.log(`⚠️ Mini model: occurrence[${i}] missing startDate or endDate`)
-              needsFallback = true
-              break
-            }
+        if (hasOccurrences && parsedMini.occurrences.some((occ, i) => {
+          if (!occ.startDate || !occ.endDate) {
+            console.log(`⚠️ Mini model: occurrence[${i}] missing startDate or endDate`)
+            return true
           }
+          return false
+        })) {
+          needsFallback = true
         }
       }
       
