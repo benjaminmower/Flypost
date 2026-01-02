@@ -13,7 +13,7 @@ import { clearEvents } from './src/storage.js'
 // Use built-in fetch (Node 18+)
 const fetchImpl = globalThis.fetch || (await import('node-fetch').then(m => m.default))
 
-const BASE_URL = 'http://localhost:3001'
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3001'
 
 // Helper to wait for server
 function delay(ms) {

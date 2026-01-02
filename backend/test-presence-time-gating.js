@@ -13,7 +13,7 @@ import { clearEvents } from './src/storage.js'
 // Use built-in fetch (Node 18+)
 const fetchImpl = globalThis.fetch || (await import('node-fetch').then(m => m.default))
 
-const BASE_URL = 'http://localhost:8080'
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:8080'
 
 // Helper to wait
 function delay(ms) {
@@ -422,14 +422,16 @@ async function runAllTests() {
   try {
     const healthCheck = await fetchImpl(`${BASE_URL}/health`)
     if (!healthCheck.ok) {
-      console.error('❌ Server is not responding. Make sure it is running on port 8080')
+      console.error('❌ Server is not responding. Make sure it is running')
       console.error('   Run: cd backend && npm start')
+      console.error('   Or with specific port: cd backend && PORT=8080 npm start')
       process.exit(1)
     }
     console.log('✅ Server is ready\n')
   } catch (error) {
-    console.error('❌ Cannot connect to server. Make sure it is running on port 8080')
+    console.error('❌ Cannot connect to server. Make sure it is running')
     console.error('   Run: cd backend && npm start')
+    console.error('   Or with specific port: cd backend && PORT=8080 npm start')
     process.exit(1)
   }
 
