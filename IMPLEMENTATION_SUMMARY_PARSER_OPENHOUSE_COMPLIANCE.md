@@ -3,84 +3,171 @@
 ## Overview
 This PR updates the LLM parser to comply with the backend requirements introduced in PR #74, ensuring proper handling of open-house events with time ranges and multi-slot occurrences.
 
+## Updates (Following Review Feedback)
+
+### Comment #3706406753 Addressed
+1. ✅ **Refactored validation into exported helper** - `shouldFallbackOpenHouse()` 
+2. ✅ **Tightened prompt** - Made endDate REQUIRED for open-houses
+3. ✅ **Fixed test** - Now imports real code, no duplication
+4. ✅ **Auto-population** - Top-level dates populated from first occurrence
+
 ## Problem Statement
 After PR #74, the backend requires:
 1. Open-house events with time ranges MUST include an `endDate` field
 2. Multi-slot open houses MUST use top-level `occurrences[]` array (not `flypost.occurrences`)
 3. Each occurrence MUST include both `startDate` and `endDate`
+4. Multi-slot events MUST have root `startDate` and `endDate` populated
 
 The LLM parser was not instructing the model about these requirements, causing valid open house inputs to be rejected with 400 errors like:
 - "Open houses require an end time. Please include an end time (e.g., "11am-1pm")."
 
 ## Solution
 
-### 1. Enhanced System Prompt (`backend/src/llmParser.js`)
+### 1. Exported Validation Helper (`backend/src/llmParser.js`)
 
-#### Added Section 3: MULTI-SLOT OPEN HOUSES
-New comprehensive instructions for the LLM model covering:
-- When to use top-level `occurrences[]` array
-- Required fields for each occurrence: `startDate`, `endDate`, `label`
-- Example structure showing proper formatting
-- Instructions to set top-level dates from first occurrence
-- Emphasis on short, descriptive labels ("Saturday", "Sunday")
-
-#### Updated Section 2: DATE/TIME HANDLING
-Changed from:
-```
-- endDate: Optional. Include if mentioned, otherwise omit
-```
-
-To:
-```
-- endDate: Optional for most categories. REQUIRED for open-houses when a time range is present
-```
-
-### 2. Post-Parse Validation Logic
-
-Added open-house specific validation in `parseEventWithLLM()` function (lines 213-235):
+Created `shouldFallbackOpenHouse(parsedEvent)` as an exported function that:
+- Only applies when `parsedEvent.flypost?.category === 'open-houses'`
+- Returns `false` for non-open-house categories
+- Validates comprehensive open-house requirements:
 
 ```javascript
-// Validate open-houses specific requirements
-if (parsedMini.flypost?.category === 'open-houses') {
-  const hasOccurrences = parsedMini.occurrences && Array.isArray(parsedMini.occurrences) && parsedMini.occurrences.length > 0
-  const hasTopLevelEndDate = parsedMini.endDate
-  
-  // Check if endDate is completely missing (neither in occurrences nor top-level)
+export function shouldFallbackOpenHouse(parsedEvent) {
+  if (parsedEvent.flypost?.category !== 'open-houses') {
+    return false
+  }
+
+  const hasOccurrences = Array.isArray(parsedEvent.occurrences) && parsedEvent.occurrences.length > 0
+  const hasTopLevelEndDate = Boolean(parsedEvent.endDate)
+  const hasTopLevelStartDate = Boolean(parsedEvent.startDate)
+
+  // A) No end boundary at all
   if (!hasTopLevelEndDate && !hasOccurrences) {
-    console.log(`⚠️ Mini model: open-houses missing both endDate and occurrences[]`)
-    needsFallback = true
+    return true
+  }
+
+  // If occurrences exist, validate structure
+  if (hasOccurrences) {
+    // B) Any occurrence missing startDate or endDate
+    if (parsedEvent.occurrences.some(occ => !occ.startDate || !occ.endDate)) {
+      return true
+    }
+    
+    // C) Root startDate missing
+    if (!hasTopLevelStartDate) {
+      return true
+    }
+    
+    // D) Root endDate missing
+    if (!hasTopLevelEndDate) {
+      return true
+    }
+  }
+
+  return false
+}
+```
+
+### 2. Enhanced System Prompt (`backend/src/llmParser.js`)
+
+#### Updated Section 2: DATE/TIME HANDLING
+Now explicitly states:
+```
+- endDate: REQUIRED for open-houses. Optional for other categories
+- For open-houses:
+  * If a time range is present (e.g., "2-4pm"), endDate MUST be provided
+  * If multiple time slots exist, use top-level occurrences[] (see section 3)
+```
+
+#### Enhanced Section 3: MULTI-SLOT OPEN HOUSES
+Strengthened with MUST language:
+- "you MUST use the TOP-LEVEL occurrences[] array"
+- "Each occurrence MUST include: startDate (REQUIRED), endDate (REQUIRED)"
+- "IMPORTANT: When outputting occurrences[], you MUST ALSO set top-level startDate and endDate"
+- Clear instruction to set root dates from first occurrence
+
+### 3. Auto-Population Logic
+
+Added normalization after parsing to auto-populate missing dates from occurrences:
+
+```javascript
+// Auto-populate top-level dates from occurrences for open-houses if needed
+if (parsedEvent.flypost?.category === 'open-houses' && 
+    Array.isArray(parsedEvent.occurrences) && 
+    parsedEvent.occurrences.length > 0) {
+  
+  const firstOccurrence = parsedEvent.occurrences[0]
+  
+  if (!parsedEvent.startDate && firstOccurrence.startDate) {
+    parsedEvent.startDate = firstOccurrence.startDate
+    console.log(`📅 Auto-populated startDate from first occurrence`)
   }
   
-  // If occurrences exist, validate each has both startDate and endDate
-  if (hasOccurrences) {
-    for (let i = 0; i < parsedMini.occurrences.length; i++) {
-      const occ = parsedMini.occurrences[i]
-      if (!occ.startDate || !occ.endDate) {
-        console.log(`⚠️ Mini model: occurrence[${i}] missing startDate or endDate`)
-        needsFallback = true
-        break
-      }
-    }
+  if (!parsedEvent.endDate && firstOccurrence.endDate) {
+    parsedEvent.endDate = firstOccurrence.endDate
+    console.log(`📅 Auto-populated endDate from first occurrence`)
   }
 }
 ```
 
-This validation logic:
-- Detects when open-house events are missing required `endDate` field
-- Validates that multi-slot events have proper `occurrences[]` structure
-- Validates that each occurrence has both `startDate` and `endDate`
-- Triggers automatic fallback to `gpt-4o` when validation fails
+This prevents downstream 400 errors when the model forgets top-level dates but provides valid occurrences.
 
-### 3. Comprehensive Test Suite
+### 4. Updated Test Suite
 
-Created `backend/test-parser-openhouse-multislot.js` with 8 test cases:
+**Removed code duplication** - `backend/test-parser-openhouse-multislot.js` now:
+- Imports `shouldFallbackOpenHouse` directly from `llmParser.js`
+- No duplicated validation logic
+- Tests the real production code
 
-1. ✅ Single-slot open house missing endDate triggers fallback
-2. ✅ Single-slot open house with endDate does not trigger fallback
-3. ✅ Multi-slot with valid occurrences[] does not trigger fallback
-4. ✅ Multi-slot with occurrence missing endDate triggers fallback
-5. ✅ Multi-slot with occurrence missing startDate triggers fallback
-6. ✅ Non-open-house without endDate does not trigger fallback
+**Enhanced test coverage** - Added Test 6a:
+- Multi-slot with occurrences but missing root `startDate`
+- Validates new validation rule (C)
+
+**Test structure:**
+```javascript
+import { shouldFallbackOpenHouse } from './src/llmParser.js'
+
+// Test fixtures
+const testEvent = { ... }
+
+// Direct call to production function
+const result = shouldFallbackOpenHouse(testEvent)
+console.assert(result === true, 'Expected fallback')
+```
+
+All 9 tests pass without requiring OPENAI_API_KEY.
+
+## Files Modified
+
+### Modified
+- `backend/src/llmParser.js`
+  - Extracted `shouldFallbackOpenHouse()` as exported function
+  - Enhanced validation with 4 comprehensive checks (A-D)
+  - Tightened system prompt (REQUIRED language for open-houses)
+  - Added auto-population of dates from occurrences
+  - Updated usage in parseEventWithLLM to call helper
+
+### Modified
+- `backend/test-parser-openhouse-multislot.js`
+  - Removed duplicated validation function (51 lines removed)
+  - Imports `shouldFallbackOpenHouse` from llmParser.js
+  - Added Test 6a for missing root startDate
+  - All assertions now test real production code
+
+## Test Results
+
+### New/Updated Tests (All Passing ✅)
+```
+✅ test-parser-openhouse-multislot.js (9/9 tests passed)
+  1. Single-slot missing endDate triggers fallback
+  2. Single-slot with endDate does not trigger fallback
+  3. Multi-slot with valid occurrences does not trigger fallback
+  4. Multi-slot with occurrence missing endDate triggers fallback
+  5. Multi-slot with occurrence missing startDate triggers fallback
+  6. Non-open-house without endDate does not trigger fallback
+  6a. Multi-slot missing root startDate triggers fallback (NEW)
+  7. Occurrences structure validation
+  8. Occurrences at root level verification
+```
 7. ✅ Verify occurrences[] structure matches expected schema
 8. ✅ Verify occurrences[] is at root level (not flypost.occurrences)
 
