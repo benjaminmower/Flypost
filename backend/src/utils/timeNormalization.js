@@ -6,7 +6,7 @@
  */
 
 import crypto from 'crypto'
-import { zonedTimeToUtc, utcToZonedTime, format } from 'date-fns-tz'
+import { toZonedTime, fromZonedTime } from 'date-fns-tz'
 import { parseISO } from 'date-fns'
 
 /**
@@ -44,8 +44,8 @@ export function reinterpretTimestampInTimezone(isoTimestamp, targetTimezone) {
     const wallClockDate = parseISO(wallClockStr)
     
     // Interpret this wall-clock time as being in the target timezone
-    // and convert to UTC
-    const utcDate = zonedTimeToUtc(wallClockDate, targetTimezone)
+    // and convert to UTC using fromZonedTime (which treats input as local to timezone)
+    const utcDate = fromZonedTime(wallClockDate, targetTimezone)
     
     // Return as ISO string
     return utcDate.toISOString()
