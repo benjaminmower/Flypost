@@ -1,4 +1,4 @@
-/* v3
+/* v4
  * Flypost v4 - Enhanced Always-On Parser with Better Field Extraction
  *
  * ENHANCEMENTS:
@@ -7,11 +7,13 @@
  * - Better context handling (location, timezone, current date)
  * - Comprehensive field normalization and validation
  * - Robust error handling with descriptive messages
+ * - Open-house specific requirements (endDate + multi-slot occurrences support)
  * 
  * FEATURES:
  * - Primary model: gpt-4o-mini (cheap + fast)
  * - Automatic fallback: gpt-4o (only for malformed JSON or missing required fields)
  * - Production-ready: no dev mode switching, no config toggles
+ * - Open-house validation: ensures endDate presence and proper occurrences structure
  */
 
 import OpenAI from 'openai'
