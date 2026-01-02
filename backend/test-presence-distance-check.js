@@ -23,6 +23,10 @@ function delay(ms) {
 
 // Helper to create a test event with specific coordinates
 async function createTestEventWithCoordinates(name, lat, lng, brokerageId = 'test-brokerage') {
+  // Create active event (started 30 min ago, ends in 1.5 hours)
+  const startDate = new Date(Date.now() - 1800000).toISOString()
+  const endDate = new Date(Date.now() + 5400000).toISOString()
+  
   const response = await fetchImpl(`${BASE_URL}/api/test-add-event`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -34,7 +38,8 @@ async function createTestEventWithCoordinates(name, lat, lng, brokerageId = 'tes
       city: 'Los Angeles',
       state: 'CA',
       postalCode: '90001',
-      startDate: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+      startDate,
+      endDate,
       latitude: lat,
       longitude: lng
     })
