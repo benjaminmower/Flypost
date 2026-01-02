@@ -82,6 +82,9 @@ export function inferTimezoneFromCoordinates(latitude, longitude) {
  * - ISO timezone (Z, +HH:MM, -HH:MM)
  * - Named timezone markers (PT, PST, PDT, ET, EST, EDT, CT, CST, CDT, MT, MST, MDT, etc.)
  * 
+ * This function is strict to avoid false positives from addresses (St, Ave, Rd),
+ * common words (at, in, on), or URLs.
+ * 
  * @param {string} text - Raw input text to analyze
  * @returns {boolean} True if explicit timezone markers are present
  */
@@ -94,13 +97,25 @@ export function hasExplicitTimezone(text) {
   // Look for patterns like: "2025-01-15T10:00:00Z" or "2025-01-15T10:00:00+08:00" or "+0800"
   const isoTimezonePattern = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}([.]\d{1,9})?([Z]|[+-]\d{2}:?\d{2})/i
   if (isoTimezonePattern.test(text)) {
+    console.log('✅ Explicit timezone detected: ISO timestamp with Z or offset')
     return true
   }
 
   // Check for named timezone abbreviations (common US/international markers)
-  // Word boundary ensures we match whole tokens (e.g., not "PT" in "ACCEPT")
-  const namedTimezonePattern = /\b(PT|PST|PDT|ET|EST|EDT|CT|CST|CDT|MT|MST|MDT|AT|AST|ADT|HST|AKST|AKDT|GMT|UTC|BST|CET|CEST|JST|IST)\b/i
+  // EXCLUDED: AT (common word "at"), IST (ambiguous), ST (street abbreviation)
+  // INCLUDED: Only unambiguous timezone markers
+  // Must be preceded by time-like context (digit or time word) to avoid false positives
+  const namedTimezonePattern = /\b(\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)?\s+)(PT|PST|PDT|ET|EST|EDT|CT|CST|CDT|MT|MST|MDT|HST|AKST|AKDT|GMT|UTC)\b/i
   if (namedTimezonePattern.test(text)) {
+    const match = text.match(namedTimezonePattern)
+    console.log(`✅ Explicit timezone detected: Named timezone "${match[2]}"`)
+    return true
+  }
+
+  // Also check for standalone UTC/GMT which are unambiguous
+  const standaloneUTCPattern = /\b(UTC|GMT)\b/
+  if (standaloneUTCPattern.test(text)) {
+    console.log('✅ Explicit timezone detected: UTC/GMT')
     return true
   }
 

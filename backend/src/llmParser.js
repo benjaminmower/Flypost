@@ -1,4 +1,4 @@
-/* v3
+/* v4
  * Flypost v4 - Enhanced Always-On Parser with Better Field Extraction
  *
  * ENHANCEMENTS:
@@ -7,11 +7,13 @@
  * - Better context handling (location, timezone, current date)
  * - Comprehensive field normalization and validation
  * - Robust error handling with descriptive messages
+ * - Open-house specific requirements (endDate + multi-slot occurrences support)
  * 
  * FEATURES:
  * - Primary model: gpt-4o-mini (cheap + fast)
  * - Automatic fallback: gpt-4o (only for malformed JSON or missing required fields)
  * - Production-ready: no dev mode switching, no config toggles
+ * - Open-house validation: ensures endDate presence and proper occurrences structure
  */
 
 import OpenAI from 'openai'
@@ -53,11 +55,39 @@ PARSING RULES:
 
 2. DATE/TIME HANDLING:
    - startDate: REQUIRED. Parse to ISO 8601 (YYYY-MM-DDTHH:MM:SS.000Z)
-   - endDate: Optional. Include if mentioned, otherwise omit
+   - endDate: REQUIRED for open-houses. Optional for other categories
+   - For open-houses:
+     * If a time range is present (e.g., "2-4pm"), endDate MUST be provided
+     * If multiple time slots exist, use top-level occurrences[] (see section 3)
    - If only date given (no time), default to 09:00:00.000Z
    - If relative dates ("tomorrow", "next Saturday"), calculate from current time
 
-3. LOCATION (REQUIRED):
+3. MULTI-SLOT OPEN HOUSES:
+   - If input describes multiple time slots for an open house (e.g., Saturday 11am-1pm AND Sunday 2pm-4pm),
+     you MUST use the TOP-LEVEL occurrences[] array (NOT flypost.occurrences)
+   - Each occurrence MUST include:
+     * startDate: ISO 8601 timestamp for this slot's start (REQUIRED)
+     * endDate: ISO 8601 timestamp for this slot's end (REQUIRED)
+     * label: Short human-readable label (e.g., "Saturday", "Sunday", "Morning", "Afternoon")
+   - Example occurrences structure:
+     "occurrences": [
+       {
+         "startDate": "2026-01-04T11:00:00.000Z",
+         "endDate": "2026-01-04T13:00:00.000Z",
+         "label": "Saturday"
+       },
+       {
+         "startDate": "2026-01-05T14:30:00.000Z",
+         "endDate": "2026-01-05T17:30:00.000Z",
+         "label": "Sunday"
+       }
+     ]
+   - IMPORTANT: When outputting occurrences[], you MUST ALSO set top-level startDate and endDate:
+     * Set top-level startDate to the first occurrence's startDate
+     * Set top-level endDate to the first occurrence's endDate
+   - For multi-slot open houses, ALWAYS include occurrences[] with all slots
+
+4. LOCATION (REQUIRED):
    - location.@type: Always "Place"
    - location.name: Extract if mentioned, otherwise use streetAddress
    - location.address.@type: Always "PostalAddress"
@@ -68,7 +98,7 @@ PARSING RULES:
    - location.address.addressCountry: Country (default "US" if context suggests USA)
    - location.geo: Include ONLY if latitude/longitude explicitly provided
 
-4. ORGANIZER (REQUIRED):
+5. ORGANIZER (REQUIRED):
    - organizer.@type: "Person" for individuals, "Organization" for companies/groups
    - organizer.name: Extract if mentioned, use "Event Organizer" as fallback
    - organizer.email: Extract if valid email found
@@ -76,7 +106,7 @@ PARSING RULES:
    - organizer.licenseId: Real estate license number if mentioned
    - organizer.mlsNumber: MLS listing number if mentioned
 
-5. PRICE INFORMATION (OPTIONAL):
+6. PRICE INFORMATION (OPTIONAL):
    - If a price is mentioned in the text (e.g., list price, rental rate, cost):
      * flypost.listPrice: Numeric value only (e.g., 1250000 for $1,250,000)
      * flypost.listPriceCurrency: Currency code (default "USD")
@@ -85,11 +115,11 @@ PARSING RULES:
    - Only include price fields if price information is clearly stated in the text
    - Do NOT invent or estimate prices
 
-6. OPTIONAL FIELDS:
+7. OPTIONAL FIELDS:
    - keywords: Array of relevant tags if you can infer them from content
    - Only include optional fields if you have valid data
 
-7. FLYPOST METADATA:
+8. FLYPOST METADATA:
    - Generate flypost.eventId: "evt_" + random alphanumeric
    - Set flypost.submissionTimestamp to current UTC ISO string
    - Set flypost.realTimeData: true
@@ -141,6 +171,69 @@ async function callLLM(model, messages, maxTokens = 1200) {
   return completion.choices[0].message.content
 }
 
+/**
+ * Determine if an open-house event should trigger fallback to gpt-4o
+ * 
+ * This function validates open-house specific requirements that may be
+ * missing from gpt-4o-mini output, triggering a fallback to the stronger model.
+ * 
+ * @param {object} parsedEvent - The parsed event object to validate
+ * @param {object} parsedEvent.flypost - Flypost metadata
+ * @param {string} parsedEvent.flypost.category - Event category (must be "open-houses" for validation)
+ * @param {string} [parsedEvent.startDate] - Top-level start date (ISO 8601)
+ * @param {string} [parsedEvent.endDate] - Top-level end date (ISO 8601)
+ * @param {Array} [parsedEvent.occurrences] - Array of occurrence objects for multi-slot events
+ * @param {string} parsedEvent.occurrences[].startDate - Start date for this occurrence
+ * @param {string} parsedEvent.occurrences[].endDate - End date for this occurrence
+ * 
+ * @returns {boolean} - True if fallback to gpt-4o is needed, false otherwise
+ * 
+ * Returns true when:
+ * - (A) No endDate and no occurrences array
+ * - (B) Any occurrence missing startDate or endDate
+ * - (C) Root startDate missing when occurrences exist
+ * - (D) Root endDate missing when occurrences exist
+ * 
+ * Returns false for non-open-house categories.
+ */
+export function shouldFallbackOpenHouse(parsedEvent) {
+  // Only applies to open-houses category
+  if (parsedEvent.flypost?.category !== 'open-houses') {
+    return false
+  }
+
+  const hasOccurrences = Array.isArray(parsedEvent.occurrences) && parsedEvent.occurrences.length > 0
+  const hasTopLevelEndDate = Boolean(parsedEvent.endDate)
+  const hasTopLevelStartDate = Boolean(parsedEvent.startDate)
+
+  // A) No end boundary at all (neither top-level endDate nor occurrences)
+  if (!hasTopLevelEndDate && !hasOccurrences) {
+    return true
+  }
+
+  // If occurrences exist, validate their structure
+  if (hasOccurrences) {
+    // B) Any occurrence missing startDate or endDate
+    const hasInvalidOccurrence = parsedEvent.occurrences.some(occ => !occ.startDate || !occ.endDate)
+    if (hasInvalidOccurrence) {
+      return true
+    }
+
+    // C) Root startDate missing (required for all events)
+    if (!hasTopLevelStartDate) {
+      return true
+    }
+
+    // D) Root endDate missing when occurrences exist
+    // (Should be set from first occurrence, but if missing, trigger fallback)
+    if (!hasTopLevelEndDate) {
+      return true
+    }
+  }
+
+  return false
+}
+
 // Main parser
 export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
   if (!openai) initializeOpenAI()
@@ -185,6 +278,12 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
       if (!parsedMini.organizer) missingFields.push('organizer')
       if (!parsedMini['@context']) missingFields.push('@context')
       if (!parsedMini['@type']) missingFields.push('@type')
+      
+      // Validate open-houses specific requirements using the helper
+      if (shouldFallbackOpenHouse(parsedMini)) {
+        console.log(`⚠️ Mini model: open-houses validation failed`)
+        needsFallback = true
+      }
       
       if (missingFields.length > 0) {
         console.log(`⚠️ Mini model missing fields: ${missingFields.join(', ')}`)
@@ -261,6 +360,30 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
         delete parsedEvent.organizer[field]
         console.log(`🧹 Sanitized organizer.${field}: removed invalid value (type: ${typeof value})`)
       }
+    }
+  }
+
+  // Auto-populate top-level dates from occurrences for open-houses if needed
+  // This normalization prevents downstream 400 errors when the model provides
+  // valid occurrences but forgets to set root startDate/endDate.
+  // Kept inline here rather than extracted to maintain clarity of the
+  // post-parse normalization flow.
+  if (parsedEvent.flypost?.category === 'open-houses' && 
+      Array.isArray(parsedEvent.occurrences) && 
+      parsedEvent.occurrences.length > 0) {
+    
+    const firstOccurrence = parsedEvent.occurrences[0]
+    
+    // Set startDate from first occurrence if missing
+    if (!parsedEvent.startDate && firstOccurrence.startDate) {
+      parsedEvent.startDate = firstOccurrence.startDate
+      console.log(`📅 Auto-populated startDate from first occurrence: ${parsedEvent.startDate}`)
+    }
+    
+    // Set endDate from first occurrence if missing
+    if (!parsedEvent.endDate && firstOccurrence.endDate) {
+      parsedEvent.endDate = firstOccurrence.endDate
+      console.log(`📅 Auto-populated endDate from first occurrence: ${parsedEvent.endDate}`)
     }
   }
 
