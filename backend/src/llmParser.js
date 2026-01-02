@@ -53,11 +53,35 @@ PARSING RULES:
 
 2. DATE/TIME HANDLING:
    - startDate: REQUIRED. Parse to ISO 8601 (YYYY-MM-DDTHH:MM:SS.000Z)
-   - endDate: Optional. Include if mentioned, otherwise omit
+   - endDate: Optional for most categories. REQUIRED for open-houses when a time range is present
    - If only date given (no time), default to 09:00:00.000Z
    - If relative dates ("tomorrow", "next Saturday"), calculate from current time
 
-3. LOCATION (REQUIRED):
+3. MULTI-SLOT OPEN HOUSES:
+   - If input describes multiple time slots for an open house (e.g., Saturday 11am-1pm AND Sunday 2pm-4pm),
+     use the TOP-LEVEL occurrences[] array (NOT flypost.occurrences)
+   - Each occurrence MUST include:
+     * startDate: ISO 8601 timestamp for this slot's start
+     * endDate: ISO 8601 timestamp for this slot's end (REQUIRED)
+     * label: Short human-readable label (e.g., "Saturday", "Sunday", "Morning", "Afternoon")
+   - Example occurrences structure:
+     "occurrences": [
+       {
+         "startDate": "2026-01-04T11:00:00.000Z",
+         "endDate": "2026-01-04T13:00:00.000Z",
+         "label": "Saturday"
+       },
+       {
+         "startDate": "2026-01-05T14:30:00.000Z",
+         "endDate": "2026-01-05T17:30:00.000Z",
+         "label": "Sunday"
+       }
+     ]
+   - For multi-slot open houses, ALWAYS include occurrences[] with all slots
+   - Set top-level startDate to the first slot's start time
+   - Set top-level endDate to the first slot's end time
+
+4. LOCATION (REQUIRED):
    - location.@type: Always "Place"
    - location.name: Extract if mentioned, otherwise use streetAddress
    - location.address.@type: Always "PostalAddress"
@@ -68,7 +92,7 @@ PARSING RULES:
    - location.address.addressCountry: Country (default "US" if context suggests USA)
    - location.geo: Include ONLY if latitude/longitude explicitly provided
 
-4. ORGANIZER (REQUIRED):
+5. ORGANIZER (REQUIRED):
    - organizer.@type: "Person" for individuals, "Organization" for companies/groups
    - organizer.name: Extract if mentioned, use "Event Organizer" as fallback
    - organizer.email: Extract if valid email found
@@ -76,7 +100,7 @@ PARSING RULES:
    - organizer.licenseId: Real estate license number if mentioned
    - organizer.mlsNumber: MLS listing number if mentioned
 
-5. PRICE INFORMATION (OPTIONAL):
+6. PRICE INFORMATION (OPTIONAL):
    - If a price is mentioned in the text (e.g., list price, rental rate, cost):
      * flypost.listPrice: Numeric value only (e.g., 1250000 for $1,250,000)
      * flypost.listPriceCurrency: Currency code (default "USD")
@@ -85,11 +109,11 @@ PARSING RULES:
    - Only include price fields if price information is clearly stated in the text
    - Do NOT invent or estimate prices
 
-6. OPTIONAL FIELDS:
+7. OPTIONAL FIELDS:
    - keywords: Array of relevant tags if you can infer them from content
    - Only include optional fields if you have valid data
 
-7. FLYPOST METADATA:
+8. FLYPOST METADATA:
    - Generate flypost.eventId: "evt_" + random alphanumeric
    - Set flypost.submissionTimestamp to current UTC ISO string
    - Set flypost.realTimeData: true
@@ -185,6 +209,30 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
       if (!parsedMini.organizer) missingFields.push('organizer')
       if (!parsedMini['@context']) missingFields.push('@context')
       if (!parsedMini['@type']) missingFields.push('@type')
+      
+      // Validate open-houses specific requirements
+      if (parsedMini.flypost?.category === 'open-houses') {
+        const hasOccurrences = parsedMini.occurrences && Array.isArray(parsedMini.occurrences) && parsedMini.occurrences.length > 0
+        const hasTopLevelEndDate = parsedMini.endDate
+        
+        // Check if endDate is completely missing (neither in occurrences nor top-level)
+        if (!hasTopLevelEndDate && !hasOccurrences) {
+          console.log(`⚠️ Mini model: open-houses missing both endDate and occurrences[]`)
+          needsFallback = true
+        }
+        
+        // If occurrences exist, validate each has both startDate and endDate
+        if (hasOccurrences) {
+          for (let i = 0; i < parsedMini.occurrences.length; i++) {
+            const occ = parsedMini.occurrences[i]
+            if (!occ.startDate || !occ.endDate) {
+              console.log(`⚠️ Mini model: occurrence[${i}] missing startDate or endDate`)
+              needsFallback = true
+              break
+            }
+          }
+        }
+      }
       
       if (missingFields.length > 0) {
         console.log(`⚠️ Mini model missing fields: ${missingFields.join(', ')}`)
