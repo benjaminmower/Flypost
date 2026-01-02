@@ -401,8 +401,8 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       if (!inferredTimezone && !hasExplicitTz) {
         // Cannot infer timezone and no explicit timezone in input
         // Check if timestamps already have explicit timezone info
-        const timestampsHaveTz = (parsedEvent.startDate && /[Z]|[+-]\d{2}:\d{2}$/.test(parsedEvent.startDate)) ||
-                                  (parsedEvent.endDate && /[Z]|[+-]\d{2}:\d{2}$/.test(parsedEvent.endDate))
+        const timestampsHaveTz = (parsedEvent.startDate && /[Z]|[+-]\d{2}:?\d{2}$/.test(parsedEvent.startDate)) ||
+                                  (parsedEvent.endDate && /[Z]|[+-]\d{2}:?\d{2}$/.test(parsedEvent.endDate))
         
         if (!timestampsHaveTz) {
           console.error(`❌ Cannot determine timezone for open house: no inferred timezone and no explicit timezone in input or timestamps`)
@@ -418,7 +418,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
     }
 
-    // 3.8) VALIDATE ENDDDATE FOR OPEN-HOUSES
+    // 3.8) VALIDATE ENDDATE FOR OPEN-HOUSES
     // Open houses require endDate for presence gating
     const endDateValidation = validateOpenHouseEndDate(parsedEvent)
     if (!endDateValidation.valid) {
