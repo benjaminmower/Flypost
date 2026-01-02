@@ -13,7 +13,7 @@ import { clearEvents } from './src/storage.js'
 // Use built-in fetch (Node 18+)
 const fetchImpl = globalThis.fetch || (await import('node-fetch').then(m => m.default))
 
-const BASE_URL = 'http://localhost:3001'
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3001'
 
 // Helper to wait for server
 function delay(ms) {
@@ -22,6 +22,9 @@ function delay(ms) {
 
 // Helper to create a test event
 async function createTestEvent(brokerageId, address, startDate) {
+  // Calculate endDate as 2 hours after startDate
+  const endDate = new Date(new Date(startDate).getTime() + 2 * 3600000).toISOString()
+  
   const response = await fetchImpl(`${BASE_URL}/api/test-add-event`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -34,6 +37,7 @@ async function createTestEvent(brokerageId, address, startDate) {
       state: address.state,
       postalCode: address.postalCode,
       startDate,
+      endDate,
       latitude: 34.0195,
       longitude: -118.4912
     })
@@ -48,11 +52,11 @@ async function testCheckInExplicit() {
   console.log('\n🧪 Test 1: Check-in with Explicit Event ID...')
   
   try {
-    // Create test event
+    // Create test event (currently active: started 30 min ago, ends in 1.5 hours)
     const eventId = await createTestEvent(
       'brokerage-test',
       { streetAddress: '123 Main St', city: 'Santa Monica', state: 'CA', postalCode: '90405' },
-      new Date(Date.now() + 3600000).toISOString() // 1 hour from now
+      new Date(Date.now() - 1800000).toISOString() // 30 min ago
     )
 
     const response = await fetchImpl(`${BASE_URL}/v1/presence/check-in`, {
@@ -88,11 +92,11 @@ async function testCheckInNearest() {
   console.log('\n🧪 Test 2: Check-in with Nearest Event Match...')
   
   try {
-    // Create test event
+    // Create test event (currently active)
     await createTestEvent(
       'brokerage-test',
       { streetAddress: '456 Oak Ave', city: 'Los Angeles', state: 'CA', postalCode: '90001' },
-      new Date(Date.now() + 3600000).toISOString()
+      new Date(Date.now() - 1800000).toISOString() // 30 min ago
     )
 
     const response = await fetchImpl(`${BASE_URL}/v1/presence/check-in`, {
@@ -229,11 +233,11 @@ async function testFeedbackWithOldAttendance() {
   console.log('\n🧪 Test 6: Feedback with Old Attendance (Should Fail)...')
   
   try {
-    // Create test event
+    // Create test event (currently active)
     const eventId = await createTestEvent(
       'brokerage-test',
       { streetAddress: '789 Pine St', city: 'Seattle', state: 'WA', postalCode: '98101' },
-      new Date(Date.now() + 3600000).toISOString()
+      new Date(Date.now() - 1800000).toISOString() // 30 min ago
     )
 
     // Check in with old timestamp (5 hours ago - beyond the 4-hour threshold)

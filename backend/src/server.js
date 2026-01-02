@@ -934,8 +934,7 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
         })
       }
 
-      // For now, use the first/nearest event
-      // TODO: Add time window filtering based on timestamp
+      // Use the first/nearest event
       matchedEvent = nearbyEvents[0]
       targetEventId = matchedEvent.flypost.eventId
       matchedBy = 'nearest'
@@ -961,6 +960,76 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
         })
       }
     }
+
+    // STRICT TIME GATING: Validate check-in is within event time window
+    // Use server time (not client-provided timestamp) for gate checks
+    const now = new Date()
+    
+    // Check if event has startDate
+    if (!matchedEvent.startDate) {
+      console.error(`❌ Event ${targetEventId} missing startDate (cannot time-gate)`)
+      return res.status(400).json({
+        success: false,
+        error: 'EVENT_NOT_TIME_GATABLE',
+        message: 'This event is missing startDate and cannot be checked into.'
+      })
+    }
+
+    // Check if event has endDate (required for time gating)
+    if (!matchedEvent.endDate) {
+      console.error(`❌ Event ${targetEventId} missing endDate (cannot time-gate)`)
+      return res.status(400).json({
+        success: false,
+        error: 'EVENT_NOT_TIME_GATABLE',
+        message: 'This event is missing endDate and cannot be checked into.'
+      })
+    }
+
+    // Parse event time window
+    let eventStart, eventEnd
+    try {
+      eventStart = new Date(matchedEvent.startDate)
+      eventEnd = new Date(matchedEvent.endDate)
+      
+      if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
+        throw new Error('Invalid date format')
+      }
+    } catch (error) {
+      console.error(`❌ Failed to parse event times for ${targetEventId}:`, error.message)
+      return res.status(500).json({
+        success: false,
+        error: 'Invalid event time data',
+        message: 'Event has malformed time information.'
+      })
+    }
+
+    // Check if current time is within event window
+    if (now < eventStart) {
+      const minutesUntilStart = Math.round((eventStart - now) / 60000)
+      console.log(`⏰ Check-in rejected: Event ${targetEventId} has not started yet (starts in ${minutesUntilStart} minutes)`)
+      return res.status(400).json({
+        success: false,
+        error: 'EVENT_NOT_STARTED',
+        message: 'This event has not started yet.',
+        eventStart: matchedEvent.startDate,
+        eventEnd: matchedEvent.endDate
+      })
+    }
+
+    if (now > eventEnd) {
+      const minutesSinceEnd = Math.round((now - eventEnd) / 60000)
+      console.log(`⏰ Check-in rejected: Event ${targetEventId} has already ended (ended ${minutesSinceEnd} minutes ago)`)
+      return res.status(400).json({
+        success: false,
+        error: 'EVENT_ALREADY_ENDED',
+        message: 'This event has already ended.',
+        eventStart: matchedEvent.startDate,
+        eventEnd: matchedEvent.endDate
+      })
+    }
+
+    // Event is active - log success
+    console.log(`✅ Time gate passed: Event ${targetEventId} is active (${eventStart.toISOString()} - ${eventEnd.toISOString()})`)
 
     // STRICT DISTANCE CHECK: Validate proximity to event location
     // Extract event coordinates (handle common field paths)
@@ -1281,6 +1350,11 @@ if (process.env.NODE_ENV !== 'production') {
         name: req.body.organizer || 'Test Organizer',
         email: req.body.email || 'test@example.com'
       }
+    }
+    
+    // Add optional endDate if provided
+    if (req.body.endDate) {
+      baseEvent.endDate = req.body.endDate
     }
     
     // Add optional geo coordinates if provided
