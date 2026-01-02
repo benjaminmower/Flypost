@@ -86,7 +86,7 @@ The Flypost v4 Event Model is a minimal JSON-LD structure based on Schema.org's 
 
 ## Optional Fields
 
-- `endDate`: Event end datetime (**Required for `open-houses` category** to enable presence gating)
+- `endDate`: Event end datetime (**Required for `open-houses` category** to enable presence gating - can be provided at the top level OR within all occurrences if using multi-slot format)
 - `location.name`: Friendly location name
 - `location.geo`: Latitude/longitude coordinates (**Required for publishing** - events without geo coordinates will be rejected at publish time to prevent false-positive presence matches. If not provided in natural language input, the system will attempt automatic geocoding.)
 - `organizer.@type`: "Person" or "Organization" (defaults to "Person" if not specified)

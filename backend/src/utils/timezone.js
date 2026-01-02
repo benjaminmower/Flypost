@@ -91,8 +91,8 @@ export function hasExplicitTimezone(text) {
   }
 
   // Check for ISO timezone markers (Z or offset)
-  // Look for patterns like: "2025-01-15T10:00:00Z" or "2025-01-15T10:00:00+08:00"
-  const isoTimezonePattern = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}([.]\d{3})?([Z]|[+-]\d{2}:\d{2})/i
+  // Look for patterns like: "2025-01-15T10:00:00Z" or "2025-01-15T10:00:00+08:00" or "+0800"
+  const isoTimezonePattern = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}([.]\d{1,9})?([Z]|[+-]\d{2}:?\d{2})/i
   if (isoTimezonePattern.test(text)) {
     return true
   }

@@ -30,7 +30,7 @@ export function reinterpretTimestampInTimezone(isoTimestamp, targetTimezone) {
   try {
     // Extract date/time components (ignore any timezone info)
     // Match: YYYY-MM-DDTHH:MM:SS with optional milliseconds and timezone
-    const match = isoTimestamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})([.]\d{3})?/)
+    const match = isoTimestamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})([.]\d{1,9})?/)
     if (!match) {
       console.warn(`⚠️  Could not parse timestamp for reinterpretation: ${isoTimestamp}`)
       return isoTimestamp
