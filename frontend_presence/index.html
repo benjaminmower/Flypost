@@ -28,68 +28,70 @@
         .glass-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); }
         .hidden { display: none; }
         .thumb-active { opacity: 1 !important; filter: grayscale(0) !important; transform: scale(1.2); }
+        /* Clamped scale: Mobile is punchy but fits; Desktop is massive. */
+        .text-hero { font-size: clamp(2.4rem, 11vw, 8.5rem); letter-spacing: -0.04em; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center p-4 md:p-10 text-center justify-start">
     <div class="bg-glow"></div>
 
-    <header class="flex flex-col items-center pt-10 md:pt-16 pb-6 md:pb-12 w-full max-w-5xl">
-        <div class="text-white text-base md:text-2xl font-black tracking-tighter mb-2 uppercase opacity-40">Flypost</div>
+    <header class="flex flex-col items-center pt-10 md:pt-16 pb-6 md:pb-12 w-full max-w-6xl">
+        <div class="text-white text-base md:text-2xl font-black tracking-tighter mb-2 md:mb-4 uppercase opacity-30">Flypost</div>
         
-        <div class="w-full max-w-[100px] md:max-w-[240px] border-t border-white/10 mb-4 md:mb-8"></div>
+        <div class="w-full max-w-[100px] md:max-w-[320px] border-t border-white/10 mb-4 md:mb-10"></div>
         
         <div class="w-full flex flex-col items-center">
             
-            <div class="flex md:hidden w-full max-w-[200px] justify-between items-center mb-2">
-                <a href="https://ask.goflypost.com" class="text-[9px] font-bold text-air_force_blue-800 opacity-20 uppercase tracking-[0.3em]">Ask</a>
-                <a href="https://post.goflypost.com" class="text-[9px] font-bold text-air_force_blue-800 opacity-20 uppercase tracking-[0.3em]">Post</a>
+            <div class="flex md:hidden w-full max-w-[180px] justify-between items-center mb-1">
+                <a href="https://ask.goflypost.com" class="text-[10px] font-bold text-air_force_blue-800 opacity-20 uppercase tracking-[0.3em]">Ask</a>
+                <a href="https://post.goflypost.com" class="text-[10px] font-bold text-air_force_blue-800 opacity-20 uppercase tracking-[0.3em]">Post</a>
             </div>
-            <h1 class="block md:hidden text-5xl font-black text-lemon_lime uppercase tracking-tighter leading-none">Presence</h1>
+            <h1 class="block md:hidden text-hero font-black text-lemon_lime uppercase leading-none">Presence</h1>
 
-            <div class="hidden md:flex items-center justify-between w-full px-12">
+            <div class="hidden md:flex items-center justify-between w-full px-12 gap-4">
                 <a href="https://ask.goflypost.com" class="text-xs font-bold text-air_force_blue-800 opacity-20 hover:opacity-100 transition-all uppercase tracking-[0.3em] w-1/4 text-right">Ask</a>
-                <h1 class="text-7xl font-black text-lemon_lime uppercase tracking-tighter w-2/4">Presence</h1>
+                <h1 class="text-hero font-black text-lemon_lime uppercase w-2/4 leading-tight">Presence</h1>
                 <a href="https://post.goflypost.com" class="text-xs font-bold text-air_force_blue-800 opacity-20 hover:opacity-100 transition-all uppercase tracking-[0.3em] w-1/4 text-left">Post</a>
             </div>
             
         </div>
     </header>
 
-    <main class="max-w-md w-full mt-2 md:mt-8 px-2">
+    <main class="max-w-md md:max-w-xl w-full mt-2 md:mt-8 px-2">
         <div id="view-checkin" class="glass-card p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] border-lemon_lime/10 shadow-2xl">
             <h2 class="text-xl md:text-3xl font-bold mb-4 italic tracking-tight opacity-90">Arrived?</h2>
-            <p class="text-air_force_blue-700 text-xs md:text-lg mb-8 opacity-70 leading-relaxed">Check in to this open house to receive property details.</p>
+            <p class="text-air_force_blue-700 text-sm md:text-lg mb-8 md:mb-12 opacity-70">Check in to receive property details.</p>
             
-            <button id="btn-checkin" class="w-full bg-lemon_lime text-ink_black py-4 md:py-6 rounded-xl md:rounded-2xl font-black text-lg md:text-2xl shadow-xl shadow-lemon_lime/10 active:scale-95 transition-all uppercase">
+            <button id="btn-checkin" class="w-full bg-lemon_lime text-ink_black py-5 md:py-7 rounded-2xl md:rounded-3xl font-black text-xl md:text-3xl shadow-xl shadow-lemon_lime/20 active:scale-95 transition-all uppercase tracking-tight">
                 Check In Now
             </button>
             
-            <p id="status-msg" class="mt-4 text-[9px] uppercase tracking-[0.2em] text-air_force_blue-900 font-bold min-h-[14px]"></p>
+            <p id="status-msg" class="mt-6 text-[9px] uppercase tracking-[0.2em] text-air_force_blue-900 font-bold min-h-[14px]"></p>
         </div>
 
         <div id="view-success" class="hidden">
-            <h2 class="text-2xl md:text-4xl font-black mb-8 tracking-tighter uppercase">Checked In.</h2>
-            <div class="space-y-3 px-4">
-                <button id="btn-copy-link" class="w-full glass-card py-4 rounded-xl font-bold text-sm">Copy Link</button>
-                <a id="sms-link" href="#" class="block w-full bg-hot_berry py-4 rounded-xl font-bold text-bright_snow text-sm">Text Link</a>
+            <h2 class="text-3xl md:text-5xl font-black mb-10 tracking-tighter uppercase">Checked In.</h2>
+            <div class="space-y-4 px-6">
+                <button id="btn-copy-link" class="w-full glass-card py-5 rounded-2xl font-bold">Copy Link</button>
+                <a id="sms-link" href="#" class="block w-full bg-hot_berry py-5 rounded-2xl font-bold text-bright_snow shadow-xl">Text Link</a>
                 <button id="btn-open-feedback" class="w-full border border-white/5 py-3 rounded-xl font-bold text-air_force_blue-800 text-[10px] uppercase tracking-widest">Feedback</button>
             </div>
         </div>
 
-        <div id="view-feedback" class="hidden glass-card p-8 rounded-[2rem] mt-4 text-left border-white/5">
-             <h2 class="text-xl font-black mb-6 uppercase tracking-tighter">Feedback</h2>
-             <textarea id="feedback-liked" rows="2" class="w-full bg-ink_black/50 border border-white/10 rounded-xl p-4 text-sm text-white mb-4 outline-none" placeholder="Feeling?"></textarea>
-             <textarea id="feedback-disliked" rows="2" class="w-full bg-ink_black/50 border border-white/10 rounded-xl p-4 text-sm text-white mb-6 outline-none" placeholder="Dislikes?"></textarea>
-             <div class="flex justify-center gap-10 mb-8">
-                 <button id="thumb-down" type="button" class="text-4xl opacity-20 grayscale transition-all duration-300">👎</button>
-                 <button id="thumb-up" type="button" class="text-4xl opacity-20 grayscale transition-all duration-300">👍</button>
+        <div id="view-feedback" class="hidden glass-card p-10 rounded-[2.5rem] mt-6 text-left border-white/5">
+             <h2 class="text-2xl md:text-3xl font-black mb-8 uppercase tracking-tighter">Feedback</h2>
+             <textarea id="feedback-liked" rows="2" class="w-full bg-ink_black/50 border border-white/10 rounded-2xl p-5 text-white mb-6 outline-none" placeholder="Feeling?"></textarea>
+             <textarea id="feedback-disliked" rows="2" class="w-full bg-ink_black/50 border border-white/10 rounded-2xl p-5 text-white mb-8 outline-none" placeholder="Dislikes?"></textarea>
+             <div class="flex justify-center gap-12 mb-10">
+                 <button id="thumb-down" type="button" class="text-5xl opacity-20 grayscale transition-all duration-300">👎</button>
+                 <button id="thumb-up" type="button" class="text-5xl opacity-20 grayscale transition-all duration-300">👍</button>
              </div>
-             <button id="btn-submit-feedback" class="w-full bg-lemon_lime text-ink_black py-4 rounded-xl font-black">Submit</button>
+             <button id="btn-submit-feedback" class="w-full bg-lemon_lime text-ink_black py-5 rounded-2xl font-black text-xl">Submit</button>
         </div>
     </main>
 
-    <footer class="mt-auto py-10 opacity-20">
-        <p class="text-[8px] uppercase tracking-[0.5em] text-air_force_blue-900 font-bold">Presence // 2026</p>
+    <footer class="mt-auto py-12 opacity-20">
+        <p class="text-[9px] uppercase tracking-[0.5em] text-air_force_blue-900 font-bold">Presence // 2026</p>
     </footer>
 
     <script type="module" src="/src/main.js"></script>

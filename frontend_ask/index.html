@@ -1,46 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Flypost | Ask</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = { theme: { extend: { colors: { ink_black: '#060810', hot_berry: '#d82e7e', dark_amethyst: '#2f195f', mint_leaf: '#40c9a2', bright_snow: '#f7f7f7', lemon_lime: '#e0e03e', air_force_blue: '#628395' } } } }
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink_black: '#060810',
+                        hot_berry: '#d82e7e',
+                        dark_amethyst: '#2f195f',
+                        mint_leaf: '#40c9a2',
+                        bright_snow: '#f7f7f7',
+                        lemon_lime: '#e0e03e',
+                        air_force_blue: '#628395'
+                    }
+                }
+            }
+        }
     </script>
     <style>
-        body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; }
-        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 30%, #1d3a33 0%, #060810 70%); z-index: -1; }
-        .text-glow { background: linear-gradient(to right, #40c9a2, #f7f7f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 15%, #1d3a33 0%, #060810 80%); z-index: -1; }
         .glass-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); }
-        #chat-transcript { max-height: 500px; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; padding: 1rem; }
-        .message { padding: 1rem; border-radius: 1rem; max-width: 85%; }
-        .message.user { background: rgba(64, 201, 162, 0.15); align-self: flex-end; }
-        .message.assistant { background: rgba(98, 131, 149, 0.1); align-self: flex-start; }
+        #chat-transcript::-webkit-scrollbar { width: 4px; }
+        #chat-transcript::-webkit-scrollbar-thumb { background: rgba(64, 201, 162, 0.2); border-radius: 10px; }
+        /* Clamped scale: Mobile is punchy but fits; Desktop is massive. */
+        .text-hero { font-size: clamp(2.4rem, 11vw, 8.5rem); letter-spacing: -0.04em; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center p-6 text-center">
+<body class="min-h-screen flex flex-col items-center p-4 md:p-10 text-center justify-start">
     <div class="bg-glow"></div>
 
-    <header class="flex flex-col items-center pt-16 pb-12 w-full max-w-4xl">
-        <div class="text-white text-3xl font-black tracking-tighter mb-4 uppercase">Flypost</div>
-        <div class="w-full max-w-[280px] border-t border-white/20 mb-6"></div>
-        <div class="flex items-center justify-between w-full px-4 gap-2">
-            <a href="https://post.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-30 hover:opacity-100 transition-all uppercase tracking-[0.2em] w-1/4 text-right">Post</a>
-            <div class="text-5xl md:text-7xl font-black text-mint_leaf uppercase tracking-tighter w-2/4">Ask</div>
-            <a href="https://presence.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-30 hover:opacity-100 transition-all uppercase tracking-[0.2em] w-1/4 text-left">Presence</a>
+    <header class="flex flex-col items-center pt-10 md:pt-16 pb-6 md:pb-12 w-full max-w-6xl">
+        <div class="text-white text-base md:text-2xl font-black tracking-tighter mb-2 md:mb-4 uppercase opacity-30">Flypost</div>
+        
+        <div class="w-full max-w-[100px] md:max-w-[320px] border-t border-white/20 mb-4 md:mb-10"></div>
+        
+        <div class="w-full flex flex-col items-center">
+            
+            <div class="flex md:hidden w-full max-w-[180px] justify-between items-center mb-1">
+                <a href="https://presence.goflypost.com" class="text-[10px] font-bold text-air_force_blue-800 opacity-20 uppercase tracking-[0.3em]">Presence</a>
+                <a href="https://post.goflypost.com" class="text-[10px] font-bold text-air_force_blue-800 opacity-20 uppercase tracking-[0.3em]">Post</a>
+            </div>
+            <h1 class="block md:hidden text-hero font-black text-mint_leaf uppercase leading-none">Ask</h1>
+
+            <div class="hidden md:flex items-center justify-between w-full px-12 gap-4">
+                <a href="https://presence.goflypost.com" class="text-xs font-bold text-air_force_blue-800 opacity-20 hover:opacity-100 transition-all uppercase tracking-[0.3em] w-1/4 text-right">Presence</a>
+                <h1 class="text-hero font-black text-mint_leaf uppercase w-2/4 leading-tight">Ask</h1>
+                <a href="https://post.goflypost.com" class="text-xs font-bold text-air_force_blue-800 opacity-20 hover:opacity-100 transition-all uppercase tracking-[0.3em] w-1/4 text-left">Post</a>
+            </div>
         </div>
     </header>
 
-    <main class="max-w-3xl w-full mt-10">
-        <h1 class="text-3xl font-bold mb-6 tracking-tighter">Search with <span class="text-glow">Intelligence.</span></h1>
+    <main class="max-w-2xl w-full mt-2 md:mt-8 px-2 flex flex-col h-full">
+        <div id="chat-transcript" class="flex-grow overflow-y-auto space-y-4 mb-6 min-h-[300px] px-2">
+            </div>
         
-        <div id="chat-transcript" class="max-w-xl mx-auto glass-card rounded-3xl mb-4 border-white/5"></div>
-        
-        <form id="chat-form" class="glass-card p-2 rounded-2xl flex max-w-xl mx-auto border-mint_leaf/20">
-            <input id="chat-input" type="text" placeholder="Ask anything..." class="bg-transparent flex-grow p-4 focus:outline-none text-white">
-            <button id="chat-button" type="submit" class="bg-mint_leaf text-ink_black px-6 py-2 rounded-xl font-bold">Ask AI</button>
+        <form id="chat-form" class="glass-card p-2 rounded-2xl flex border-mint_leaf/10 shadow-2xl">
+            <input id="chat-input" type="text" placeholder="Search with Intelligence..." class="bg-transparent flex-grow p-4 focus:outline-none text-white text-sm md:text-lg">
+            <button id="chat-button" type="submit" class="bg-mint_leaf text-ink_black px-6 md:px-8 py-3 rounded-xl font-bold uppercase tracking-tight active:scale-95 transition-transform">Ask AI</button>
         </form>
     </main>
+
+    <footer class="mt-auto py-10 opacity-20">
+        <p class="text-[8px] uppercase tracking-[0.5em] text-air_force_blue-900 font-bold">Ask // 2026</p>
+    </footer>
+
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>

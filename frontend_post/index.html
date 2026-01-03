@@ -1,63 +1,105 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Flypost | Post</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = { theme: { extend: { colors: { ink_black: '#060810', hot_berry: '#d82e7e', dark_amethyst: '#2f195f', mint_leaf: '#40c9a2', lemon_lime: '#e0e03e', bright_snow: '#f7f7f7', air_force_blue: '#628395' } } } }
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink_black: '#060810',
+                        hot_berry: '#d82e7e',
+                        dark_amethyst: '#2f195f',
+                        mint_leaf: '#40c9a2',
+                        lemon_lime: '#e0e03e',
+                        bright_snow: '#f7f7f7',
+                        air_force_blue: '#628395'
+                    }
+                }
+            }
+        }
     </script>
     <style>
-        body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; }
-        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 30%, #2f195f 0%, #060810 70%); z-index: -1; }
+        body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 15%, #2f195f 0%, #060810 80%); z-index: -1; }
         .glass-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); }
         .text-glow { background: linear-gradient(to right, #d82e7e, #e0e03e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .status { margin-top: 1rem; padding: 1rem; border-radius: 0.5rem; }
         .status.info { background-color: rgba(64, 201, 162, 0.1); border: 1px solid rgba(64, 201, 162, 0.3); }
         .status.error { background-color: rgba(216, 46, 126, 0.1); border: 1px solid rgba(216, 46, 126, 0.3); }
         .hidden { display: none; }
+        /* Clamped scale for the hero text */
+        .text-hero { font-size: clamp(2.4rem, 11vw, 8.5rem); letter-spacing: -0.04em; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center p-6 text-center">
+<body class="min-h-screen flex flex-col items-center p-4 md:p-10 text-center justify-start">
     <div class="bg-glow"></div>
 
-    <header class="flex flex-col items-center pt-16 pb-12 w-full max-w-4xl">
-        <div class="text-white text-3xl font-black tracking-tighter mb-4 uppercase">Flypost</div>
-        <div class="w-full max-w-[280px] border-t border-white/20 mb-6"></div>
-        <div class="flex items-center justify-between w-full px-4 gap-2">
-            <a href="https://presence.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-30 hover:opacity-100 transition-all uppercase tracking-[0.2em] w-1/4 text-right">Presence</a>
-            <div class="text-5xl md:text-7xl font-black text-hot_berry uppercase tracking-tighter w-2/4">Post</div>
-            <a href="https://ask.goflypost.com" class="text-sm font-bold text-air_force_blue-800 opacity-30 hover:opacity-100 transition-all uppercase tracking-[0.2em] w-1/4 text-left">Ask</a>
+    <header class="flex flex-col items-center pt-10 md:pt-16 pb-6 md:pb-12 w-full max-w-6xl">
+        <div class="text-white text-base md:text-2xl font-black tracking-tighter mb-2 md:mb-4 uppercase opacity-30">Flypost</div>
+        
+        <div class="w-full max-w-[100px] md:max-w-[320px] border-t border-white/20 mb-4 md:mb-10"></div>
+        
+        <div class="w-full flex flex-col items-center">
+            
+            <div class="flex md:hidden w-full max-w-[180px] justify-between items-center mb-1">
+                <a href="https://ask.goflypost.com" class="text-[10px] font-bold text-air_force_blue-800 opacity-20 uppercase tracking-[0.3em]">Ask</a>
+                <a href="https://presence.goflypost.com" class="text-[10px] font-bold text-air_force_blue-800 opacity-20 uppercase tracking-[0.3em]">Presence</a>
+            </div>
+            <h1 class="block md:hidden text-hero font-black text-hot_berry uppercase leading-none">Post</h1>
+
+            <div class="hidden md:flex items-center justify-between w-full px-12 gap-4">
+                <a href="https://ask.goflypost.com" class="text-xs font-bold text-air_force_blue-800 opacity-20 hover:opacity-100 transition-all uppercase tracking-[0.3em] w-1/4 text-right">Ask</a>
+                <h1 class="text-hero font-black text-hot_berry uppercase w-2/4 leading-tight">Post</h1>
+                <a href="https://presence.goflypost.com" class="text-xs font-bold text-air_force_blue-800 opacity-20 hover:opacity-100 transition-all uppercase tracking-[0.3em] w-1/4 text-left">Presence</a>
+            </div>
+            
         </div>
     </header>
 
-    <main class="max-w-2xl w-full mt-10">
-        <h1 class="text-3xl md:text-4xl font-bold mb-10 tracking-tighter italic">Market your <span class="text-glow">Listing.</span></h1>
+    <main class="max-w-md md:max-w-2xl w-full mt-2 md:mt-8 px-2">
+        <h2 class="text-2xl md:text-4xl font-bold mb-8 md:mb-12 tracking-tighter italic">Market your <span class="text-glow">Listing.</span></h2>
         
         <div id="auth-section" class="max-w-xl mx-auto">
-            <div class="glass-card p-8 rounded-3xl border-hot_berry/20">
-                <h2 class="text-2xl font-bold mb-2 uppercase tracking-tight">Agent Access</h2>
-                <p class="text-air_force_blue-700 text-sm mb-8 uppercase tracking-widest font-bold">Magic Link Sign-In</p>
-                <div class="flex flex-col gap-3">
-                    <input id="auth-email" type="email" placeholder="agent@brokerage.com" class="bg-ink_black/50 border border-white/10 p-4 rounded-xl focus:outline-none focus:border-hot_berry text-white text-center text-lg">
-                    <button id="send-link-btn" class="bg-hot_berry text-white py-4 rounded-xl font-black text-xl hover:brightness-110 transition shadow-xl shadow-hot_berry/20">SEND MAGIC LINK</button>
+            <div class="glass-card p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] border-hot_berry/10 shadow-2xl">
+                <h3 class="text-xl md:text-2xl font-bold mb-2 uppercase tracking-tight opacity-90">Agent Access</h3>
+                <p class="text-air_force_blue-700 text-[10px] md:text-xs mb-8 uppercase tracking-widest font-bold opacity-60">Magic Link Sign-In</p>
+                
+                <div class="flex flex-col gap-4">
+                    <input id="auth-email" type="email" placeholder="agent@brokerage.com" class="bg-ink_black/50 border border-white/10 p-4 md:p-5 rounded-xl md:rounded-2xl focus:outline-none focus:border-hot_berry text-white text-center text-sm md:text-lg transition-all">
+                    
+                    <button id="send-link-btn" class="bg-hot_berry text-white py-4 md:py-6 rounded-xl md:rounded-2xl font-black text-lg md:text-2xl shadow-xl shadow-hot_berry/20 active:scale-95 transition-all uppercase tracking-tight">
+                        Send Magic Link
+                    </button>
                 </div>
-                <div id="auth-status" class="status info mt-4 text-xs tracking-widest uppercase">Authorized Personnel Only</div>
+                
+                <div id="auth-status" class="status info mt-6 text-[9px] uppercase tracking-widest font-bold opacity-40">Authorized Personnel Only</div>
             </div>
         </div>
 
         <div id="publish-section" class="hidden max-w-xl mx-auto space-y-4 text-left">
-            <div class="flex justify-between items-center px-2">
-                <span class="text-xs font-bold text-mint_leaf uppercase tracking-widest">● Active Session</span>
-                <button id="signout-btn" class="text-xs text-air_force_blue-700 hover:text-hot_berry transition uppercase font-bold">Sign Out</button>
+            <div class="flex justify-between items-center px-4">
+                <span class="text-[10px] font-bold text-mint_leaf uppercase tracking-widest">● Active Session</span>
+                <button id="signout-btn" class="text-[10px] text-air_force_blue-700 hover:text-hot_berry transition-all uppercase font-bold tracking-widest">Sign Out</button>
             </div>
-            <form id="event-form" class="glass-card p-8 rounded-3xl border-mint_leaf/20">
-                <textarea id="event-input" rows="4" placeholder="Describe your event..." class="bg-ink_black/50 border border-white/10 w-full p-4 rounded-xl focus:outline-none focus:border-mint_leaf text-white mb-6 resize-none"></textarea>
-                <button id="publish-btn" type="submit" class="bg-bright_snow text-ink_black w-full py-4 rounded-xl font-black text-xl hover:bg-hot_berry hover:text-white transition-all transform hover:scale-[1.02]">PUBLISH EVENT</button>
+            
+            <form id="event-form" class="glass-card p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] border-mint_leaf/10 shadow-2xl">
+                <textarea id="event-input" rows="4" placeholder="Describe your event..." class="bg-ink_black/50 border border-white/10 w-full p-5 rounded-2xl focus:outline-none focus:border-mint_leaf text-white mb-6 resize-none text-sm md:text-base transition-all"></textarea>
+                
+                <button id="publish-btn" type="submit" class="bg-bright_snow text-ink_black w-full py-4 md:py-6 rounded-2xl font-black text-lg md:text-2xl hover:bg-hot_berry hover:text-white transition-all transform active:scale-95 shadow-xl uppercase tracking-tight">
+                    Publish Event
+                </button>
             </form>
             <div id="publish-status" class="status hidden"></div>
         </div>
     </main>
+
+    <footer class="mt-auto py-12 opacity-20">
+        <p class="text-[8px] uppercase tracking-[0.5em] text-air_force_blue-900 font-bold">Post // 2026</p>
+    </footer>
     
     <script type="module" src="/src/main.js"></script>
 </body>
