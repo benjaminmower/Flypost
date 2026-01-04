@@ -63,7 +63,7 @@ async function handleCheckIn() {
 async function handleFeedbackSubmit() {
   const liked = document.getElementById('feedback-liked')?.value || ''
   const disliked = document.getElementById('feedback-disliked')?.value || ''
-  const wantsSimilar = wantsSimilarInput.value === "true"
+  const wantsSimilar = wantsSimilarInput?.value === "true"
 
   if (!currentAttendanceId) return showNotification('Check in first', 'error')
 
@@ -101,11 +101,11 @@ function init() {
 
   // Emoji Toggle Logic
   thumbUp?.addEventListener('click', () => {
-    wantsSimilarInput.value = "true"
+    if (wantsSimilarInput) wantsSimilarInput.value = "true"
     thumbUp.classList.add('thumb-active'); thumbDown.classList.remove('thumb-active')
   })
   thumbDown?.addEventListener('click', () => {
-    wantsSimilarInput.value = "false"
+    if (wantsSimilarInput) wantsSimilarInput.value = "false"
     thumbDown.classList.add('thumb-active'); thumbUp.classList.remove('thumb-active')
   })
 
