@@ -93,4 +93,30 @@ test('URL Extraction - Real estate URL with query params', () => {
   )
 })
 
+test('URL Extraction - Trailing punctuation removed', () => {
+  const input1 = 'Check out https://example.com/listing.'
+  const result1 = extractFirstUrl(input1)
+  assert.strictEqual(
+    result1,
+    'https://example.com/listing',
+    'Should remove trailing period'
+  )
+
+  const input2 = 'Visit https://example.com/listing, for details'
+  const result2 = extractFirstUrl(input2)
+  assert.strictEqual(
+    result2,
+    'https://example.com/listing',
+    'Should remove trailing comma'
+  )
+
+  const input3 = 'See https://example.com/listing)'
+  const result3 = extractFirstUrl(input3)
+  assert.strictEqual(
+    result3,
+    'https://example.com/listing',
+    'Should remove trailing parenthesis'
+  )
+})
+
 console.log('✅ All URL extraction tests passed')

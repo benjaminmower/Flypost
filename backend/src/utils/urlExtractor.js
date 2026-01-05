@@ -15,8 +15,8 @@ export function extractFirstUrl(text) {
   }
 
   // Regex to match https:// URLs
-  // Matches: https:// followed by non-whitespace characters
-  const urlRegex = /https:\/\/[^\s]+/g
+  // Matches: https:// followed by valid URL characters (excludes common trailing punctuation)
+  const urlRegex = /https:\/\/[^\s<>"{}|\\^`[\]]+/g
   const matches = text.match(urlRegex)
 
   if (!matches || matches.length === 0) {
@@ -28,6 +28,9 @@ export function extractFirstUrl(text) {
 
   // Trim whitespace
   url = url.trim()
+  
+  // Remove trailing punctuation that's often not part of URLs
+  url = url.replace(/[.,;:!?)\]]+$/, '')
 
   // Cap at 1000 characters
   if (url.length > 1000) {

@@ -588,20 +588,6 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
         sourceData
       )
     }
-    
-    // Also set sourceUrl on the 'parse-and-publish' source entry or first source
-    // per requirements: if parse-and-publish exists, set on it; otherwise set on first entry
-    if (extractedUrl && enrichedEvent.flypost.sources && enrichedEvent.flypost.sources.length > 0) {
-      const parsePublishSource = enrichedEvent.flypost.sources.find(
-        s => s.sourceId === 'parse-and-publish'
-      )
-      if (parsePublishSource) {
-        parsePublishSource.sourceUrl = extractedUrl
-      } else {
-        // Set on first source if parse-and-publish not found
-        enrichedEvent.flypost.sources[0].sourceUrl = extractedUrl
-      }
-    }
 
     // 7) Validate the enriched event
     const validation = validateEventData(enrichedEvent)
