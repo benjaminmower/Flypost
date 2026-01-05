@@ -30,7 +30,26 @@ The proxy implements different authentication requirements based on the request 
 
 ### Authentication Rules
 
-#### 1. Firebase-Required Browser Origins
+#### 1. Truth-Writing Endpoint Restrictions (Presence & Feedback)
+
+**Endpoints**: `/v1/presence/*` and `/v1/feedback/*` POST requests
+
+**Required Origin**: `https://presence.goflypost.com`
+
+These endpoints mint "truth" (attendance/feedback records) and are restricted to the Presence web application:
+- Must originate from `https://presence.goflypost.com`
+- Returns `403` if origin is missing or different
+- **Enforced regardless of authentication** - even valid tokens cannot bypass this origin check
+- Prevents server-to-server / LLM / non-browser callers from minting truth
+
+Examples of restricted endpoints:
+- `POST /v1/presence/check-in` - Record attendance at an event
+- `POST /v1/presence/check-out` - Record departure from an event
+- `POST /v1/feedback/submit` - Submit feedback for an event
+
+This restriction ensures truth-writing can only happen through the verified browser application, preventing abuse while keeping machine ingestion writes for events intact.
+
+#### 2. Firebase-Required Browser Origins
 
 **Origins**: `https://app.goflypost.com`, `https://post.goflypost.com`
 
@@ -41,7 +60,7 @@ Browser writes from these origins **require Firebase authentication**:
 
 This ensures browser clients cannot use static secrets, which would be visible in browser dev tools.
 
-#### 2. Read-Only Ask Origin
+#### 3. Read-Only Ask Origin
 
 **Origin**: `https://ask.goflypost.com`
 
@@ -51,7 +70,7 @@ This origin is read-only and can only access chat endpoints:
 
 This separation ensures the concierge/query surface cannot be used to publish events.
 
-#### 3. Machine / Server-to-Server Writes
+#### 4. Machine / Server-to-Server Writes
 
 **Origins**: No origin header, or origins not matching the above
 
@@ -64,7 +83,7 @@ Server-to-server requests use static token authentication:
   - `COMPASS_WRITE_TOKEN`: Compass brokerage
 - Token determines tenancy (brokerageId) for the request
 
-#### 4. Chat Endpoint Exemption
+#### 5. Chat Endpoint Exemption
 
 **Paths**: `/api/chat` and `/api/chat/*` (exact match only)
 
@@ -165,6 +184,19 @@ BACKEND_URL=http://localhost:3001 FLYPOST_WRITE_TOKEN=secret npm start
 ```
 
 ## Testing
+
+Run the truth endpoint origin restriction tests:
+
+```bash
+node test-truth-origin.js
+```
+
+This test suite validates:
+- ✅ Presence endpoints require `https://presence.goflypost.com` origin
+- ✅ Feedback endpoints require `https://presence.goflypost.com` origin
+- ✅ Rejection of missing or wrong origins (403 errors)
+- ✅ `/api/*` endpoints remain unchanged
+- ✅ GET requests not affected by origin restrictions
 
 Run the comprehensive origin-gated authentication tests:
 
