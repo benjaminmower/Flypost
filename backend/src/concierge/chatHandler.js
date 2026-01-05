@@ -160,25 +160,25 @@ const getEventsNearTool = {
  * 
  * @param {Object} args - Tool arguments
  * @param {string} backendUrl - Backend URL for API calls
- * @param {string|undefined} brokerageId - Optional brokerage ID for filtering
  * @returns {Promise<Object>} Events data
  */
-async function executeGetEventsNear(args, backendUrl, brokerageId) {
+async function executeGetEventsNear(args, backendUrl) {
   const { lat, lng, radius = 5 } = args
   
   // Convert miles to kilometers for backend API (backend expects kilometers)
   const radiusMiles = Math.max(0, Number(radius))
   const radiusKm = radiusMiles * MILES_TO_KM
   
+  // Enforce fixed 7-day discovery window (server time)
+  const now = new Date()
+  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  
   const params = new URLSearchParams()
   params.append('lat', lat.toString())
   params.append('lng', lng.toString())
   params.append('radius', radiusKm.toString())
-  
-  // Add brokerageId if provided
-  if (brokerageId) {
-    params.append('brokerageId', brokerageId)
-  }
+  params.append('start', now.toISOString())
+  params.append('end', sevenDaysLater.toISOString())
 
   const url = `${backendUrl}/v1/events/near?${params.toString()}`
   
@@ -230,12 +230,11 @@ async function executeGetEventsNear(args, backendUrl, brokerageId) {
  * @param {number|undefined} lat - User's latitude (optional)
  * @param {number|undefined} lng - User's longitude (optional)
  * @param {string} backendUrl - Backend URL for API calls
- * @param {string|undefined} brokerageId - Optional brokerage ID for filtering
  * @param {Array|undefined} conversationHistory - Optional conversation history for context (array of {role, content})
  * @param {Function|undefined} onToken - Optional callback for streaming tokens
  * @returns {Promise<Object>} Chat response or async generator if streaming
  */
-export async function processChatMessage(message, lat, lng, backendUrl, brokerageId, conversationHistory = [], onToken = null) {
+export async function processChatMessage(message, lat, lng, backendUrl, conversationHistory = [], onToken = null) {
   const openai = getOpenAIClient()
   
   // Determine if coordinates are available
@@ -255,6 +254,31 @@ When user location is unknown (no coordinates provided):
 - **NEVER** list specific events, dates, addresses, or properties when no coordinates are available
 - **NEVER** attempt to search for events without coordinates
 - Wait for the user to provide location information before searching
+
+When coordinates ARE available:
+- **DO NOT** ask for location again
+- Proceed directly with event search using the provided coordinates
+
+## Addresses + Links (Within Discovery Contract)
+
+- Include address details as provided by the Discovery V1 payload
+- Include externalListingUrl when present in event data
+- **NEVER** attempt to infer or reconstruct withheld address fields
+- Present addresses exactly as provided; if partial, present what's available
+
+## Web Browsing / External Scraping - PROHIBITED
+
+You **MUST NOT**:
+- Browse the web or perform web searches
+- Google search for events or properties
+- Scrape external websites
+- Access data from Zillow, Redfin, Realtor.com, or other external sites
+
+**Rationale**: You are a deterministic discovery interface. All responses must be auditable and traceable to Flypost's registry. External data sources introduce drift and non-determinism.
+
+**Enforcement**: If a user requests web browsing or external searches, politely refuse:
+- "I can only search Flypost's verified event registry. I cannot browse external websites or search engines."
+- "Would you like me to search for events in the Flypost registry instead?"
 
 ## Response Format: Markdown-First
 
@@ -398,12 +422,13 @@ When users ask about events or open houses:
 - **NEVER** mention any event details from memory or training data
 - **NEVER** fabricate placeholder events or examples
 
-**When presenting tool results:**
-- **ONLY** mention events that appear in the tool's returned data
+**Tool Discipline - No Fabrication:**
+- **ONLY** mention events that appear in the getEventsNear tool's returned data
 - **NEVER** add events from other sources, memory, or imagination
 - **NEVER** mention past events unless they appear in the current tool results
 - **NEVER** reference events from years like 2023, 2022, etc. unless explicitly in tool data
 - Verify each event detail exists in the tool output before including it
+- If no events are found, say so clearly and suggest alternatives
 
 ## Date & Time Filtering
 
@@ -453,6 +478,7 @@ The Concierge must:
 ## Restrictions - NEVER Do These
 
 - ❌ Reference Zillow, Redfin, Realtor.com, MLS sites, or IDX portals
+- ❌ Browse the web, Google search, or scrape external sites
 - ❌ Invent listing-specific details not in the event data
 - ❌ Invent agent emails, phones, or contact info
 - ❌ Steer clients based on protected class characteristics
@@ -462,11 +488,13 @@ The Concierge must:
 - ❌ List events when no coordinates are provided (see Location Clarification Rule)
 - ❌ Fabricate events when tool returns zero results (see Anti-Hallucination Rules)
 - ❌ Mention events from past years (e.g., 2023, 2022) unless in tool results
+- ❌ Ask for location when coordinates are already provided
 - ✅ Stay fair housing compliant
 - ✅ Use Markdown formatting
 - ✅ Include disclaimers for estimates
 - ✅ End with suggested follow-up questions
 - ✅ Only present verified data from tool results
+- ✅ Include externalListingUrl when present in event data
 
 ## Tone
 
@@ -477,11 +505,6 @@ The Concierge must:
 - **Organized**: Uses clear Markdown structure
 
 The user's current location is approximately: ${locString}`
-
-  // Add brokerage-specific context if brokerageId is provided
-  if (brokerageId) {
-    systemPrompt += `\n\n## Brokerage Context\n\nYou are helping a user discover events from ${brokerageId}. Focus on events associated with this brokerage when available.`
-  }
 
   // Configuration constants
   const MAX_HISTORY_MESSAGES = 10  // Limit history to control token usage
@@ -550,7 +573,7 @@ The user's current location is approximately: ${locString}`
 
         let result
         if (functionName === 'getEventsNear') {
-          result = await executeGetEventsNear(functionArgs, backendUrl, brokerageId)
+          result = await executeGetEventsNear(functionArgs, backendUrl)
           // Enrich events with normalized price information
           if (result.success && result.events) {
             result.events = enrichEventsWithPrice(result.events)
