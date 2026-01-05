@@ -171,8 +171,7 @@ async function executeGetEventsNear(args, backendUrl) {
   
   // Enforce fixed 7-day discovery window (server time)
   const now = new Date()
-  const sevenDaysLater = new Date(now)
-  sevenDaysLater.setDate(sevenDaysLater.getDate() + 7)
+  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   
   const params = new URLSearchParams()
   params.append('lat', lat.toString())
