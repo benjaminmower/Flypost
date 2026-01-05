@@ -200,10 +200,9 @@ test('chatHandler.js: executeGetEventsNear enforces fixed 7-day window', () => {
   
   const functionBody = functionMatch[0]
   
-  // Should calculate now and now+7days
+  // Should calculate now and now+7days (using getTime() arithmetic)
   return functionBody.includes('new Date()') &&
-         functionBody.includes('setDate') &&
-         functionBody.includes('+ 7') &&
+         functionBody.includes('7 * 24 * 60 * 60 * 1000') &&
          functionBody.includes("params.append('start'") &&
          functionBody.includes("params.append('end'")
 })
@@ -233,9 +232,8 @@ test('chatHandler.js: Fixed window is exactly 7 days', () => {
   
   const functionBody = functionMatch[0]
   
-  // Should use 7 days specifically
-  return functionBody.includes('sevenDaysLater') || 
-         (functionBody.includes('+ 7') && functionBody.includes('setDate'))
+  // Should use 7 days specifically (in milliseconds: 7 * 24 * 60 * 60 * 1000)
+  return functionBody.includes('7 * 24 * 60 * 60 * 1000')
 })
 
 // ===== LOCATION DISCIPLINE TESTS =====
@@ -250,8 +248,8 @@ test('chatHandler.js: System prompt instructs not to re-ask for location when co
   const section = locationSection[0]
   
   // Should have guidance about not asking for location when coords are available
-  return section.includes('coordinates ARE available') ||
-         section.includes('DO NOT') && section.includes('ask for location')
+  return (section.includes('coordinates ARE available') ||
+         (section.includes('DO NOT') && section.includes('ask for location')))
 })
 
 test('chatHandler.js: Restrictions include not asking for location when coords provided', () => {
