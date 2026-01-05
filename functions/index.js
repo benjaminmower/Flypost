@@ -220,10 +220,7 @@ function aggregateFeedback(feedbackDocs, attendanceMap, eventMap) {
   const eventCheckInCounts = new Map()
   for (const [attendanceId, attendance] of attendanceMap.entries()) {
     const eventId = attendance.eventId
-    if (!eventCheckInCounts.has(eventId)) {
-      eventCheckInCounts.set(eventId, 0)
-    }
-    eventCheckInCounts.set(eventId, eventCheckInCounts.get(eventId) + 1)
+    eventCheckInCounts.set(eventId, (eventCheckInCounts.get(eventId) || 0) + 1)
   }
   
   // Build final event digests
@@ -296,6 +293,7 @@ export const generateWeeklyFeedbackDigest = onSchedule(
     timeoutSeconds: 540 // 9 minutes
   },
   async (event) => {
+    const startTime = Date.now()
     console.log('=== Starting Weekly Feedback Digest Generation ===')
     
     try {
@@ -305,7 +303,9 @@ export const generateWeeklyFeedbackDigest = onSchedule(
       console.log(`Document ID: ${docId}`)
       
       // Query feedback in window
+      console.log('Step 1: Querying feedback...')
       const feedbackDocs = await queryFeedbackInWindow(windowStartIso, windowEndIso)
+      console.log(`Step 1 complete: Found ${feedbackDocs.length} feedback documents (${Date.now() - startTime}ms elapsed)`)
       
       if (feedbackDocs.length === 0) {
         console.log('No feedback in this window. Creating empty digest.')
@@ -316,26 +316,32 @@ export const generateWeeklyFeedbackDigest = onSchedule(
           eventDigests: []
         }
         await persistDigest(docId, emptyDigest)
-        console.log('=== Digest generation complete (empty) ===')
+        console.log(`=== Digest generation complete (empty) - Total time: ${Date.now() - startTime}ms ===`)
         return
       }
       
       // Extract unique attendanceIds
       const attendanceIds = [...new Set(feedbackDocs.map(f => f.attendanceId).filter(Boolean))]
-      console.log(`Found ${attendanceIds.length} unique attendance IDs`)
+      console.log(`Step 2: Found ${attendanceIds.length} unique attendance IDs`)
       
       // Batch query attendance records
+      console.log('Step 2: Querying attendance records...')
       const attendanceMap = await batchQueryAttendance(attendanceIds)
+      console.log(`Step 2 complete: Fetched ${attendanceMap.size} attendance records (${Date.now() - startTime}ms elapsed)`)
       
       // Extract unique eventIds
       const eventIds = [...new Set(feedbackDocs.map(f => f.eventId).filter(Boolean))]
-      console.log(`Found ${eventIds.length} unique event IDs`)
+      console.log(`Step 3: Found ${eventIds.length} unique event IDs`)
       
       // Batch query events for enrichment
+      console.log('Step 3: Querying event documents...')
       const eventMap = await batchQueryEvents(eventIds)
+      console.log(`Step 3 complete: Fetched ${eventMap.size} event documents (${Date.now() - startTime}ms elapsed)`)
       
       // Aggregate feedback
+      console.log('Step 4: Aggregating feedback...')
       const eventDigests = aggregateFeedback(feedbackDocs, attendanceMap, eventMap)
+      console.log(`Step 4 complete: Aggregated ${eventDigests.length} event digests (${Date.now() - startTime}ms elapsed)`)
       
       // Build final digest
       const digest = {
@@ -346,13 +352,23 @@ export const generateWeeklyFeedbackDigest = onSchedule(
       }
       
       // Persist to Firestore
+      console.log('Step 5: Persisting digest to Firestore...')
       await persistDigest(docId, digest)
+      console.log(`Step 5 complete: Digest persisted (${Date.now() - startTime}ms elapsed)`)
       
+      const totalTime = Date.now() - startTime
       console.log('=== Digest generation complete ===')
       console.log(`Total events: ${eventDigests.length}`)
       console.log(`Total feedback: ${feedbackDocs.length}`)
+      console.log(`Total execution time: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
+      
+      // Warn if approaching timeout (540 seconds = 540000ms)
+      if (totalTime > 400000) {
+        console.warn(`⚠️ Function took ${(totalTime / 1000).toFixed(2)}s - approaching timeout limit of 540s`)
+      }
     } catch (error) {
-      console.error('Error generating weekly digest:', error)
+      const totalTime = Date.now() - startTime
+      console.error(`Error generating weekly digest after ${totalTime}ms:`, error)
       throw error
     }
   }

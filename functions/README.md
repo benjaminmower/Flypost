@@ -106,6 +106,8 @@ feedback.where('createdAt', '>=', windowStartIso)
         .where('createdAt', '<', windowEndIso)
 ```
 
+**Index Requirement:** A single-field ascending index on `feedback.createdAt` is required. This index supports both range operators (`>=` and `<`) on the same field. The index is defined in `firestore.indexes.json` and will be automatically created during deployment.
+
 ### Attendance Batch Query
 Attendance records are fetched in batches using the `__name__` (document ID) field with the `in` operator, respecting Firestore's 10-item limit per query:
 ```javascript
