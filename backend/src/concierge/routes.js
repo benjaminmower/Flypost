@@ -42,10 +42,11 @@ export function createConciergeRouter(config) {
    *   "message": "What events are happening near me?",
    *   "lat": 34.0195,              // Optional: latitude
    *   "lng": -118.4912,            // Optional: longitude
-   *   "brokerageId": "vista-sir",  // Optional
    *   "conversationHistory": [],   // Optional: array of previous messages
    *   "history": []                // Optional: array of {role, content} for follow-ups
    * }
+   * 
+   * Note: This is a global public discovery interface. Any brokerageId in the request is silently ignored.
    * 
    * Response:
    * {
@@ -69,20 +70,13 @@ export function createConciergeRouter(config) {
     
     try {
       // Validate request body
-      const { message, lat, lng, brokerageId, conversationHistory, history } = req.body || {}
+      // Note: brokerageId is silently ignored (global public supply)
+      const { message, lat, lng, conversationHistory, history } = req.body || {}
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
           success: false,
           error: 'Missing or invalid "message" field. Please provide a non-empty string.'
-        })
-      }
-
-      // Validate brokerageId if provided
-      if (brokerageId !== undefined && typeof brokerageId !== 'string') {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid "brokerageId" field. Must be a string if provided.'
         })
       }
 
@@ -141,12 +135,11 @@ export function createConciergeRouter(config) {
       }
 
       // Log request (GDPR-compliant - no PII)
-      const logBrokerageId = brokerageId ? `, brokerageId=${brokerageId}` : ''
       const logHistory = conversationHistory ? `, history_msgs=${conversationHistory.length}` : ''
       const logContextHistory = history ? `, context_history=${history.length}` : ''
       const latStr = latitude !== undefined ? latitude.toFixed(4) : 'n/a'
       const lngStr = longitude !== undefined ? longitude.toFixed(4) : 'n/a'
-      console.log(`🤖 Concierge chat request: lat=${latStr}, lng=${lngStr}, msg_length=${message.length}${logBrokerageId}${logHistory}${logContextHistory}`)
+      console.log(`🤖 Concierge chat request: lat=${latStr}, lng=${lngStr}, msg_length=${message.length}${logHistory}${logContextHistory}`)
 
       // Process chat message (use history if provided, otherwise conversationHistory)
       const contextHistory = history || conversationHistory
@@ -155,7 +148,6 @@ export function createConciergeRouter(config) {
         latitude,
         longitude,
         backendUrl,
-        brokerageId,
         contextHistory
       )
 
@@ -205,10 +197,11 @@ export function createConciergeRouter(config) {
    *   "message": "What events are happening near me?",
    *   "lat": 34.0195,              // Optional: latitude
    *   "lng": -118.4912,            // Optional: longitude
-   *   "brokerageId": "vista-sir",  // Optional
    *   "conversationHistory": [],   // Optional: array of previous messages
    *   "history": []                // Optional: array of {role, content} for follow-ups
    * }
+   * 
+   * Note: This is a global public discovery interface. Any brokerageId in the request is silently ignored.
    * 
    * Response: SSE stream
    * data: {"type": "token", "content": "Hello"}
@@ -220,20 +213,13 @@ export function createConciergeRouter(config) {
     
     try {
       // Validate request body
-      const { message, lat, lng, brokerageId, conversationHistory, history } = req.body || {}
+      // Note: brokerageId is silently ignored (global public supply)
+      const { message, lat, lng, conversationHistory, history } = req.body || {}
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
           success: false,
           error: 'Missing or invalid "message" field. Please provide a non-empty string.'
-        })
-      }
-
-      // Validate brokerageId if provided
-      if (brokerageId !== undefined && typeof brokerageId !== 'string') {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid "brokerageId" field. Must be a string if provided.'
         })
       }
 
@@ -292,12 +278,11 @@ export function createConciergeRouter(config) {
       }
 
       // Log request (GDPR-compliant - no PII)
-      const logBrokerageId = brokerageId ? `, brokerageId=${brokerageId}` : ''
       const logHistory = conversationHistory ? `, history_msgs=${conversationHistory.length}` : ''
       const logContextHistory = history ? `, context_history=${history.length}` : ''
       const latStr = latitude !== undefined ? latitude.toFixed(4) : 'n/a'
       const lngStr = longitude !== undefined ? longitude.toFixed(4) : 'n/a'
-      console.log(`🤖 Concierge streaming request: lat=${latStr}, lng=${lngStr}, msg_length=${message.length}${logBrokerageId}${logHistory}${logContextHistory}`)
+      console.log(`🤖 Concierge streaming request: lat=${latStr}, lng=${lngStr}, msg_length=${message.length}${logHistory}${logContextHistory}`)
 
       // Set up SSE headers
       res.setHeader('Content-Type', 'text/event-stream')
@@ -315,7 +300,6 @@ export function createConciergeRouter(config) {
         latitude,
         longitude,
         backendUrl,
-        brokerageId,
         contextHistory,
         (token) => {
           // Send each token as SSE event
