@@ -1,5 +1,9 @@
 
 {
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs18"
+  },
   "hosting": {
     "public": "public",
     "ignore": [
