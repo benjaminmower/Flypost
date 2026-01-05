@@ -30,6 +30,7 @@ export function extractFirstUrl(text) {
   url = url.trim()
   
   // Remove trailing punctuation that's often not part of URLs
+  // Note: ] needs to be escaped or placed first in character class
   url = url.replace(/[.,;:!?)\]]+$/, '')
 
   // Cap at 1000 characters
