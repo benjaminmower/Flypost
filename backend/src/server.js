@@ -20,6 +20,7 @@ import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.
 import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.js'
 import { sanitizeEvent } from './utils/northStarEnforcer.js'
 import { mergeSources, validateSource } from './utils/sourceProvenance.js'
+import { extractFirstUrl } from './utils/urlExtractor.js'
 import { enrichEventMetadata, normalizeEventDates } from './utils/eventEnrichment.js'
 import { toDiscoveryEventsV1, toDiscoveryEventV1 } from './utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
@@ -345,6 +346,15 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
 
+    // 1.1) DETERMINISTIC URL EXTRACTION
+    // Extract external listing URL from raw input (deterministic, no LLM)
+    const extractedUrl = extractFirstUrl(naturalLanguageInput)
+    if (extractedUrl) {
+      console.log(`🔗 Extracted external URL: ${extractedUrl}`)
+      // Set as top-level event.url (Schema.org Event.url)
+      parsedEvent.url = extractedUrl
+    }
+
     // 1.2) DETERMINISTIC PRICE EXTRACTION & ENRICHMENT
     // If LLM didn't extract price, try deterministic extraction from input text
     if (!hasValidListPrice(parsedEvent)) {
@@ -561,16 +571,36 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     }
     
     // 6) Add source provenance for LLM adapter
+    const sourceData = { sourceType: 'llm', sourceId: 'parse-and-publish' }
+    // If URL was extracted, add it to source provenance
+    if (extractedUrl) {
+      sourceData.sourceUrl = extractedUrl
+    }
+    
     if (existingEvent?.flypost?.sources) {
       enrichedEvent.flypost.sources = mergeSources(
         existingEvent.flypost.sources,
-        { sourceType: 'llm', sourceId: 'parse-and-publish' }
+        sourceData
       )
     } else {
       enrichedEvent.flypost.sources = mergeSources(
         [],
-        { sourceType: 'llm', sourceId: 'parse-and-publish' }
+        sourceData
       )
+    }
+    
+    // Also set sourceUrl on the 'parse-and-publish' source entry or first source
+    // per requirements: if parse-and-publish exists, set on it; otherwise set on first entry
+    if (extractedUrl && enrichedEvent.flypost.sources && enrichedEvent.flypost.sources.length > 0) {
+      const parsePublishSource = enrichedEvent.flypost.sources.find(
+        s => s.sourceId === 'parse-and-publish'
+      )
+      if (parsePublishSource) {
+        parsePublishSource.sourceUrl = extractedUrl
+      } else {
+        // Set on first source if parse-and-publish not found
+        enrichedEvent.flypost.sources[0].sourceUrl = extractedUrl
+      }
     }
 
     // 7) Validate the enriched event
