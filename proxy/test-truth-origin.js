@@ -118,7 +118,8 @@ function createTestServer() {
   async function initialize() {
     // Set up environment for forward.js BEFORE requiring it
     process.env.PROXY_USE_ID_TOKEN = 'false' // Disable Google ID token for tests
-    process.env.FIREBASE_PROJECT_ID = '' // Disable Firebase for these tests
+    // Note: Not setting FIREBASE_PROJECT_ID to keep Firebase disabled for simplified testing
+    // Truth endpoint tests focus on origin restrictions, not Firebase auth
     process.env.FLYPOST_WRITE_TOKEN = 'test-global-token'
 
     const backend = await startMockBackend()
@@ -437,7 +438,7 @@ async function runTests() {
         })
         const data = await res.json()
         if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-        // Note: Firebase auth is disabled in test env, so this tests that it still requires auth
+        // Without Firebase auth configured, this tests that the endpoint still requires write token auth
       })
 
       // =====================================================
