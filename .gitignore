@@ -6,6 +6,8 @@ frontend_post/node_modules/
 frontend_post/dist/
 proxy/node_modules/
 backend/node_modules/
+functions/node_modules/
+functions/lib/
 node_modules
 dist/
 .env
