@@ -52,6 +52,7 @@ export async function storeAttendance(attendanceData) {
     checkInTime: attendanceData.checkInTime || new Date().toISOString(),
     dwellBand: attendanceData.dwellBand || null,
     presenceProof: attendanceData.presenceProof,
+    occurrenceId: attendanceData.occurrenceId || null,
     createdAt: new Date().toISOString()
   }
   
@@ -82,6 +83,7 @@ export async function storeAttendance(attendanceData) {
  * @param {string} feedbackData.eventId - Event identifier (denormalized)
  * @param {object} feedbackData.answers - Feedback answers
  * @param {string} [feedbackData.brokerageAffiliation] - Optional brokerage affiliation
+ * @param {string} [feedbackData.occurrenceId] - Optional occurrence identifier
  * @returns {Promise<object>} - Stored feedback record
  */
 export async function storeFeedback(feedbackData) {
@@ -92,11 +94,12 @@ export async function storeFeedback(feedbackData) {
     attendanceId: feedbackData.attendanceId,
     eventId: feedbackData.eventId,
     answers: {
-      liked: feedbackData.answers.liked || '',
-      disliked: feedbackData.answers.disliked || '',
+      liked: feedbackData.answers.liked || null,
+      disliked: feedbackData.answers.disliked || null,
       wantsSimilar: feedbackData.answers.wantsSimilar || false
     },
     brokerageAffiliation: feedbackData.brokerageAffiliation || null,
+    occurrenceId: feedbackData.occurrenceId || null,
     createdAt: new Date().toISOString()
   }
   

@@ -61,6 +61,22 @@ function toRadians(degrees) {
   return degrees * (Math.PI / 180)
 }
 
+// Helper: Normalize feedback text field (trim, cap at 500 chars, empty → null)
+function normalizeFeedbackText(text) {
+  if (typeof text !== 'string') {
+    return null
+  }
+  
+  const trimmed = text.trim()
+  
+  if (trimmed.length === 0) {
+    return null
+  }
+  
+  // Cap at 500 characters
+  return trimmed.substring(0, 500)
+}
+
 // Helper: Detect if input text describes multiple time slots
 // Uses heuristics to identify multiple day/date/time patterns
 function detectMultipleTimeSlots(text) {
@@ -1405,16 +1421,21 @@ app.post('/v1/feedback/submit', writeLimiter, async (req, res) => {
       })
     }
 
+    // Normalize feedback text fields
+    const normalizedLiked = normalizeFeedbackText(answers.liked)
+    const normalizedDisliked = normalizeFeedbackText(answers.disliked)
+
     // Store feedback
     const feedback = await storeFeedback({
       attendanceId: attendance.attendanceId,
       eventId: attendance.eventId,
       answers: {
-        liked: answers.liked || '',
-        disliked: answers.disliked || '',
+        liked: normalizedLiked,
+        disliked: normalizedDisliked,
         wantsSimilar: Boolean(answers.wantsSimilar)
       },
-      brokerageAffiliation: brokerageAffiliation || null
+      brokerageAffiliation: brokerageAffiliation || null,
+      occurrenceId: attendance.occurrenceId || null
     })
 
     res.json({
@@ -1422,7 +1443,8 @@ app.post('/v1/feedback/submit', writeLimiter, async (req, res) => {
       feedback: {
         feedbackId: feedback.feedbackId,
         eventId: feedback.eventId,
-        createdAt: feedback.createdAt
+        createdAt: feedback.createdAt,
+        occurrenceId: feedback.occurrenceId
       }
     })
   } catch (error) {
