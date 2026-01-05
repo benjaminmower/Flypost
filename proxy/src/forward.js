@@ -43,6 +43,7 @@ const allowedOrigins = Array.from(
       .filter(Boolean)),
     'https://flypost.netlify.app',
     'https://app.goflypost.com',
+    'https://presence.goflypost.com',
     'http://localhost:5173'
   ])
 )
@@ -141,6 +142,34 @@ module.exports = function createForward() {
     )
 
     try {
+      //-------------------------------------
+      // Truth-writing origin restriction
+      // Presence and feedback endpoints require presence.goflypost.com origin
+      //-------------------------------------
+      const isTruthEndpoint = 
+        req.method === 'POST' && 
+        (originalPath.startsWith('/v1/presence/') || originalPath.startsWith('/v1/feedback/'))
+      
+      if (isTruthEndpoint) {
+        const REQUIRED_ORIGIN = 'https://presence.goflypost.com'
+        
+        if (origin !== REQUIRED_ORIGIN) {
+          setCors(res, origin)
+          console.log(
+            `🔒 Truth endpoint ${originalPath} requires origin ${REQUIRED_ORIGIN}, ` +
+            `got: ${origin || 'missing'} (id=${requestId})`
+          )
+          return res.status(403).json({
+            success: false,
+            error: 'Forbidden: This endpoint requires presence.goflypost.com origin',
+            detail: `Truth-writing endpoints (presence/feedback) can only be accessed from the Presence web application`,
+            requestId
+          })
+        }
+        
+        console.log(`✅ Truth endpoint ${originalPath} - origin validated (id=${requestId})`)
+      }
+
       //-------------------------------------
       // Write authentication + tenancy derivation
       // Origin-gated auth policy:
