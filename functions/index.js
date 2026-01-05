@@ -32,7 +32,7 @@
  */
 
 import { initializeApp } from 'firebase-admin/app'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore } from 'firebase-admin/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { fromZonedTime, toZonedTime } from 'date-fns-tz'
 import { startOfWeek, addWeeks, format } from 'date-fns'
