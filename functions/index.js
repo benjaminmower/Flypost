@@ -22,7 +22,10 @@
  *     feedbackCount: number,           // Total feedback responses
  *     totalCheckIns: number,           // Total check-ins in weekly window (from attendance.createdAt)
  *     uniqueCheckInBuyers: number,     // Unique buyers who checked in (deduplicated by buyerToken)
- *     wantsSimilarCount: number,       // Number who want similar events
+ *     wantsSimilarCount: number,       // Number who want similar homes (new field)
+ *     wouldBuyYesCount: number,        // Buy intent: yes (includes legacy data)
+ *     wouldBuyMaybeCount: number,      // Buy intent: maybe
+ *     wouldBuyNoCount: number,         // Buy intent: no (includes legacy data)
  *     occurrenceIds: string[],         // List of occurrence IDs (if multi-slot)
  *     feedbackRate: number,            // feedbackCount / totalCheckIns (0 if no check-ins)
  *     eventAddress: string?,           // Optional: event address if available
@@ -32,6 +35,7 @@
  * 
  * Note: Events with check-ins but no feedback will appear with feedbackCount = 0
  * Sorted by totalCheckIns desc, then feedbackCount desc
+ * Legacy data handling: Old feedback with only wantsSimilar is mapped to wouldBuy (true->yes, false->no)
  * 
  * Privacy: No PII is logged. buyerToken, answers text, and contact info are never logged.
  */
@@ -295,16 +299,44 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
     if (!feedbackStatsByEventId.has(eventId)) {
       feedbackStatsByEventId.set(eventId, {
         feedbackCount: 0,
-        wantsSimilarCount: 0
+        wantsSimilarCount: 0,
+        wouldBuyYesCount: 0,
+        wouldBuyMaybeCount: 0,
+        wouldBuyNoCount: 0
       })
     }
     
     const stats = feedbackStatsByEventId.get(eventId)
     stats.feedbackCount++
     
-    // Track wantsSimilar
-    if (feedback.answers?.wantsSimilar === true) {
-      stats.wantsSimilarCount++
+    // Legacy data handling: if wouldBuy is missing but wantsSimilar exists,
+    // treat wantsSimilar as legacy wouldBuy intent
+    const hasWouldBuy = feedback.answers?.wouldBuy !== null && feedback.answers?.wouldBuy !== undefined
+    const hasWantsSimilar = feedback.answers?.wantsSimilar !== null && feedback.answers?.wantsSimilar !== undefined
+    
+    if (hasWouldBuy) {
+      // New data: use wouldBuy field
+      if (feedback.answers.wouldBuy === 'yes') {
+        stats.wouldBuyYesCount++
+      } else if (feedback.answers.wouldBuy === 'maybe') {
+        stats.wouldBuyMaybeCount++
+      } else if (feedback.answers.wouldBuy === 'no') {
+        stats.wouldBuyNoCount++
+      }
+      
+      // Also track wantsSimilar separately if present
+      if (feedback.answers.wantsSimilar === true) {
+        stats.wantsSimilarCount++
+      }
+    } else if (hasWantsSimilar) {
+      // Legacy data: map wantsSimilar to wouldBuy
+      // true => "yes", false => "no"
+      if (feedback.answers.wantsSimilar === true) {
+        stats.wouldBuyYesCount++
+      } else if (feedback.answers.wantsSimilar === false) {
+        stats.wouldBuyNoCount++
+      }
+      // Do NOT count legacy wantsSimilar in wantsSimilarCount
     }
   }
   
@@ -329,6 +361,9 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
       totalCheckIns,
       uniqueCheckInBuyers: attendanceStats?.uniqueCheckInBuyers.size || 0,
       wantsSimilarCount: feedbackStats?.wantsSimilarCount || 0,
+      wouldBuyYesCount: feedbackStats?.wouldBuyYesCount || 0,
+      wouldBuyMaybeCount: feedbackStats?.wouldBuyMaybeCount || 0,
+      wouldBuyNoCount: feedbackStats?.wouldBuyNoCount || 0,
       occurrenceIds: attendanceStats ? Array.from(attendanceStats.occurrenceIds) : [],
       feedbackRate: totalCheckIns === 0 ? 0 : feedbackCount / totalCheckIns
     }
@@ -423,11 +458,17 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
   let totalCheckIns = 0
   let totalFeedback = 0
   let totalWantsSimilar = 0
+  let totalWouldBuyYes = 0
+  let totalWouldBuyMaybe = 0
+  let totalWouldBuyNo = 0
   
   for (const event of eventDigests) {
     totalCheckIns += event.totalCheckIns || 0
     totalFeedback += event.feedbackCount || 0
     totalWantsSimilar += event.wantsSimilarCount || 0
+    totalWouldBuyYes += event.wouldBuyYesCount || 0
+    totalWouldBuyMaybe += event.wouldBuyMaybeCount || 0
+    totalWouldBuyNo += event.wouldBuyNoCount || 0
   }
   
   // Build Markdown
@@ -435,7 +476,9 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
   lines.push('## Weekly Open House Digest (Mon–Mon)')
   lines.push('')
   lines.push(`**Week:** ${startDate} → ${endDate}`)
-  lines.push(`**Totals:** ${totalCheckIns} verified check-ins • ${totalFeedback} feedback • ${totalWantsSimilar} wants similar`)
+  lines.push(`**Totals:** ${totalCheckIns} verified check-ins • ${totalFeedback} feedback`)
+  lines.push(`**Buy Intent:** ${totalWouldBuyYes} yes • ${totalWouldBuyMaybe} maybe • ${totalWouldBuyNo} no`)
+  lines.push(`**Wants similar homes:** ${totalWantsSimilar}`)
   lines.push('')
   
   // List events
@@ -462,6 +505,9 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
         ? 0 
         : Math.floor((event.feedbackCount / event.totalCheckIns) * 100)
       lines.push(`**Feedback submitted:** ${event.feedbackCount} (${feedbackPercent}%)`)
+      
+      // Buy intent breakdown
+      lines.push(`**Buy intent:** ${event.wouldBuyYesCount} yes • ${event.wouldBuyMaybeCount} maybe • ${event.wouldBuyNoCount} no`)
       
       // Wants similar
       lines.push(`**Wants similar:** ${event.wantsSimilarCount}`)

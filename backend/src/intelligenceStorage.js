@@ -93,6 +93,10 @@ export async function storeAttendance(attendanceData) {
  * @param {string} feedbackData.attendanceId - Linked attendance record
  * @param {string} feedbackData.eventId - Event identifier (denormalized)
  * @param {object} feedbackData.answers - Feedback answers
+ * @param {string|null} [feedbackData.answers.liked] - What the buyer liked
+ * @param {string|null} [feedbackData.answers.disliked] - What the buyer disliked
+ * @param {boolean|null} [feedbackData.answers.wantsSimilar] - Whether they want similar homes
+ * @param {string|null} [feedbackData.answers.wouldBuy] - Buy intent: "yes"|"maybe"|"no"
  * @param {string} [feedbackData.brokerageAffiliation] - Optional brokerage affiliation
  * @param {string} [feedbackData.occurrenceId] - Optional occurrence identifier
  * @returns {Promise<object>} - Stored feedback record
@@ -107,11 +111,18 @@ export async function storeFeedback(feedbackData) {
     answers: {
       liked: feedbackData.answers.liked || null,
       disliked: feedbackData.answers.disliked || null,
-      wantsSimilar: feedbackData.answers.wantsSimilar || false
+      wantsSimilar: feedbackData.answers.hasOwnProperty('wantsSimilar') 
+        ? feedbackData.answers.wantsSimilar 
+        : false
     },
     brokerageAffiliation: feedbackData.brokerageAffiliation || null,
     occurrenceId: feedbackData.occurrenceId || null,
     createdAt: new Date().toISOString()
+  }
+  
+  // Include wouldBuy if provided
+  if (feedbackData.answers.hasOwnProperty('wouldBuy')) {
+    feedback.answers.wouldBuy = feedbackData.answers.wouldBuy
   }
   
   // Store in memory
