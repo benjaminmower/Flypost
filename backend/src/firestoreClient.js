@@ -120,6 +120,11 @@ function extractListingUrl(event) {
  * Save occurrence documents for an event
  * Persists each occurrence as a subcollection document under events/{eventId}/occurrences/{occurrenceId}
  * Enforces lock semantics: locked occurrences cannot have identity fields updated
+ * 
+ * Note: Each occurrence is saved in a separate transaction for simplicity and fault tolerance.
+ * While batching would be more efficient, separate transactions ensure that one failure
+ * doesn't prevent other occurrences from being saved, and keeps the code surgical.
+ * 
  * @param {object} event - The event object with occurrences array
  * @returns {Promise<void>}
  */
@@ -207,6 +212,12 @@ export async function saveOccurrences(event) {
  * Lock an occurrence document when first attendance is recorded
  * Marks the occurrence as immutable for identity fields
  * Uses merge semantics to avoid overwriting existing locks
+ * 
+ * Note: Multiple concurrent lock calls may set different timestamps, but this is acceptable
+ * because the presence of any lockedAt value (regardless of exact timestamp) provides
+ * the identity protection guarantee. The first lock wins semantically even if a later
+ * timestamp is written.
+ * 
  * @param {string} eventId - The event ID
  * @param {string} occurrenceId - The occurrence ID
  * @returns {Promise<void>}
