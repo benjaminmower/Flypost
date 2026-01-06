@@ -61,9 +61,24 @@ function calculateTimeframe(timeframe, customStart = null, customEnd = null) {
     case 'weekend': {
       // Get current time in PT timezone
       const nowInPT = toZonedTime(now, TIMEZONE)
-      // Next Saturday and Sunday in PT timezone
-      const saturdayPT = nextSaturday(nowInPT)
-      const sundayPT = nextSunday(nowInPT)
+      // Get next Saturday and Sunday, handling case where today is already Sat/Sun
+      let saturdayPT = nextSaturday(nowInPT)
+      let sundayPT = nextSunday(nowInPT)
+      
+      // If today is Saturday or Sunday, nextSaturday/nextSunday returns next week
+      // Check the day of week and adjust if needed
+      const dayOfWeek = nowInPT.getDay() // 0=Sunday, 6=Saturday
+      if (dayOfWeek === 6) {
+        // Today is Saturday, use today
+        saturdayPT = nowInPT
+        // Sunday is tomorrow
+        sundayPT = nextSunday(nowInPT)
+      } else if (dayOfWeek === 0) {
+        // Today is Sunday, weekend has started - use yesterday's Saturday and today
+        saturdayPT = nextSaturday(nowInPT)
+        sundayPT = nowInPT
+      }
+      
       const startOfSaturdayPT = startOfDay(saturdayPT)
       const endOfSundayPT = endOfDay(sundayPT)
       // Convert back to UTC
