@@ -11,7 +11,8 @@ let feedbackUrl = null
 // DOM elements
 let viewCheckIn, viewSuccess, viewFeedback
 let btnCheckIn, statusMsg, smsLink
-let thumbUp, thumbDown, wantsSimilarInput
+let buyYes, buyMaybe, buyNo, wouldBuyInput
+let similarYes, similarNo, wantsSimilarInput
 
 function showNotification(message, type = 'info') {
   const notification = document.createElement('div')
@@ -63,14 +64,21 @@ async function handleCheckIn() {
 async function handleFeedbackSubmit() {
   const liked = document.getElementById('feedback-liked')?.value || ''
   const disliked = document.getElementById('feedback-disliked')?.value || ''
-  const wantsSimilar = wantsSimilarInput?.value === "true"
+  const wouldBuy = wouldBuyInput?.value || null
+  const wantsSimilar = wantsSimilarInput?.value === "true" ? true : 
+                       wantsSimilarInput?.value === "false" ? false : null
 
   if (!currentAttendanceId) return showNotification('Check in first', 'error')
 
   try {
     const btn = document.getElementById('btn-submit-feedback')
     btn.disabled = true; btn.textContent = 'Sending...'
-    const res = await submitFeedback(currentAttendanceId, { liked, disliked, wantsSimilar })
+    const res = await submitFeedback(currentAttendanceId, { 
+      liked, 
+      disliked, 
+      wantsSimilar,
+      wouldBuy
+    })
     if (res.success) {
       showNotification('Thank you!', 'success')
       setTimeout(() => window.location.href = 'https://ask.goflypost.com', 1500)
@@ -88,8 +96,16 @@ function init() {
   btnCheckIn = document.getElementById('btn-checkin')
   statusMsg = document.getElementById('status-msg')
   smsLink = document.getElementById('sms-link')
-  thumbUp = document.getElementById('thumb-up')
-  thumbDown = document.getElementById('thumb-down')
+  
+  // wouldBuy elements (3-way)
+  buyYes = document.getElementById('buy-yes')
+  buyMaybe = document.getElementById('buy-maybe')
+  buyNo = document.getElementById('buy-no')
+  wouldBuyInput = document.getElementById('feedback-wouldBuy')
+  
+  // wantsSimilar elements (2-way)
+  similarYes = document.getElementById('similar-yes')
+  similarNo = document.getElementById('similar-no')
   wantsSimilarInput = document.getElementById('feedback-wantsSimilar')
 
   btnCheckIn?.addEventListener('click', handleCheckIn)
@@ -99,14 +115,36 @@ function init() {
   document.getElementById('btn-open-feedback')?.addEventListener('click', () => showView('feedback'))
   document.getElementById('btn-submit-feedback')?.addEventListener('click', handleFeedbackSubmit)
 
-  // Emoji Toggle Logic
-  thumbUp?.addEventListener('click', () => {
-    if (wantsSimilarInput) wantsSimilarInput.value = "true"
-    thumbUp.classList.add('thumb-active'); thumbDown.classList.remove('thumb-active')
+  // wouldBuy emoji toggle logic (3-way)
+  buyYes?.addEventListener('click', () => {
+    if (wouldBuyInput) wouldBuyInput.value = "yes"
+    buyYes.classList.add('thumb-active')
+    buyMaybe.classList.remove('thumb-active')
+    buyNo.classList.remove('thumb-active')
   })
-  thumbDown?.addEventListener('click', () => {
+  buyMaybe?.addEventListener('click', () => {
+    if (wouldBuyInput) wouldBuyInput.value = "maybe"
+    buyYes.classList.remove('thumb-active')
+    buyMaybe.classList.add('thumb-active')
+    buyNo.classList.remove('thumb-active')
+  })
+  buyNo?.addEventListener('click', () => {
+    if (wouldBuyInput) wouldBuyInput.value = "no"
+    buyYes.classList.remove('thumb-active')
+    buyMaybe.classList.remove('thumb-active')
+    buyNo.classList.add('thumb-active')
+  })
+  
+  // wantsSimilar emoji toggle logic (2-way)
+  similarYes?.addEventListener('click', () => {
+    if (wantsSimilarInput) wantsSimilarInput.value = "true"
+    similarYes.classList.add('thumb-active')
+    similarNo.classList.remove('thumb-active')
+  })
+  similarNo?.addEventListener('click', () => {
     if (wantsSimilarInput) wantsSimilarInput.value = "false"
-    thumbDown.classList.add('thumb-active'); thumbUp.classList.remove('thumb-active')
+    similarYes.classList.remove('thumb-active')
+    similarNo.classList.add('thumb-active')
   })
 
   const feedbackMatch = window.location.pathname.match(/^\/f\/([^/]+)$/)
