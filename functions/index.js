@@ -245,10 +245,10 @@ async function batchQueryOccurrences(occurrencePairs) {
  * @param {Array} feedbackDocs - Array of feedback documents
  * @param {Array} attendanceDocs - Array of attendance documents from weekly window
  * @param {Map<string, object>} eventMap - Map of event data
- * @param {Map<string, object>} occurrenceMap - Map of occurrence data (key: "eventId|occurrenceId")
+ * @param {Map<string, object>} [occurrenceMap] - Map of occurrence data (key: "eventId|occurrenceId"), optional for backward compatibility
  * @returns {Array} - Array of event digests
  */
-function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, occurrenceMap) {
+function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, occurrenceMap = new Map()) {
   // Build attendance-based stats per eventId
   const attendanceStatsByEventId = new Map()
   
