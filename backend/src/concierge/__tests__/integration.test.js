@@ -1,77 +1,11 @@
 /**
  * Integration test for event enrichment with local times
  * Run with: node backend/src/concierge/__tests__/integration.test.js
+ * 
+ * NOTE: Uses testUtils.js to share test code without requiring npm dependencies
  */
 
-/**
- * Format event times in local timezone for display
- */
-function formatLocalTime(startISO, endISO, timezone) {
-  if (!startISO || !endISO || !timezone) {
-    return null
-  }
-
-  try {
-    const startDate = new Date(startISO)
-    const endDate = new Date(endISO)
-
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      return null
-    }
-
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: timezone
-    })
-
-    const startTimeLocal = formatter.format(startDate)
-    const endTimeLocal = formatter.format(endDate)
-
-    const tzFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZoneName: 'short',
-      timeZone: timezone
-    })
-    const tzParts = tzFormatter.formatToParts(startDate)
-    const tzName = tzParts.find(part => part.type === 'timeZoneName')?.value || ''
-
-    return `${startTimeLocal} – ${endTimeLocal} ${tzName}`.trim()
-  } catch (error) {
-    console.error('Error formatting local time:', error)
-    return null
-  }
-}
-
-/**
- * Enrich events with local time display strings
- */
-function enrichEventsWithLocalTime(events) {
-  if (!events || !Array.isArray(events)) {
-    return events
-  }
-
-  return events.map(event => {
-    if (event.when && event.when.start && event.when.end && event.when.timezone) {
-      const displayLocal = formatLocalTime(
-        event.when.start,
-        event.when.end,
-        event.when.timezone
-      )
-      
-      if (displayLocal) {
-        return {
-          ...event,
-          when: {
-            ...event.when,
-            displayLocal
-          }
-        }
-      }
-    }
-    return event
-  })
-}
+import { formatLocalTime, enrichEventsWithLocalTime } from './testUtils.js'
 
 // Simulate what the API returns (Discovery V1 format)
 const mockAPIResponse = {
