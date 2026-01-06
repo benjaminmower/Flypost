@@ -105,7 +105,6 @@ function testShouldMergeWithoutAttendance() {
 }
 
 // Test 4: eventHasAttendance returns false when Firestore is disabled
-// Test 4: eventHasAttendance returns false when Firestore is disabled
 async function testAttendanceCheckWhenFirestoreDisabled() {
   console.log('Test 4: eventHasAttendance returns false when Firestore is disabled')
   
