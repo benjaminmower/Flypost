@@ -175,21 +175,17 @@ export function toDiscoveryEventV1(event, options = {}) {
   }
 
   // Optional: where.address (flattened, max 200 chars)
+  // Include full street-level address for all tiers (no redaction)
   if (event.location?.address) {
     const addr = event.location.address
     const parts = []
 
-    if (isPublicTier) {
-      if (addr.addressLocality) parts.push(addr.addressLocality)
-      if (addr.addressRegion) parts.push(addr.addressRegion)
-      if (addr.addressCountry) parts.push(addr.addressCountry)
-    } else {
-      if (addr.streetAddress) parts.push(addr.streetAddress)
-      if (addr.addressLocality) parts.push(addr.addressLocality)
-      if (addr.addressRegion) parts.push(addr.addressRegion)
-      if (addr.postalCode) parts.push(addr.postalCode)
-      if (addr.addressCountry) parts.push(addr.addressCountry)
-    }
+    // Always include full address (street + locality + region + postal + country)
+    if (addr.streetAddress) parts.push(addr.streetAddress)
+    if (addr.addressLocality) parts.push(addr.addressLocality)
+    if (addr.addressRegion) parts.push(addr.addressRegion)
+    if (addr.postalCode) parts.push(addr.postalCode)
+    if (addr.addressCountry) parts.push(addr.addressCountry)
 
     const addressStr = parts.join(', ')
     if (addressStr.length > 0) {
@@ -204,6 +200,12 @@ export function toDiscoveryEventV1(event, options = {}) {
   if (!startUTC || !endUTC) return null
 
   const when = { start: startUTC, end: endUTC }
+  
+  // Optional: timezone (IANA timezone string)
+  // Source from event.flypost.timezone if available
+  if (event.flypost?.timezone && typeof event.flypost.timezone === 'string') {
+    when.timezone = event.flypost.timezone
+  }
 
   // Required: externalListingUrl key must exist (nullable)
   let externalListingUrl = null
