@@ -322,6 +322,80 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap) 
 }
 
 /**
+ * Build a broker-facing Markdown summary from the weekly digest data
+ * 
+ * @param {object} params - Parameters
+ * @param {string} params.windowStartIso - Start of window in UTC ISO format
+ * @param {string} params.windowEndIso - End of window in UTC ISO format
+ * @param {Array} params.eventDigests - Array of event digests
+ * @returns {string} - Markdown-formatted summary
+ */
+function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventDigests }) {
+  // Format dates in LA timezone for broker readability
+  const dateFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: LA_TIMEZONE,
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric'
+  })
+  
+  const startDate = dateFormatter.format(new Date(windowStartIso))
+  const endDate = dateFormatter.format(new Date(windowEndIso))
+  
+  // Calculate totals
+  let totalCheckIns = 0
+  let totalFeedback = 0
+  let totalWantsSimilar = 0
+  
+  for (const event of eventDigests) {
+    totalCheckIns += event.totalCheckIns || 0
+    totalFeedback += event.feedbackCount || 0
+    totalWantsSimilar += event.wantsSimilarCount || 0
+  }
+  
+  // Build Markdown
+  const lines = []
+  lines.push('## Weekly Open House Digest (Mon–Mon)')
+  lines.push('')
+  lines.push(`**Week:** ${startDate} → ${endDate}`)
+  lines.push(`**Totals:** ${totalCheckIns} verified check-ins • ${totalFeedback} feedback • ${totalWantsSimilar} wants similar`)
+  lines.push('')
+  
+  // List events
+  if (eventDigests.length === 0) {
+    lines.push('_No events with check-ins this week._')
+  } else {
+    for (const event of eventDigests) {
+      // Event heading: use address if available, otherwise eventId
+      const heading = event.eventAddress || event.eventId
+      lines.push(`### ${heading}`)
+      lines.push('')
+      
+      // Listing URL if present
+      if (event.listingUrl) {
+        lines.push(`📍 ${event.listingUrl}`)
+        lines.push('')
+      }
+      
+      // Check-ins
+      lines.push(`**Verified check-ins:** ${event.totalCheckIns} (unique buyers: ${event.uniqueCheckInBuyers})`)
+      
+      // Feedback with percent
+      const feedbackPercent = event.totalCheckIns === 0 
+        ? 0 
+        : Math.floor((event.feedbackCount / event.totalCheckIns) * 100)
+      lines.push(`**Feedback submitted:** ${event.feedbackCount} (${feedbackPercent}%)`)
+      
+      // Wants similar
+      lines.push(`**Wants similar:** ${event.wantsSimilarCount}`)
+      lines.push('')
+    }
+  }
+  
+  return lines.join('\n')
+}
+
+/**
  * Persist the weekly digest to Firestore
  * 
  * @param {string} docId - Document ID (YYYY-MM-DD format)
@@ -370,7 +444,12 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
         windowStartIso,
         windowEndIso,
         generatedAtIso: new Date().toISOString(),
-        eventDigests: []
+        eventDigests: [],
+        summaryMarkdown: buildWeeklyDigestSummaryMarkdown({
+          windowStartIso,
+          windowEndIso,
+          eventDigests: []
+        })
       }
       await persistDigest(docId, emptyDigest)
       console.log(`=== Digest generation complete (empty) - Total time: ${Date.now() - startTime}ms ===`)
@@ -401,18 +480,28 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
     const eventDigests = aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap)
     console.log(`Step 4 complete: Aggregated ${eventDigests.length} event digests (${Date.now() - startTime}ms elapsed)`)
     
+    // Build Markdown summary
+    console.log('Step 5: Building Markdown summary...')
+    const summaryMarkdown = buildWeeklyDigestSummaryMarkdown({
+      windowStartIso,
+      windowEndIso,
+      eventDigests
+    })
+    console.log(`Step 5 complete: Generated Markdown summary (${Date.now() - startTime}ms elapsed)`)
+    
     // Build final digest
     const digest = {
       windowStartIso,
       windowEndIso,
       generatedAtIso: new Date().toISOString(),
-      eventDigests
+      eventDigests,
+      summaryMarkdown
     }
     
     // Persist to Firestore
-    console.log('Step 5: Persisting digest to Firestore...')
+    console.log('Step 6: Persisting digest to Firestore...')
     await persistDigest(docId, digest)
-    console.log(`Step 5 complete: Digest persisted (${Date.now() - startTime}ms elapsed)`)
+    console.log(`Step 6 complete: Digest persisted (${Date.now() - startTime}ms elapsed)`)
     
     const totalTime = Date.now() - startTime
     console.log('=== Digest generation complete ===')
@@ -432,7 +521,8 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
       windowEndIso,
       eventCount: eventDigests.length,
       feedbackCount: feedbackDocs.length,
-      executionTimeMs: totalTime
+      executionTimeMs: totalTime,
+      summaryMarkdown
     }
   } catch (error) {
     const totalTime = Date.now() - startTime
@@ -504,7 +594,8 @@ export const generateWeeklyFeedbackDigestHttp = onRequest(
         eventCount: result.eventCount,
         feedbackCount: result.feedbackCount,
         executionTimeMs: result.executionTimeMs,
-        executionTimeSec: (result.executionTimeMs / 1000).toFixed(2)
+        executionTimeSec: (result.executionTimeMs / 1000).toFixed(2),
+        summaryMarkdown: result.summaryMarkdown
       })
     } catch (error) {
       console.error('Error in HTTP-triggered digest generation:', error)
