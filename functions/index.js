@@ -51,6 +51,34 @@ const LA_TIMEZONE = 'America/Los_Angeles'
 const DIGEST_TRIGGER_TOKEN = defineSecret('DIGEST_TRIGGER_TOKEN')
 
 /**
+ * Constant-time string comparison to prevent timing attacks
+ * @param {string} a - First string
+ * @param {string} b - Second string
+ * @returns {boolean} - True if strings are equal
+ * @private
+ */
+function constantTimeCompare(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') {
+    return false
+  }
+  
+  // If lengths differ, still compare to avoid leaking length info
+  const aLen = a.length
+  const bLen = b.length
+  const maxLen = Math.max(aLen, bLen)
+  
+  let result = aLen === bLen ? 0 : 1
+  
+  for (let i = 0; i < maxLen; i++) {
+    const aChar = i < aLen ? a.charCodeAt(i) : 0
+    const bChar = i < bLen ? b.charCodeAt(i) : 0
+    result |= aChar ^ bChar
+  }
+  
+  return result === 0
+}
+
+/**
  * Calculate the weekly window boundaries for the prior week
  * Returns start and end times as UTC ISO strings
  * Week runs from Monday 00:00 LA to next Monday 00:00 LA
@@ -287,12 +315,13 @@ async function persistDigest(docId, digest) {
 }
 
 /**
- * Shared digest generation logic
+ * Shared digest generation logic (internal, not exported)
  * Used by both scheduled and HTTP-triggered functions
  * 
  * @param {object} options - Options object
  * @param {Date} options.now - Current date/time (defaults to now)
  * @returns {Promise<object>} - Digest result with metadata
+ * @private
  */
 async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
   const startTime = Date.now()
@@ -433,7 +462,8 @@ export const generateWeeklyFeedbackDigestHttp = onRequest(
     const providedToken = req.get('X-Digest-Token')
     const expectedToken = DIGEST_TRIGGER_TOKEN.value()
     
-    if (!providedToken || providedToken !== expectedToken) {
+    // Use constant-time comparison to prevent timing attacks
+    if (!providedToken || !constantTimeCompare(providedToken, expectedToken)) {
       console.warn('Unauthorized digest trigger attempt')
       res.status(401).json({
         ok: false,
