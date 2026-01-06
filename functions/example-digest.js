@@ -53,37 +53,57 @@ const sampleFeedback = [
   }
 ]
 
-// Sample attendance data
-const sampleAttendance = new Map([
-  ['att_a', {
+// Sample attendance data from weekly window (as array, not map)
+const sampleAttendance = [
+  {
     attendanceId: 'att_a',
     eventId: 'evt_123',
     buyerToken: 'buyer_001',
     checkInTime: '2025-12-30T09:45:00.000Z',
+    createdAt: '2025-12-30T09:45:00.000Z',
     occurrenceId: 'occ_slot1'
-  }],
-  ['att_b', {
+  },
+  {
     attendanceId: 'att_b',
     eventId: 'evt_123',
     buyerToken: 'buyer_002',
     checkInTime: '2025-12-30T11:20:00.000Z',
+    createdAt: '2025-12-30T11:20:00.000Z',
     occurrenceId: 'occ_slot1'
-  }],
-  ['att_c', {
+  },
+  {
     attendanceId: 'att_c',
     eventId: 'evt_456',
     buyerToken: 'buyer_003',
     checkInTime: '2026-01-02T14:50:00.000Z',
+    createdAt: '2026-01-02T14:50:00.000Z',
     occurrenceId: null
-  }],
-  ['att_d', {
+  },
+  {
     attendanceId: 'att_d',
     eventId: 'evt_123',
     buyerToken: 'buyer_001', // Same buyer as att_a
     checkInTime: '2026-01-03T13:55:00.000Z',
+    createdAt: '2026-01-03T13:55:00.000Z',
     occurrenceId: 'occ_slot2'
-  }]
-])
+  },
+  {
+    attendanceId: 'att_e',
+    eventId: 'evt_789', // Event with attendance but no feedback
+    buyerToken: 'buyer_004',
+    checkInTime: '2026-01-04T10:00:00.000Z',
+    createdAt: '2026-01-04T10:00:00.000Z',
+    occurrenceId: null
+  },
+  {
+    attendanceId: 'att_f',
+    eventId: 'evt_789', // Second check-in for same event
+    buyerToken: 'buyer_005',
+    checkInTime: '2026-01-04T11:00:00.000Z',
+    createdAt: '2026-01-04T11:00:00.000Z',
+    occurrenceId: null
+  }
+]
 
 // Sample event data
 const sampleEvents = new Map([
@@ -114,72 +134,99 @@ const sampleEvents = new Map([
       }
     },
     url: 'https://example.com/listing/456'
+  }],
+  ['evt_789', {
+    eventId: 'evt_789',
+    name: 'Open House - 789 Pine St',
+    location: {
+      address: {
+        streetAddress: '789 Pine St',
+        city: 'Venice',
+        state: 'CA',
+        postalCode: '90291'
+      }
+    },
+    url: 'https://example.com/listing/789'
   }]
 ])
 
 /**
- * Aggregate feedback by eventId (same logic as in index.js)
+ * Aggregate feedback and attendance by eventId (same logic as in index.js)
  */
-function aggregateFeedback(feedbackDocs, attendanceMap, eventMap) {
-  const eventStats = new Map()
+function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap) {
+  // Build attendance-based stats per eventId
+  const attendanceStatsByEventId = new Map()
   
-  // Aggregate feedback by eventId
+  for (const attendance of attendanceDocs) {
+    const eventId = attendance.eventId
+    
+    if (!attendanceStatsByEventId.has(eventId)) {
+      attendanceStatsByEventId.set(eventId, {
+        totalCheckIns: 0,
+        uniqueCheckInBuyers: new Set(),
+        occurrenceIds: new Set()
+      })
+    }
+    
+    const stats = attendanceStatsByEventId.get(eventId)
+    stats.totalCheckIns++
+    
+    // Track unique buyers (without logging PII)
+    if (attendance.buyerToken) {
+      stats.uniqueCheckInBuyers.add(attendance.buyerToken)
+    }
+    
+    // Track occurrences (excluding null)
+    if (attendance.occurrenceId) {
+      stats.occurrenceIds.add(attendance.occurrenceId)
+    }
+  }
+  
+  // Build feedback-based stats per eventId
+  const feedbackStatsByEventId = new Map()
+  
   for (const feedback of feedbackDocs) {
     const eventId = feedback.eventId
     
-    if (!eventStats.has(eventId)) {
-      eventStats.set(eventId, {
-        eventId,
+    if (!feedbackStatsByEventId.has(eventId)) {
+      feedbackStatsByEventId.set(eventId, {
         feedbackCount: 0,
-        buyerTokens: new Set(),
-        occurrenceIds: new Set(),
         wantsSimilarCount: 0
       })
     }
     
-    const stats = eventStats.get(eventId)
+    const stats = feedbackStatsByEventId.get(eventId)
     stats.feedbackCount++
     
     // Track wantsSimilar
     if (feedback.answers?.wantsSimilar === true) {
       stats.wantsSimilarCount++
     }
-    
-    // Get attendance data for this feedback
-    const attendance = attendanceMap.get(feedback.attendanceId)
-    if (attendance) {
-      // Track unique buyers (without logging PII)
-      if (attendance.buyerToken) {
-        stats.buyerTokens.add(attendance.buyerToken)
-      }
-      
-      // Track occurrences
-      if (attendance.occurrenceId) {
-        stats.occurrenceIds.add(attendance.occurrenceId)
-      }
-    }
   }
   
-  // Count total check-ins per event
-  const eventCheckInCounts = new Map()
-  for (const [attendanceId, attendance] of attendanceMap.entries()) {
-    const eventId = attendance.eventId
-    if (!eventCheckInCounts.has(eventId)) {
-      eventCheckInCounts.set(eventId, 0)
-    }
-    eventCheckInCounts.set(eventId, eventCheckInCounts.get(eventId) + 1)
-  }
+  // Get UNION of all eventIds
+  const allEventIds = new Set([
+    ...attendanceStatsByEventId.keys(),
+    ...feedbackStatsByEventId.keys()
+  ])
   
   // Build final event digests
   const eventDigests = []
-  for (const [eventId, stats] of eventStats.entries()) {
+  for (const eventId of allEventIds) {
+    const attendanceStats = attendanceStatsByEventId.get(eventId)
+    const feedbackStats = feedbackStatsByEventId.get(eventId)
+    
+    const totalCheckIns = attendanceStats?.totalCheckIns || 0
+    const feedbackCount = feedbackStats?.feedbackCount || 0
+    
     const digest = {
       eventId,
-      feedbackCount: stats.feedbackCount,
-      uniqueBuyers: stats.buyerTokens.size,
-      totalCheckIns: eventCheckInCounts.get(eventId) || 0,
-      wantsSimilarCount: stats.wantsSimilarCount,
-      occurrenceIds: Array.from(stats.occurrenceIds)
+      feedbackCount,
+      totalCheckIns,
+      uniqueCheckInBuyers: attendanceStats?.uniqueCheckInBuyers.size || 0,
+      wantsSimilarCount: feedbackStats?.wantsSimilarCount || 0,
+      occurrenceIds: attendanceStats ? Array.from(attendanceStats.occurrenceIds) : [],
+      feedbackRate: totalCheckIns === 0 ? 0 : feedbackCount / totalCheckIns
     }
     
     // Enrich with event data if available
@@ -207,8 +254,13 @@ function aggregateFeedback(feedbackDocs, attendanceMap, eventMap) {
     eventDigests.push(digest)
   }
   
-  // Sort by feedback count (descending)
-  eventDigests.sort((a, b) => b.feedbackCount - a.feedbackCount)
+  // Sort by totalCheckIns desc, then feedbackCount desc
+  eventDigests.sort((a, b) => {
+    if (b.totalCheckIns !== a.totalCheckIns) {
+      return b.totalCheckIns - a.totalCheckIns
+    }
+    return b.feedbackCount - a.feedbackCount
+  })
   
   return eventDigests
 }
@@ -217,11 +269,11 @@ function aggregateFeedback(feedbackDocs, attendanceMap, eventMap) {
 console.log('=== Weekly Feedback Digest Example ===\n')
 console.log(`Sample Data:`)
 console.log(`  - ${sampleFeedback.length} feedback submissions`)
-console.log(`  - ${sampleAttendance.size} attendance records`)
+console.log(`  - ${sampleAttendance.length} attendance records`)
 console.log(`  - ${sampleEvents.size} event documents`)
 console.log()
 
-const eventDigests = aggregateFeedback(sampleFeedback, sampleAttendance, sampleEvents)
+const eventDigests = aggregateFeedbackAndAttendance(sampleFeedback, sampleAttendance, sampleEvents)
 
 console.log('Generated Digest:\n')
 console.log(JSON.stringify({
@@ -232,14 +284,15 @@ console.log(JSON.stringify({
 }, null, 2))
 
 console.log('\n=== Summary ===')
-console.log(`Total events with feedback: ${eventDigests.length}`)
+console.log(`Total events: ${eventDigests.length}`)
 eventDigests.forEach((digest, i) => {
   console.log(`\nEvent ${i + 1}: ${digest.eventId}`)
   console.log(`  Address: ${digest.eventAddress || 'N/A'}`)
-  console.log(`  Feedback Count: ${digest.feedbackCount}`)
-  console.log(`  Unique Buyers: ${digest.uniqueBuyers}`)
   console.log(`  Total Check-ins: ${digest.totalCheckIns}`)
+  console.log(`  Feedback Count: ${digest.feedbackCount}`)
+  console.log(`  Unique Check-in Buyers: ${digest.uniqueCheckInBuyers}`)
   console.log(`  Want Similar: ${digest.wantsSimilarCount}`)
+  console.log(`  Feedback Rate: ${(digest.feedbackRate * 100).toFixed(1)}%`)
   console.log(`  Occurrences: ${digest.occurrenceIds.length > 0 ? digest.occurrenceIds.join(', ') : 'N/A'}`)
   console.log(`  Listing URL: ${digest.listingUrl || 'N/A'}`)
 })

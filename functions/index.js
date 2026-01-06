@@ -7,7 +7,7 @@
  * 
  * Collections used:
  * - feedback: Contains feedback documents with createdAt (ISO UTC string), eventId, attendanceId, answers
- * - attendance: Contains attendance documents with eventId, occurrenceId, checkInTime, buyerToken, presenceProof
+ * - attendance: Contains attendance documents with eventId, occurrenceId, checkInTime, buyerToken, presenceProof, createdAt
  * - events: Contains event documents (optional enrichment with address, listing URL)
  * - weeklyDigests: Output collection where digests are persisted as {YYYY-MM-DD} documents
  * 
@@ -17,16 +17,20 @@
  *   windowEndIso: string,          // End of the week in UTC ISO format
  *   generatedAtIso: string,        // When the digest was generated
  *   eventDigests: [{
- *     eventId: string,             // Event identifier
- *     feedbackCount: number,       // Total feedback responses
- *     uniqueBuyers: number,        // Unique buyers who provided feedback
- *     totalCheckIns: number,       // Total check-ins across all attendance records
- *     wantsSimilarCount: number,   // Number who want similar events
- *     occurrenceIds: string[],     // List of occurrence IDs (if multi-slot)
- *     eventAddress: string?,       // Optional: event address if available
- *     listingUrl: string?          // Optional: external listing URL if available
+ *     eventId: string,                 // Event identifier
+ *     feedbackCount: number,           // Total feedback responses
+ *     totalCheckIns: number,           // Total check-ins in weekly window (from attendance.createdAt)
+ *     uniqueCheckInBuyers: number,     // Unique buyers who checked in (deduplicated by buyerToken)
+ *     wantsSimilarCount: number,       // Number who want similar events
+ *     occurrenceIds: string[],         // List of occurrence IDs (if multi-slot)
+ *     feedbackRate: number,            // feedbackCount / totalCheckIns (0 if no check-ins)
+ *     eventAddress: string?,           // Optional: event address if available
+ *     listingUrl: string?              // Optional: external listing URL if available
  *   }]
  * }
+ * 
+ * Note: Events with check-ins but no feedback will appear with feedbackCount = 0
+ * Sorted by totalCheckIns desc, then feedbackCount desc
  * 
  * Privacy: No PII is logged. buyerToken, answers text, and contact info are never logged.
  */
@@ -136,35 +140,29 @@ async function queryFeedbackInWindow(windowStartIso, windowEndIso) {
 }
 
 /**
- * Batch query attendance records by attendanceId
- * Firestore 'in' operator is limited to 10 items per query
+ * Query attendance within the weekly window
+ * Uses string range filters on createdAt field
  * 
- * @param {string[]} attendanceIds - Array of attendance IDs
- * @returns {Promise<Map<string, object>>} - Map of attendanceId to attendance data
+ * @param {string} windowStartIso - Start of window (ISO UTC string)
+ * @param {string} windowEndIso - End of window (ISO UTC string)
+ * @returns {Promise<Array>} - Array of attendance documents
  */
-async function batchQueryAttendance(attendanceIds) {
-  if (attendanceIds.length === 0) {
-    return new Map()
-  }
+async function queryAttendanceInWindow(windowStartIso, windowEndIso) {
+  console.log(`Querying attendance between ${windowStartIso} and ${windowEndIso}`)
   
-  const attendanceMap = new Map()
   const attendanceRef = db.collection('attendance')
+  const snapshot = await attendanceRef
+    .where('createdAt', '>=', windowStartIso)
+    .where('createdAt', '<', windowEndIso)
+    .get()
   
-  // Split into batches of 10 (Firestore 'in' limit)
-  const BATCH_SIZE = 10
-  for (let i = 0; i < attendanceIds.length; i += BATCH_SIZE) {
-    const batch = attendanceIds.slice(i, i + BATCH_SIZE)
-    const snapshot = await attendanceRef
-      .where('__name__', 'in', batch)
-      .get()
-    
-    snapshot.forEach(doc => {
-      attendanceMap.set(doc.id, doc.data())
-    })
-  }
+  const attendanceDocs = []
+  snapshot.forEach(doc => {
+    attendanceDocs.push({ id: doc.id, ...doc.data() })
+  })
   
-  console.log(`Fetched ${attendanceMap.size} attendance records from ${attendanceIds.length} IDs`)
-  return attendanceMap
+  console.log(`Found ${attendanceDocs.length} attendance documents`)
+  return attendanceDocs
 }
 
 /**
@@ -202,70 +200,87 @@ async function batchQueryEvents(eventIds) {
 }
 
 /**
- * Aggregate feedback by eventId and compute stats
+ * Aggregate feedback and attendance data by eventId
  * 
  * @param {Array} feedbackDocs - Array of feedback documents
- * @param {Map<string, object>} attendanceMap - Map of attendance data
+ * @param {Array} attendanceDocs - Array of attendance documents from weekly window
  * @param {Map<string, object>} eventMap - Map of event data
  * @returns {Array} - Array of event digests
  */
-function aggregateFeedback(feedbackDocs, attendanceMap, eventMap) {
-  const eventStats = new Map()
+function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap) {
+  // Build attendance-based stats per eventId
+  const attendanceStatsByEventId = new Map()
   
-  // Aggregate feedback by eventId
+  for (const attendance of attendanceDocs) {
+    const eventId = attendance.eventId
+    
+    if (!attendanceStatsByEventId.has(eventId)) {
+      attendanceStatsByEventId.set(eventId, {
+        totalCheckIns: 0,
+        uniqueCheckInBuyers: new Set(),
+        occurrenceIds: new Set()
+      })
+    }
+    
+    const stats = attendanceStatsByEventId.get(eventId)
+    stats.totalCheckIns++
+    
+    // Track unique buyers (without logging PII)
+    if (attendance.buyerToken) {
+      stats.uniqueCheckInBuyers.add(attendance.buyerToken)
+    }
+    
+    // Track occurrences (excluding null)
+    if (attendance.occurrenceId) {
+      stats.occurrenceIds.add(attendance.occurrenceId)
+    }
+  }
+  
+  // Build feedback-based stats per eventId
+  const feedbackStatsByEventId = new Map()
+  
   for (const feedback of feedbackDocs) {
     const eventId = feedback.eventId
     
-    if (!eventStats.has(eventId)) {
-      eventStats.set(eventId, {
-        eventId,
+    if (!feedbackStatsByEventId.has(eventId)) {
+      feedbackStatsByEventId.set(eventId, {
         feedbackCount: 0,
-        buyerTokens: new Set(),
-        occurrenceIds: new Set(),
         wantsSimilarCount: 0
       })
     }
     
-    const stats = eventStats.get(eventId)
+    const stats = feedbackStatsByEventId.get(eventId)
     stats.feedbackCount++
     
     // Track wantsSimilar
     if (feedback.answers?.wantsSimilar === true) {
       stats.wantsSimilarCount++
     }
-    
-    // Get attendance data for this feedback
-    const attendance = attendanceMap.get(feedback.attendanceId)
-    if (attendance) {
-      // Track unique buyers (without logging PII)
-      if (attendance.buyerToken) {
-        stats.buyerTokens.add(attendance.buyerToken)
-      }
-      
-      // Track occurrences
-      if (attendance.occurrenceId) {
-        stats.occurrenceIds.add(attendance.occurrenceId)
-      }
-    }
   }
   
-  // Count total check-ins per event (all attendance records for these events)
-  const eventCheckInCounts = new Map()
-  for (const [attendanceId, attendance] of attendanceMap.entries()) {
-    const eventId = attendance.eventId
-    eventCheckInCounts.set(eventId, (eventCheckInCounts.get(eventId) || 0) + 1)
-  }
+  // Get UNION of all eventIds
+  const allEventIds = new Set([
+    ...attendanceStatsByEventId.keys(),
+    ...feedbackStatsByEventId.keys()
+  ])
   
   // Build final event digests
   const eventDigests = []
-  for (const [eventId, stats] of eventStats.entries()) {
+  for (const eventId of allEventIds) {
+    const attendanceStats = attendanceStatsByEventId.get(eventId)
+    const feedbackStats = feedbackStatsByEventId.get(eventId)
+    
+    const totalCheckIns = attendanceStats?.totalCheckIns || 0
+    const feedbackCount = feedbackStats?.feedbackCount || 0
+    
     const digest = {
       eventId,
-      feedbackCount: stats.feedbackCount,
-      uniqueBuyers: stats.buyerTokens.size,
-      totalCheckIns: eventCheckInCounts.get(eventId) || 0,
-      wantsSimilarCount: stats.wantsSimilarCount,
-      occurrenceIds: Array.from(stats.occurrenceIds)
+      feedbackCount,
+      totalCheckIns,
+      uniqueCheckInBuyers: attendanceStats?.uniqueCheckInBuyers.size || 0,
+      wantsSimilarCount: feedbackStats?.wantsSimilarCount || 0,
+      occurrenceIds: attendanceStats ? Array.from(attendanceStats.occurrenceIds) : [],
+      feedbackRate: totalCheckIns === 0 ? 0 : feedbackCount / totalCheckIns
     }
     
     // Enrich with event data if available
@@ -294,8 +309,13 @@ function aggregateFeedback(feedbackDocs, attendanceMap, eventMap) {
     eventDigests.push(digest)
   }
   
-  // Sort by feedback count (descending)
-  eventDigests.sort((a, b) => b.feedbackCount - a.feedbackCount)
+  // Sort by totalCheckIns desc, then feedbackCount desc
+  eventDigests.sort((a, b) => {
+    if (b.totalCheckIns !== a.totalCheckIns) {
+      return b.totalCheckIns - a.totalCheckIns
+    }
+    return b.feedbackCount - a.feedbackCount
+  })
   
   console.log(`Aggregated ${eventDigests.length} event digests`)
   return eventDigests
@@ -338,8 +358,14 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
     const feedbackDocs = await queryFeedbackInWindow(windowStartIso, windowEndIso)
     console.log(`Step 1 complete: Found ${feedbackDocs.length} feedback documents (${Date.now() - startTime}ms elapsed)`)
     
-    if (feedbackDocs.length === 0) {
-      console.log('No feedback in this window. Creating empty digest.')
+    // Query attendance in window
+    console.log('Step 2: Querying attendance...')
+    const attendanceDocs = await queryAttendanceInWindow(windowStartIso, windowEndIso)
+    console.log(`Step 2 complete: Found ${attendanceDocs.length} attendance documents (${Date.now() - startTime}ms elapsed)`)
+    
+    // If no feedback AND no attendance, create empty digest
+    if (feedbackDocs.length === 0 && attendanceDocs.length === 0) {
+      console.log('No feedback or attendance in this window. Creating empty digest.')
       const emptyDigest = {
         windowStartIso,
         windowEndIso,
@@ -359,27 +385,20 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
       }
     }
     
-    // Extract unique attendanceIds
-    const attendanceIds = [...new Set(feedbackDocs.map(f => f.attendanceId).filter(Boolean))]
-    console.log(`Step 2: Found ${attendanceIds.length} unique attendance IDs`)
-    
-    // Batch query attendance records
-    console.log('Step 2: Querying attendance records...')
-    const attendanceMap = await batchQueryAttendance(attendanceIds)
-    console.log(`Step 2 complete: Fetched ${attendanceMap.size} attendance records (${Date.now() - startTime}ms elapsed)`)
-    
-    // Extract unique eventIds
-    const eventIds = [...new Set(feedbackDocs.map(f => f.eventId).filter(Boolean))]
-    console.log(`Step 3: Found ${eventIds.length} unique event IDs`)
+    // Extract unique eventIds from both feedback and attendance
+    const feedbackEventIds = [...new Set(feedbackDocs.map(f => f.eventId).filter(Boolean))]
+    const attendanceEventIds = [...new Set(attendanceDocs.map(a => a.eventId).filter(Boolean))]
+    const allEventIds = [...new Set([...feedbackEventIds, ...attendanceEventIds])]
+    console.log(`Step 3: Found ${allEventIds.length} unique event IDs (${feedbackEventIds.length} from feedback, ${attendanceEventIds.length} from attendance)`)
     
     // Batch query events for enrichment
     console.log('Step 3: Querying event documents...')
-    const eventMap = await batchQueryEvents(eventIds)
+    const eventMap = await batchQueryEvents(allEventIds)
     console.log(`Step 3 complete: Fetched ${eventMap.size} event documents (${Date.now() - startTime}ms elapsed)`)
     
-    // Aggregate feedback
-    console.log('Step 4: Aggregating feedback...')
-    const eventDigests = aggregateFeedback(feedbackDocs, attendanceMap, eventMap)
+    // Aggregate feedback and attendance
+    console.log('Step 4: Aggregating feedback and attendance...')
+    const eventDigests = aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap)
     console.log(`Step 4 complete: Aggregated ${eventDigests.length} event digests (${Date.now() - startTime}ms elapsed)`)
     
     // Build final digest
@@ -399,6 +418,7 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
     console.log('=== Digest generation complete ===')
     console.log(`Total events: ${eventDigests.length}`)
     console.log(`Total feedback: ${feedbackDocs.length}`)
+    console.log(`Total attendance: ${attendanceDocs.length}`)
     console.log(`Total execution time: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
     
     // Warn if approaching timeout (540 seconds = 540000ms)
