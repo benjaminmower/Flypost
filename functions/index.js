@@ -201,16 +201,59 @@ async function batchQueryEvents(eventIds) {
 }
 
 /**
+ * Fetch occurrence documents for enrichment
+ * Returns a map of (eventId, occurrenceId) tuple key to occurrence data
+ * 
+ * @param {Array<{eventId: string, occurrenceId: string}>} occurrencePairs - Array of (eventId, occurrenceId) pairs
+ * @returns {Promise<Map<string, object>>} - Map of "eventId|occurrenceId" to occurrence data
+ */
+async function batchQueryOccurrences(occurrencePairs) {
+  if (occurrencePairs.length === 0) {
+    return new Map()
+  }
+  
+  const occurrenceMap = new Map()
+  
+  // Fetch each occurrence document individually
+  const promises = occurrencePairs.map(async ({ eventId, occurrenceId }) => {
+    try {
+      const occDocRef = db.collection('events')
+        .doc(eventId)
+        .collection('occurrences')
+        .doc(occurrenceId)
+      
+      const doc = await occDocRef.get()
+      if (doc.exists) {
+        const key = `${eventId}|${occurrenceId}`
+        occurrenceMap.set(key, doc.data())
+      }
+    } catch (error) {
+      // Log error but don't fail the entire digest
+      console.error(`Failed to fetch occurrence ${eventId}/${occurrenceId}:`, error.message)
+    }
+  })
+  
+  await Promise.all(promises)
+  
+  console.log(`Fetched ${occurrenceMap.size} occurrence documents from ${occurrencePairs.length} pairs`)
+  return occurrenceMap
+}
+
+/**
  * Aggregate feedback and attendance data by eventId
  * 
  * @param {Array} feedbackDocs - Array of feedback documents
  * @param {Array} attendanceDocs - Array of attendance documents from weekly window
  * @param {Map<string, object>} eventMap - Map of event data
+ * @param {Map<string, object>} occurrenceMap - Map of occurrence data (key: "eventId|occurrenceId")
  * @returns {Array} - Array of event digests
  */
-function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap) {
+function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, occurrenceMap) {
   // Build attendance-based stats per eventId
   const attendanceStatsByEventId = new Map()
+  
+  // Track (eventId, occurrenceId) pairs for occurrence enrichment preference
+  const eventOccurrencePairs = new Map() // eventId -> Set of occurrenceIds
   
   for (const attendance of attendanceDocs) {
     const eventId = attendance.eventId
@@ -234,6 +277,12 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap) 
     // Track occurrences (excluding null)
     if (attendance.occurrenceId) {
       stats.occurrenceIds.add(attendance.occurrenceId)
+      
+      // Track eventId -> occurrenceId mapping
+      if (!eventOccurrencePairs.has(eventId)) {
+        eventOccurrencePairs.set(eventId, new Set())
+      }
+      eventOccurrencePairs.get(eventId).add(attendance.occurrenceId)
     }
   }
   
@@ -284,26 +333,53 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap) 
       feedbackRate: totalCheckIns === 0 ? 0 : feedbackCount / totalCheckIns
     }
     
-    // Enrich with event data if available
-    const eventData = eventMap.get(eventId)
-    if (eventData) {
-      // Extract address
-      if (eventData.location?.address) {
-        const addr = eventData.location.address
-        // Build a simple address string (no PII from organizer contact)
-        const parts = [
-          addr.streetAddress,
-          addr.addressLocality || addr.city,
-          addr.addressRegion || addr.state
-        ].filter(Boolean)
-        digest.eventAddress = parts.join(', ')
+    // Enrichment: prefer occurrence docs, fallback to event doc
+    let enrichedFromOccurrence = false
+    
+    // Try to enrich from occurrence docs first
+    const occurrenceIds = eventOccurrencePairs.get(eventId)
+    if (occurrenceIds && occurrenceIds.size > 0) {
+      // Use the first occurrence we have data for
+      for (const occId of occurrenceIds) {
+        const occKey = `${eventId}|${occId}`
+        const occData = occurrenceMap.get(occKey)
+        
+        if (occData) {
+          // Populate from occurrence doc
+          if (occData.eventAddress) {
+            digest.eventAddress = occData.eventAddress
+          }
+          if (occData.listingUrl) {
+            digest.listingUrl = occData.listingUrl
+          }
+          enrichedFromOccurrence = true
+          break // Use first available occurrence
+        }
       }
-      
-      // Extract listing URL (from offers or other field)
-      if (eventData.offers?.url) {
-        digest.listingUrl = eventData.offers.url
-      } else if (eventData.url) {
-        digest.listingUrl = eventData.url
+    }
+    
+    // Fallback to event-level enrichment if no occurrence data available
+    if (!enrichedFromOccurrence) {
+      const eventData = eventMap.get(eventId)
+      if (eventData) {
+        // Extract address
+        if (eventData.location?.address) {
+          const addr = eventData.location.address
+          // Build a simple address string (no PII from organizer contact)
+          const parts = [
+            addr.streetAddress,
+            addr.addressLocality || addr.city,
+            addr.addressRegion || addr.state
+          ].filter(Boolean)
+          digest.eventAddress = parts.join(', ')
+        }
+        
+        // Extract listing URL (from offers or other field)
+        if (eventData.offers?.url) {
+          digest.listingUrl = eventData.offers.url
+        } else if (eventData.url) {
+          digest.listingUrl = eventData.url
+        }
       }
     }
     
@@ -471,14 +547,36 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
     const allEventIds = [...new Set([...feedbackEventIds, ...attendanceEventIds])]
     console.log(`Found ${allEventIds.length} unique event IDs (${feedbackEventIds.length} from feedback, ${attendanceEventIds.length} from attendance)`)
     
-    // Batch query events for enrichment
-    console.log('Step 3: Querying event documents...')
+    // Extract unique (eventId, occurrenceId) pairs from attendance
+    const occurrencePairs = []
+    const seenPairs = new Set()
+    for (const attendance of attendanceDocs) {
+      if (attendance.eventId && attendance.occurrenceId) {
+        const pairKey = `${attendance.eventId}|${attendance.occurrenceId}`
+        if (!seenPairs.has(pairKey)) {
+          seenPairs.add(pairKey)
+          occurrencePairs.push({
+            eventId: attendance.eventId,
+            occurrenceId: attendance.occurrenceId
+          })
+        }
+      }
+    }
+    console.log(`Found ${occurrencePairs.length} unique (eventId, occurrenceId) pairs`)
+    
+    // Batch query occurrence documents for enrichment (prefer over events)
+    console.log('Step 3a: Querying occurrence documents...')
+    const occurrenceMap = await batchQueryOccurrences(occurrencePairs)
+    console.log(`Step 3a complete: Fetched ${occurrenceMap.size} occurrence documents (${Date.now() - startTime}ms elapsed)`)
+    
+    // Batch query events for enrichment (fallback)
+    console.log('Step 3b: Querying event documents...')
     const eventMap = await batchQueryEvents(allEventIds)
-    console.log(`Step 3 complete: Fetched ${eventMap.size} event documents (${Date.now() - startTime}ms elapsed)`)
+    console.log(`Step 3b complete: Fetched ${eventMap.size} event documents (${Date.now() - startTime}ms elapsed)`)
     
     // Aggregate feedback and attendance
     console.log('Step 4: Aggregating feedback and attendance...')
-    const eventDigests = aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap)
+    const eventDigests = aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, occurrenceMap)
     console.log(`Step 4 complete: Aggregated ${eventDigests.length} event digests (${Date.now() - startTime}ms elapsed)`)
     
     // Build Markdown summary
