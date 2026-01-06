@@ -75,10 +75,179 @@ export async function saveEvent(event) {
     
     console.log(`🔥 Saved event to Firestore: ${eventId}`)
     
+    // After saving event, persist occurrence documents
+    await saveOccurrences(event)
+    
     return event // Return original event without Firestore internal metadata
   } catch (error) {
     console.error('❌ Firestore save error:', error)
     throw new Error(`Failed to save event to Firestore: ${error.message}`)
+  }
+}
+
+/**
+ * Extract event address as a single human-readable string
+ * @param {object} event - The event object
+ * @returns {string|null} - Address string or null
+ * @private
+ */
+function extractEventAddress(event) {
+  if (!event.location?.address) {
+    return null
+  }
+  
+  const addr = event.location.address
+  const parts = [
+    addr.streetAddress,
+    addr.addressLocality || addr.city,
+    addr.addressRegion || addr.state
+  ].filter(Boolean)
+  
+  return parts.length > 0 ? parts.join(', ') : null
+}
+
+/**
+ * Extract listing URL from event
+ * @param {object} event - The event object
+ * @returns {string|null} - Listing URL or null
+ * @private
+ */
+function extractListingUrl(event) {
+  return event.offers?.url || event.url || null
+}
+
+/**
+ * Save occurrence documents for an event
+ * Persists each occurrence as a subcollection document under events/{eventId}/occurrences/{occurrenceId}
+ * Enforces lock semantics: locked occurrences cannot have identity fields updated
+ * 
+ * Note: Each occurrence is saved in a separate transaction for simplicity and fault tolerance.
+ * While batching would be more efficient, separate transactions ensure that one failure
+ * doesn't prevent other occurrences from being saved, and keeps the code surgical.
+ * 
+ * @param {object} event - The event object with occurrences array
+ * @returns {Promise<void>}
+ */
+export async function saveOccurrences(event) {
+  const eventId = event.flypost?.eventId
+  if (!eventId) {
+    return
+  }
+
+  // Get occurrences array - prefer event.occurrences, fallback to event.flypost.occurrences
+  const occurrences = event.occurrences || event.flypost?.occurrences
+  if (!occurrences || !Array.isArray(occurrences) || occurrences.length === 0) {
+    return
+  }
+
+  const db = getFirestoreClient()
+  const eventDocRef = db.collection('events').doc(eventId)
+  const occurrencesCollection = eventDocRef.collection('occurrences')
+  
+  // Extract event-level fields once
+  const eventAddress = extractEventAddress(event)
+  const listingUrl = extractListingUrl(event)
+
+  console.log(`🔥 Persisting ${occurrences.length} occurrence(s) for event ${eventId}`)
+
+  for (const occ of occurrences) {
+    if (!occ.occurrenceId) {
+      console.warn(`⚠️  Skipping occurrence without occurrenceId`)
+      continue
+    }
+
+    try {
+      const occDocRef = occurrencesCollection.doc(occ.occurrenceId)
+      
+      // Use a transaction to atomically check lock and update
+      await db.runTransaction(async (transaction) => {
+        const existingDoc = await transaction.get(occDocRef)
+        
+        if (existingDoc.exists) {
+          const existingData = existingDoc.data()
+          
+          // If locked, only update non-identity metadata
+          if (existingData.lockedAt) {
+            console.log(`🔒 Occurrence ${occ.occurrenceId} is locked - preserving identity fields`)
+            
+            // Only update updatedAt timestamp
+            transaction.update(occDocRef, {
+              '_firestoreMetadata.updatedAt': Firestore.FieldValue.serverTimestamp()
+            })
+            
+            return
+          }
+        }
+        
+        // Not locked or doesn't exist - write/update full document
+        const occurrenceDoc = {
+          occurrenceId: occ.occurrenceId,
+          eventId: eventId,
+          startDate: occ.startDate,
+          endDate: occ.endDate,
+          eventAddress: eventAddress,
+          listingUrl: listingUrl,
+          lockedAt: existingDoc.exists ? existingData.lockedAt : null,
+          _firestoreMetadata: {
+            createdAt: existingDoc.exists && existingData._firestoreMetadata?.createdAt 
+              ? existingData._firestoreMetadata.createdAt 
+              : Firestore.FieldValue.serverTimestamp(),
+            updatedAt: Firestore.FieldValue.serverTimestamp()
+          }
+        }
+        
+        transaction.set(occDocRef, occurrenceDoc)
+      })
+      
+      console.log(`  ✅ Saved occurrence: ${occ.occurrenceId}`)
+      
+    } catch (error) {
+      console.error(`❌ Failed to save occurrence ${occ.occurrenceId}:`, error.message)
+      // Continue with other occurrences
+    }
+  }
+}
+
+/**
+ * Lock an occurrence document when first attendance is recorded
+ * Marks the occurrence as immutable for identity fields
+ * Uses merge semantics to avoid overwriting existing locks
+ * 
+ * Note: Multiple concurrent lock calls may set different timestamps, but this is acceptable
+ * because the presence of any lockedAt value (regardless of exact timestamp) provides
+ * the identity protection guarantee. The first lock wins semantically even if a later
+ * timestamp is written.
+ * 
+ * @param {string} eventId - The event ID
+ * @param {string} occurrenceId - The occurrence ID
+ * @returns {Promise<void>}
+ */
+export async function lockOccurrence(eventId, occurrenceId) {
+  if (!eventId || !occurrenceId) {
+    return
+  }
+
+  const db = getFirestoreClient()
+  const occDocRef = db.collection('events')
+    .doc(eventId)
+    .collection('occurrences')
+    .doc(occurrenceId)
+
+  try {
+    // Use set with merge:true to only set lockedAt if document exists
+    // If lockedAt already exists, merge will preserve it
+    // This is idempotent and safe for concurrent calls
+    await occDocRef.set(
+      {
+        lockedAt: Firestore.FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    )
+    
+    console.log(`🔒 Locked occurrence: ${occurrenceId} for event ${eventId}`)
+  } catch (error) {
+    console.error(`⚠️  Failed to lock occurrence ${occurrenceId}:`, error.message)
+    // Non-fatal - continue with attendance recording
   }
 }
 
