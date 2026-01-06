@@ -16,6 +16,7 @@
  *   windowStartIso: string,        // Start of the week in UTC ISO format
  *   windowEndIso: string,          // End of the week in UTC ISO format
  *   generatedAtIso: string,        // When the digest was generated
+ *   summaryMarkdown: string,       // Broker-facing Markdown summary (no PII)
  *   eventDigests: [{
  *     eventId: string,                 // Event identifier
  *     feedbackCount: number,           // Total feedback responses
