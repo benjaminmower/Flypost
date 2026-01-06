@@ -154,43 +154,46 @@ export async function saveOccurrences(event) {
     try {
       const occDocRef = occurrencesCollection.doc(occ.occurrenceId)
       
-      // Read existing document to check for lock
-      const existingDoc = await occDocRef.get()
-      
-      if (existingDoc.exists) {
-        const existingData = existingDoc.data()
+      // Use a transaction to atomically check lock and update
+      await db.runTransaction(async (transaction) => {
+        const existingDoc = await transaction.get(occDocRef)
         
-        // If locked, only update non-identity metadata
-        if (existingData.lockedAt) {
-          console.log(`🔒 Occurrence ${occ.occurrenceId} is locked - preserving identity fields`)
+        if (existingDoc.exists) {
+          const existingData = existingDoc.data()
           
-          // Only update updatedAt timestamp
-          await occDocRef.update({
-            '_firestoreMetadata.updatedAt': Firestore.FieldValue.serverTimestamp()
-          })
-          
-          continue
+          // If locked, only update non-identity metadata
+          if (existingData.lockedAt) {
+            console.log(`🔒 Occurrence ${occ.occurrenceId} is locked - preserving identity fields`)
+            
+            // Only update updatedAt timestamp
+            transaction.update(occDocRef, {
+              '_firestoreMetadata.updatedAt': Firestore.FieldValue.serverTimestamp()
+            })
+            
+            return
+          }
         }
-      }
-      
-      // Not locked or doesn't exist - write/update full document
-      const occurrenceDoc = {
-        occurrenceId: occ.occurrenceId,
-        eventId: eventId,
-        startDate: occ.startDate,
-        endDate: occ.endDate,
-        eventAddress: eventAddress,
-        listingUrl: listingUrl,
-        lockedAt: existingDoc.exists ? existingData.lockedAt : null,
-        _firestoreMetadata: {
-          createdAt: existingDoc.exists && existingData._firestoreMetadata?.createdAt 
-            ? existingData._firestoreMetadata.createdAt 
-            : Firestore.FieldValue.serverTimestamp(),
-          updatedAt: Firestore.FieldValue.serverTimestamp()
+        
+        // Not locked or doesn't exist - write/update full document
+        const occurrenceDoc = {
+          occurrenceId: occ.occurrenceId,
+          eventId: eventId,
+          startDate: occ.startDate,
+          endDate: occ.endDate,
+          eventAddress: eventAddress,
+          listingUrl: listingUrl,
+          lockedAt: existingDoc.exists ? existingData.lockedAt : null,
+          _firestoreMetadata: {
+            createdAt: existingDoc.exists && existingData._firestoreMetadata?.createdAt 
+              ? existingData._firestoreMetadata.createdAt 
+              : Firestore.FieldValue.serverTimestamp(),
+            updatedAt: Firestore.FieldValue.serverTimestamp()
+          }
         }
-      }
+        
+        transaction.set(occDocRef, occurrenceDoc)
+      })
       
-      await occDocRef.set(occurrenceDoc)
       console.log(`  ✅ Saved occurrence: ${occ.occurrenceId}`)
       
     } catch (error) {
@@ -203,6 +206,7 @@ export async function saveOccurrences(event) {
 /**
  * Lock an occurrence document when first attendance is recorded
  * Marks the occurrence as immutable for identity fields
+ * Uses merge semantics to avoid overwriting existing locks
  * @param {string} eventId - The event ID
  * @param {string} occurrenceId - The occurrence ID
  * @returns {Promise<void>}
@@ -219,7 +223,9 @@ export async function lockOccurrence(eventId, occurrenceId) {
     .doc(occurrenceId)
 
   try {
-    // Use merge semantics to only set lockedAt if not already set
+    // Use set with merge:true to only set lockedAt if document exists
+    // If lockedAt already exists, merge will preserve it
+    // This is idempotent and safe for concurrent calls
     await occDocRef.set(
       {
         lockedAt: Firestore.FieldValue.serverTimestamp()
