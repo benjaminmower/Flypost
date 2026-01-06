@@ -34,6 +34,8 @@
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { onRequest } from 'firebase-functions/v2/https'
+import { defineSecret } from 'firebase-functions/params'
 import { fromZonedTime, toZonedTime } from 'date-fns-tz'
 import { startOfWeek, addWeeks, format } from 'date-fns'
 
@@ -44,6 +46,9 @@ const db = getFirestore()
 
 // Los Angeles timezone constant
 const LA_TIMEZONE = 'America/Los_Angeles'
+
+// Secret for HTTP trigger authentication
+const DIGEST_TRIGGER_TOKEN = defineSecret('DIGEST_TRIGGER_TOKEN')
 
 /**
  * Calculate the weekly window boundaries for the prior week
@@ -282,8 +287,114 @@ async function persistDigest(docId, digest) {
 }
 
 /**
- * Main weekly digest generation function
- * Scheduled to run every Monday at 00:00 America/Los_Angeles
+ * Shared digest generation logic
+ * Used by both scheduled and HTTP-triggered functions
+ * 
+ * @param {object} options - Options object
+ * @param {Date} options.now - Current date/time (defaults to now)
+ * @returns {Promise<object>} - Digest result with metadata
+ */
+async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
+  const startTime = Date.now()
+  console.log('=== Starting Weekly Feedback Digest Generation ===')
+  
+  try {
+    // Calculate weekly window
+    const { windowStartIso, windowEndIso, docId } = calculateWeeklyWindow(now)
+    console.log(`Window: ${windowStartIso} to ${windowEndIso}`)
+    console.log(`Document ID: ${docId}`)
+    
+    // Query feedback in window
+    console.log('Step 1: Querying feedback...')
+    const feedbackDocs = await queryFeedbackInWindow(windowStartIso, windowEndIso)
+    console.log(`Step 1 complete: Found ${feedbackDocs.length} feedback documents (${Date.now() - startTime}ms elapsed)`)
+    
+    if (feedbackDocs.length === 0) {
+      console.log('No feedback in this window. Creating empty digest.')
+      const emptyDigest = {
+        windowStartIso,
+        windowEndIso,
+        generatedAtIso: new Date().toISOString(),
+        eventDigests: []
+      }
+      await persistDigest(docId, emptyDigest)
+      console.log(`=== Digest generation complete (empty) - Total time: ${Date.now() - startTime}ms ===`)
+      
+      return {
+        docId,
+        windowStartIso,
+        windowEndIso,
+        eventCount: 0,
+        feedbackCount: 0,
+        executionTimeMs: Date.now() - startTime
+      }
+    }
+    
+    // Extract unique attendanceIds
+    const attendanceIds = [...new Set(feedbackDocs.map(f => f.attendanceId).filter(Boolean))]
+    console.log(`Step 2: Found ${attendanceIds.length} unique attendance IDs`)
+    
+    // Batch query attendance records
+    console.log('Step 2: Querying attendance records...')
+    const attendanceMap = await batchQueryAttendance(attendanceIds)
+    console.log(`Step 2 complete: Fetched ${attendanceMap.size} attendance records (${Date.now() - startTime}ms elapsed)`)
+    
+    // Extract unique eventIds
+    const eventIds = [...new Set(feedbackDocs.map(f => f.eventId).filter(Boolean))]
+    console.log(`Step 3: Found ${eventIds.length} unique event IDs`)
+    
+    // Batch query events for enrichment
+    console.log('Step 3: Querying event documents...')
+    const eventMap = await batchQueryEvents(eventIds)
+    console.log(`Step 3 complete: Fetched ${eventMap.size} event documents (${Date.now() - startTime}ms elapsed)`)
+    
+    // Aggregate feedback
+    console.log('Step 4: Aggregating feedback...')
+    const eventDigests = aggregateFeedback(feedbackDocs, attendanceMap, eventMap)
+    console.log(`Step 4 complete: Aggregated ${eventDigests.length} event digests (${Date.now() - startTime}ms elapsed)`)
+    
+    // Build final digest
+    const digest = {
+      windowStartIso,
+      windowEndIso,
+      generatedAtIso: new Date().toISOString(),
+      eventDigests
+    }
+    
+    // Persist to Firestore
+    console.log('Step 5: Persisting digest to Firestore...')
+    await persistDigest(docId, digest)
+    console.log(`Step 5 complete: Digest persisted (${Date.now() - startTime}ms elapsed)`)
+    
+    const totalTime = Date.now() - startTime
+    console.log('=== Digest generation complete ===')
+    console.log(`Total events: ${eventDigests.length}`)
+    console.log(`Total feedback: ${feedbackDocs.length}`)
+    console.log(`Total execution time: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
+    
+    // Warn if approaching timeout (540 seconds = 540000ms)
+    if (totalTime > 400000) {
+      console.warn(`⚠️ Function took ${(totalTime / 1000).toFixed(2)}s - approaching timeout limit of 540s`)
+    }
+    
+    return {
+      docId,
+      windowStartIso,
+      windowEndIso,
+      eventCount: eventDigests.length,
+      feedbackCount: feedbackDocs.length,
+      executionTimeMs: totalTime
+    }
+  } catch (error) {
+    const totalTime = Date.now() - startTime
+    console.error(`Error generating weekly digest after ${totalTime}ms:`, error)
+    throw error
+  }
+}
+
+/**
+ * Scheduled weekly digest generation function
+ * Runs every Monday at 00:00 America/Los_Angeles
  */
 export const generateWeeklyFeedbackDigest = onSchedule(
   {
@@ -293,83 +404,65 @@ export const generateWeeklyFeedbackDigest = onSchedule(
     timeoutSeconds: 540 // 9 minutes
   },
   async (event) => {
-    const startTime = Date.now()
-    console.log('=== Starting Weekly Feedback Digest Generation ===')
+    await runWeeklyFeedbackDigest()
+  }
+)
+
+/**
+ * HTTP-triggered weekly digest generation function
+ * Allows manual execution of the digest generation
+ * Requires X-Digest-Token header for authentication
+ */
+export const generateWeeklyFeedbackDigestHttp = onRequest(
+  {
+    secrets: [DIGEST_TRIGGER_TOKEN],
+    memory: '512MiB',
+    timeoutSeconds: 540 // 9 minutes
+  },
+  async (req, res) => {
+    // Only allow POST method
+    if (req.method !== 'POST') {
+      res.status(405).json({
+        ok: false,
+        error: 'Method not allowed. Use POST.'
+      })
+      return
+    }
     
+    // Validate authentication token
+    const providedToken = req.get('X-Digest-Token')
+    const expectedToken = DIGEST_TRIGGER_TOKEN.value()
+    
+    if (!providedToken || providedToken !== expectedToken) {
+      console.warn('Unauthorized digest trigger attempt')
+      res.status(401).json({
+        ok: false,
+        error: 'unauthorized'
+      })
+      return
+    }
+    
+    // Run the digest generation
     try {
-      // Calculate weekly window
-      const { windowStartIso, windowEndIso, docId } = calculateWeeklyWindow()
-      console.log(`Window: ${windowStartIso} to ${windowEndIso}`)
-      console.log(`Document ID: ${docId}`)
+      const result = await runWeeklyFeedbackDigest()
       
-      // Query feedback in window
-      console.log('Step 1: Querying feedback...')
-      const feedbackDocs = await queryFeedbackInWindow(windowStartIso, windowEndIso)
-      console.log(`Step 1 complete: Found ${feedbackDocs.length} feedback documents (${Date.now() - startTime}ms elapsed)`)
-      
-      if (feedbackDocs.length === 0) {
-        console.log('No feedback in this window. Creating empty digest.')
-        const emptyDigest = {
-          windowStartIso,
-          windowEndIso,
-          generatedAtIso: new Date().toISOString(),
-          eventDigests: []
-        }
-        await persistDigest(docId, emptyDigest)
-        console.log(`=== Digest generation complete (empty) - Total time: ${Date.now() - startTime}ms ===`)
-        return
-      }
-      
-      // Extract unique attendanceIds
-      const attendanceIds = [...new Set(feedbackDocs.map(f => f.attendanceId).filter(Boolean))]
-      console.log(`Step 2: Found ${attendanceIds.length} unique attendance IDs`)
-      
-      // Batch query attendance records
-      console.log('Step 2: Querying attendance records...')
-      const attendanceMap = await batchQueryAttendance(attendanceIds)
-      console.log(`Step 2 complete: Fetched ${attendanceMap.size} attendance records (${Date.now() - startTime}ms elapsed)`)
-      
-      // Extract unique eventIds
-      const eventIds = [...new Set(feedbackDocs.map(f => f.eventId).filter(Boolean))]
-      console.log(`Step 3: Found ${eventIds.length} unique event IDs`)
-      
-      // Batch query events for enrichment
-      console.log('Step 3: Querying event documents...')
-      const eventMap = await batchQueryEvents(eventIds)
-      console.log(`Step 3 complete: Fetched ${eventMap.size} event documents (${Date.now() - startTime}ms elapsed)`)
-      
-      // Aggregate feedback
-      console.log('Step 4: Aggregating feedback...')
-      const eventDigests = aggregateFeedback(feedbackDocs, attendanceMap, eventMap)
-      console.log(`Step 4 complete: Aggregated ${eventDigests.length} event digests (${Date.now() - startTime}ms elapsed)`)
-      
-      // Build final digest
-      const digest = {
-        windowStartIso,
-        windowEndIso,
-        generatedAtIso: new Date().toISOString(),
-        eventDigests
-      }
-      
-      // Persist to Firestore
-      console.log('Step 5: Persisting digest to Firestore...')
-      await persistDigest(docId, digest)
-      console.log(`Step 5 complete: Digest persisted (${Date.now() - startTime}ms elapsed)`)
-      
-      const totalTime = Date.now() - startTime
-      console.log('=== Digest generation complete ===')
-      console.log(`Total events: ${eventDigests.length}`)
-      console.log(`Total feedback: ${feedbackDocs.length}`)
-      console.log(`Total execution time: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
-      
-      // Warn if approaching timeout (540 seconds = 540000ms)
-      if (totalTime > 400000) {
-        console.warn(`⚠️ Function took ${(totalTime / 1000).toFixed(2)}s - approaching timeout limit of 540s`)
-      }
+      res.status(200).json({
+        ok: true,
+        docId: result.docId,
+        windowStartIso: result.windowStartIso,
+        windowEndIso: result.windowEndIso,
+        eventCount: result.eventCount,
+        feedbackCount: result.feedbackCount,
+        executionTimeMs: result.executionTimeMs,
+        executionTimeSec: (result.executionTimeMs / 1000).toFixed(2)
+      })
     } catch (error) {
-      const totalTime = Date.now() - startTime
-      console.error(`Error generating weekly digest after ${totalTime}ms:`, error)
-      throw error
+      console.error('Error in HTTP-triggered digest generation:', error)
+      res.status(500).json({
+        ok: false,
+        error: 'Internal server error',
+        message: error.message
+      })
     }
   }
 )
