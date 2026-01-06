@@ -78,6 +78,25 @@ function normalizeFeedbackText(text) {
   return trimmed.substring(0, 500)
 }
 
+// Helper: Normalize wouldBuy field (validate "yes"|"maybe"|"no")
+function normalizeWouldBuy(value) {
+  if (value === null || value === undefined) {
+    return null
+  }
+  
+  if (typeof value !== 'string') {
+    return null
+  }
+  
+  const normalized = value.toLowerCase().trim()
+  
+  if (normalized === 'yes' || normalized === 'maybe' || normalized === 'no') {
+    return normalized
+  }
+  
+  return null
+}
+
 // Helper: Detect if input text describes multiple time slots
 // Uses heuristics to identify multiple day/date/time patterns
 function detectMultipleTimeSlots(text) {
@@ -1375,19 +1394,26 @@ app.post('/v1/presence/check-in', writeLimiter, async (req, res) => {
  * - attendanceId (optional): Specific attendance record
  * - eventId (optional): Event ID (if attendanceId not provided, requires buyerToken)
  * - buyerToken (optional): Buyer token (if attendanceId not provided)
- * - answers (required): { liked, disliked, wantsSimilar }
+ * - answers (required): { liked, disliked, wantsSimilar, wouldBuy }
+ *   - liked (optional): string or null
+ *   - disliked (optional): string or null
+ *   - wantsSimilar (optional): boolean (for backward compatibility)
+ *   - wouldBuy (optional): "yes"|"maybe"|"no" or null
  * - brokerageAffiliation (optional): Brokerage ID for routing
  */
 app.post('/v1/feedback/submit', writeLimiter, async (req, res) => {
   try {
     const { attendanceId, eventId, buyerToken, answers, brokerageAffiliation } = req.body
 
-    if (!answers || !answers.hasOwnProperty('wantsSimilar')) {
+    if (!answers) {
       return res.status(400).json({
         success: false,
-        error: 'answers object with wantsSimilar is required'
+        error: 'answers object is required'
       })
     }
+    
+    // Backward compatibility: accept submissions with only wantsSimilar (legacy)
+    // New submissions should include wouldBuy
 
     const { 
       findAttendanceById, 
@@ -1440,6 +1466,9 @@ app.post('/v1/feedback/submit', writeLimiter, async (req, res) => {
     // Normalize feedback text fields
     const normalizedLiked = normalizeFeedbackText(answers.liked)
     const normalizedDisliked = normalizeFeedbackText(answers.disliked)
+    
+    // Normalize wouldBuy field
+    const normalizedWouldBuy = normalizeWouldBuy(answers.wouldBuy)
 
     // Store feedback
     const feedback = await storeFeedback({
@@ -1448,7 +1477,8 @@ app.post('/v1/feedback/submit', writeLimiter, async (req, res) => {
       answers: {
         liked: normalizedLiked,
         disliked: normalizedDisliked,
-        wantsSimilar: Boolean(answers.wantsSimilar)
+        wantsSimilar: answers.hasOwnProperty('wantsSimilar') ? Boolean(answers.wantsSimilar) : null,
+        wouldBuy: normalizedWouldBuy
       },
       brokerageAffiliation: brokerageAffiliation || null,
       occurrenceId: attendance.occurrenceId || null
