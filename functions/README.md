@@ -150,6 +150,9 @@ npm install
 # Deploy only the scheduled function
 firebase deploy --only functions:generateWeeklyFeedbackDigest
 
+# Deploy only the HTTP function (requires DIGEST_TRIGGER_TOKEN secret to be set)
+firebase deploy --only functions:generateWeeklyFeedbackDigestHttp
+
 # Or deploy all functions
 firebase deploy --only functions
 ```
@@ -185,6 +188,73 @@ firebase emulators:start
 
 ### Option 3: Test with Custom Date
 You can temporarily modify the function to test with a custom date by passing a specific date to `calculateWeeklyWindow(customDate)` for development purposes.
+
+## Manual Trigger (HTTP)
+
+The digest can be triggered manually via HTTP POST request using the `generateWeeklyFeedbackDigestHttp` function. This is useful for testing, debugging, or generating digests on-demand.
+
+### Setup Secret Token
+
+First, set the authentication secret using Firebase CLI:
+
+```bash
+# Set the secret value (replace YOUR_SECRET_TOKEN with a strong random string)
+firebase functions:secrets:set DIGEST_TRIGGER_TOKEN
+
+# When prompted, enter your secret token value
+# Example: use a strong random string like: openssl rand -base64 32
+```
+
+### Deploy HTTP Function
+
+```bash
+# Deploy both scheduled and HTTP functions
+firebase deploy --only functions
+
+# Or deploy only the HTTP function
+firebase deploy --only functions:generateWeeklyFeedbackDigestHttp
+```
+
+### Trigger Manually
+
+Use curl or any HTTP client to trigger the digest generation:
+
+```bash
+# Example curl command
+curl -X POST \
+  https://us-central1-goflypost.cloudfunctions.net/generateWeeklyFeedbackDigestHttp \
+  -H "X-Digest-Token: YOUR_SECRET_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+**Response (success):**
+```json
+{
+  "ok": true,
+  "docId": "2026-01-05",
+  "windowStartIso": "2025-12-29T08:00:00.000Z",
+  "windowEndIso": "2026-01-05T08:00:00.000Z",
+  "eventCount": 15,
+  "feedbackCount": 127,
+  "executionTimeMs": 2543,
+  "executionTimeSec": "2.54"
+}
+```
+
+**Response (unauthorized):**
+```json
+{
+  "ok": false,
+  "error": "unauthorized"
+}
+```
+
+**Important Notes:**
+- The HTTP trigger generates a digest for the **prior week** (Monday to Monday in LA timezone), even when run mid-week
+- It writes to the same `weeklyDigests/{YYYY-MM-DD}` collection as the scheduled function
+- If a digest already exists for that week, it will be overwritten
+- The endpoint only accepts POST requests; other methods return 405 Method Not Allowed
+- The X-Digest-Token header is required for authentication
 
 ## Monitoring
 
