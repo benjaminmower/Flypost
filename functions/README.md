@@ -48,10 +48,11 @@ Document ID format: `YYYY-MM-DD` (the Monday date in LA timezone, e.g., "2026-01
     {
       "eventId": "evt_abc123",
       "feedbackCount": 15,
-      "uniqueBuyers": 12,
       "totalCheckIns": 18,
+      "uniqueCheckInBuyers": 15,
       "wantsSimilarCount": 10,
       "occurrenceIds": ["occ_slot1", "occ_slot2"],
+      "feedbackRate": 0.8333,
       "eventAddress": "123 Main St, Santa Monica, CA",
       "listingUrl": "https://example.com/listing/123"
     }
@@ -64,15 +65,18 @@ Document ID format: `YYYY-MM-DD` (the Monday date in LA timezone, e.g., "2026-01
 - **`windowStartIso`** (string): Start of the weekly window in UTC ISO format (Monday 00:00 LA converted to UTC)
 - **`windowEndIso`** (string): End of the weekly window in UTC ISO format (next Monday 00:00 LA converted to UTC)
 - **`generatedAtIso`** (string): Timestamp when the digest was generated
-- **`eventDigests`** (array): Array of event-level aggregations, sorted by feedback count (descending)
+- **`eventDigests`** (array): Array of event-level aggregations, sorted by totalCheckIns desc, then feedbackCount desc
   - **`eventId`** (string): Event identifier
   - **`feedbackCount`** (number): Total number of feedback responses for this event
-  - **`uniqueBuyers`** (number): Count of unique buyers who provided feedback (derived from attendance records)
-  - **`totalCheckIns`** (number): Total check-ins for this event across all attendance records
+  - **`totalCheckIns`** (number): Total check-ins for this event in the weekly window (computed from ALL attendance documents where `attendance.createdAt` falls within the window)
+  - **`uniqueCheckInBuyers`** (number): Count of unique buyers who checked in (deduplicated by buyerToken from attendance records)
   - **`wantsSimilarCount`** (number): Count of respondents who indicated they want similar events
   - **`occurrenceIds`** (array of strings): List of occurrence IDs if the event has multiple slots/occurrences
+  - **`feedbackRate`** (number): Ratio of feedbackCount to totalCheckIns (0 if no check-ins)
   - **`eventAddress`** (string, optional): Formatted address string if event document is available
   - **`listingUrl`** (string, optional): External listing URL if available in event document
+
+**Note:** Events with check-ins but no feedback will appear in the digest with `feedbackCount: 0`. This allows you to see high-traffic events even if feedback collection was low.
 
 ## Schedule
 
@@ -108,11 +112,16 @@ feedback.where('createdAt', '>=', windowStartIso)
 
 **Index Requirement:** A single-field ascending index on `feedback.createdAt` is required. This index supports both range operators (`>=` and `<`) on the same field. The index is defined in `firestore.indexes.json` and will be automatically created during deployment.
 
-### Attendance Batch Query
-Attendance records are fetched in batches using the `__name__` (document ID) field with the `in` operator, respecting Firestore's 10-item limit per query:
+### Attendance Query
+Uses Firestore string range filters on `createdAt` to get ALL attendance in the weekly window:
 ```javascript
-attendance.where('__name__', 'in', [id1, id2, ..., id10])
+attendance.where('createdAt', '>=', windowStartIso)
+          .where('createdAt', '<', windowEndIso)
 ```
+
+**Index Requirement:** A single-field ascending index on `attendance.createdAt` is required. This index is defined in `firestore.indexes.json` and will be automatically created during deployment.
+
+**Important:** The `totalCheckIns` metric is computed from ALL attendance documents with `attendance.createdAt` within the weekly window, not just attendance linked to feedback submissions. This means events with high attendance but low feedback participation will be properly represented in the digest.
 
 ### Event Enrichment
 Events are fetched individually by document ID to avoid `in` operator limitations and provide more reliable results.
