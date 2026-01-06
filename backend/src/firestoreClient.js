@@ -326,3 +326,36 @@ export function isFirestoreEnabled() {
             process.env.GCLOUD_PROJECT || 
             process.env.FIRESTORE_EMULATOR_HOST)
 }
+
+/**
+ * Check if an event has any attendance records
+ * This is used to prevent overwriting events that have real attendance data.
+ * @param {string} eventId - The event ID to check
+ * @returns {Promise<boolean>} - True if attendance exists for this event
+ */
+export async function eventHasAttendance(eventId) {
+  // No-op if Firestore is not enabled
+  if (!isFirestoreEnabled()) {
+    return false
+  }
+  
+  const db = getFirestoreClient()
+  const attendanceCollection = db.collection('attendance')
+  
+  try {
+    // Use limit(1) for efficiency - we only need to know if ANY attendance exists
+    const snapshot = await attendanceCollection
+      .where('eventId', '==', eventId)
+      .limit(1)
+      .get()
+    
+    const hasAttendance = !snapshot.empty
+    console.log(`🔍 Attendance check for event ${eventId}: ${hasAttendance ? 'EXISTS' : 'NONE'}`)
+    
+    return hasAttendance
+  } catch (error) {
+    console.error(`⚠️ Error checking attendance for event ${eventId}:`, error.message)
+    // On error, conservatively assume attendance exists to prevent accidental overwrites
+    return true
+  }
+}

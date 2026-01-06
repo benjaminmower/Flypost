@@ -9,12 +9,36 @@ import {
   isFirestoreEnabled,
   findEventByCanonicalKey, // Legacy
   findEventByIdentity as findEventByIdentityFirestore, // New brokerage-agnostic identity
-  getEventByIdFromFirestore // Get event by document ID
+  getEventByIdFromFirestore, // Get event by document ID
+  eventHasAttendance // Check if event has attendance records
 } from './firestoreClient.js'
 import { hasValidListPrice } from './utils/priceExtractor.js'
 
 // In-memory event store
 let eventStore = new Map()
+
+/**
+ * Decide whether to merge an incoming event with an existing one
+ * This is a pure function for testability
+ * @param {object} existing - The existing event found by identity
+ * @param {boolean} hasAttendance - Whether the existing event has attendance records
+ * @returns {boolean} - True if should merge/update, false if should create new event
+ */
+export function shouldMergeEvent(existing, hasAttendance) {
+  // If no existing event, always create new
+  if (!existing) {
+    return false
+  }
+  
+  // If existing event has attendance, do NOT merge (create new event instead)
+  // This protects historical attendance data from being misattributed
+  if (hasAttendance) {
+    return false
+  }
+  
+  // Otherwise, safe to merge
+  return true
+}
 
 /**
  * Find an event by its event identity (brokerage-agnostic).
@@ -71,49 +95,66 @@ export async function storeEvent(eventData) {
       
       if (existing) {
         console.log(`🔄 Found existing event ${existing.flypost.eventId} for identity ${finalEvent.flypost.eventIdentity}`)
-        isUpdate = true
-        updateCount = (existing.flypost?.updateCount || 0) + 1
         
-        // MERGE STRATEGY:
-        // 1. Keep the stable identifiers
-        finalEvent.flypost.eventId = existing.flypost.eventId
-        finalEvent.flypost.updateCount = updateCount
-        finalEvent.id = existing.flypost.eventId
+        // OVERWRITE PROTECTION: Check if event has attendance
+        // If attendance exists, we must NOT reuse the eventId to preserve historical data integrity
+        const hasAttendance = await eventHasAttendance(existing.flypost.eventId)
         
-        // 2. Preserve creation timestamps, update modification
-        finalEvent._firestoreMetadata = {
-          ...existing._firestoreMetadata,
-          updatedAt: new Date()
-        }
+        // Use pure decision function for testability
+        const shouldMerge = shouldMergeEvent(existing, hasAttendance)
         
-        // 3. Carry forward price if new event lacks it but existing has it
-        const newHasPrice = hasValidListPrice(finalEvent)
-        const existingHasPrice = hasValidListPrice(existing)
-        
-        if (!newHasPrice && existingHasPrice) {
-          console.log(`💰 Carrying forward price from existing event: ${existing.flypost.listPriceDisplay || existing.flypost.listPrice}`)
+        if (!shouldMerge) {
+          console.log(`🛡️  OVERWRITE PREVENTED: Event ${existing.flypost.eventId} has attendance records. Creating new event instead.`)
+          console.log(`   Identity: ${finalEvent.flypost.eventIdentity}`)
+          // Treat as a new event - do not reuse eventId or carry over metadata
+          // finalEvent.flypost.eventId is already set to a new ID
+          // Continue with standard storage as a new event
+        } else {
+          // No attendance exists - safe to merge/update
+          isUpdate = true
+          updateCount = (existing.flypost?.updateCount || 0) + 1
           
-          // Carry forward all price fields
-          finalEvent.flypost.listPrice = existing.flypost.listPrice
-          if (existing.flypost.listPriceDisplay) {
-            finalEvent.flypost.listPriceDisplay = existing.flypost.listPriceDisplay
-          }
-          if (existing.flypost.listPriceCurrency) {
-            finalEvent.flypost.listPriceCurrency = existing.flypost.listPriceCurrency
-          }
-          if (existing.flypost.priceType) {
-            finalEvent.flypost.priceType = existing.flypost.priceType
+          // MERGE STRATEGY:
+          // 1. Keep the stable identifiers
+          finalEvent.flypost.eventId = existing.flypost.eventId
+          finalEvent.flypost.updateCount = updateCount
+          finalEvent.id = existing.flypost.eventId
+          
+          // 2. Preserve creation timestamps, update modification
+          finalEvent._firestoreMetadata = {
+            ...existing._firestoreMetadata,
+            updatedAt: new Date()
           }
           
-          // Carry forward offers object if present
-          if (existing.offers) {
-            finalEvent.offers = existing.offers
+          // 3. Carry forward price if new event lacks it but existing has it
+          const newHasPrice = hasValidListPrice(finalEvent)
+          const existingHasPrice = hasValidListPrice(existing)
+          
+          if (!newHasPrice && existingHasPrice) {
+            console.log(`💰 Carrying forward price from existing event: ${existing.flypost.listPriceDisplay || existing.flypost.listPrice}`)
+            
+            // Carry forward all price fields
+            finalEvent.flypost.listPrice = existing.flypost.listPrice
+            if (existing.flypost.listPriceDisplay) {
+              finalEvent.flypost.listPriceDisplay = existing.flypost.listPriceDisplay
+            }
+            if (existing.flypost.listPriceCurrency) {
+              finalEvent.flypost.listPriceCurrency = existing.flypost.listPriceCurrency
+            }
+            if (existing.flypost.priceType) {
+              finalEvent.flypost.priceType = existing.flypost.priceType
+            }
+            
+            // Carry forward offers object if present
+            if (existing.offers) {
+              finalEvent.offers = existing.offers
+            }
           }
+          
+          // Note: Hash will be recomputed for the updated event data
+          // The hash.canonicalVersion field is a constant (1) indicating the hash algorithm version,
+          // not an incrementing counter
         }
-        
-        // Note: Hash will be recomputed for the updated event data
-        // The hash.canonicalVersion field is a constant (1) indicating the hash algorithm version,
-        // not an incrementing counter
       }
     } catch (err) {
       console.error('⚠️ Error checking event identity:', err)
