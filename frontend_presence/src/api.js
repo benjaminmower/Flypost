@@ -38,23 +38,34 @@ export async function checkIn(lat, lng, buyerToken, method = 'geo_time') {
 /**
  * Submit feedback for an attendance
  * @param {string} attendanceId - Attendance ID
- * @param {object} answers - Feedback answers { liked, disliked, wantsSimilar }
+ * @param {object} answers - Feedback answers { liked, disliked, wantsSimilar, wouldBuy }
  * @returns {Promise<object>} - Feedback response
  */
 export async function submitFeedback(attendanceId, answers) {
+  const payload = {
+    attendanceId,
+    answers: {
+      liked: answers.liked || '',
+      disliked: answers.disliked || ''
+    }
+  }
+  
+  // Add wantsSimilar if provided (boolean or null)
+  if (answers.wantsSimilar !== null && answers.wantsSimilar !== undefined) {
+    payload.answers.wantsSimilar = Boolean(answers.wantsSimilar)
+  }
+  
+  // Add wouldBuy if provided (string "yes"|"maybe"|"no" or null)
+  if (answers.wouldBuy) {
+    payload.answers.wouldBuy = answers.wouldBuy
+  }
+  
   const response = await fetch(`${API_BASE_URL}/v1/feedback/submit`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      attendanceId,
-      answers: {
-        liked: answers.liked || '',
-        disliked: answers.disliked || '',
-        wantsSimilar: Boolean(answers.wantsSimilar)
-      }
-    })
+    body: JSON.stringify(payload)
   })
 
   if (!response.ok) {
