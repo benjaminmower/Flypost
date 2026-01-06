@@ -7,6 +7,8 @@
 
 import OpenAI from 'openai'
 import { marked } from 'marked'
+import { startOfDay, endOfDay, addDays, nextSaturday, nextSunday } from 'date-fns'
+import { toZonedTime, fromZonedTime } from 'date-fns-tz'
 
 // Configure marked for backend Markdown rendering
 marked.setOptions({
@@ -131,7 +133,7 @@ const getEventsNearTool = {
   type: 'function',
   function: {
     name: 'getEventsNear',
-    description: 'Search for events near a specific location. Use this when users ask about events, open houses, garage sales, or activities in a particular area.',
+    description: 'Search for events near a specific location. Use this when users ask about events, open houses, garage sales, or activities in a particular area. Supports timeframe filtering for "today", "tomorrow", "weekend", etc.',
     parameters: {
       type: 'object',
       properties: {
@@ -147,10 +149,96 @@ const getEventsNearTool = {
           type: 'number',
           description: 'Search radius in miles',
           default: 5
+        },
+        timeframe: {
+          type: 'string',
+          enum: ['today', 'tomorrow', 'weekend', 'next_7_days', 'custom'],
+          description: 'Time period to search for events. Use "today" for same-day events, "tomorrow" for next day, "weekend" for Saturday and Sunday of current week, "next_7_days" for the next week, or "custom" with explicit start/end dates.'
+        },
+        start: {
+          type: 'string',
+          description: 'Start date-time in ISO 8601 format (e.g., "2025-01-15T00:00:00Z"). Only used when timeframe is "custom".'
+        },
+        end: {
+          type: 'string',
+          description: 'End date-time in ISO 8601 format (e.g., "2025-01-16T23:59:59Z"). Only used when timeframe is "custom".'
         }
       },
       required: ['lat', 'lng'],
       additionalProperties: false
+    }
+  }
+}
+
+/**
+ * Calculate start and end times for a given timeframe
+ * Uses America/Los_Angeles timezone for calculations
+ * 
+ * @param {string} timeframe - The timeframe: 'today', 'tomorrow', 'weekend', 'next_7_days', 'custom'
+ * @param {string} customStart - Custom start date (ISO string) for 'custom' timeframe
+ * @param {string} customEnd - Custom end date (ISO string) for 'custom' timeframe
+ * @returns {Object} Object with start and end Date objects in UTC
+ */
+function calculateTimeframe(timeframe, customStart = null, customEnd = null) {
+  const TIMEZONE = 'America/Los_Angeles'
+  const now = new Date()
+  
+  if (timeframe === 'custom') {
+    if (customStart && customEnd) {
+      return {
+        start: new Date(customStart),
+        end: new Date(customEnd)
+      }
+    }
+    // Fallback to next 7 days if custom dates not provided
+    timeframe = 'next_7_days'
+  }
+  
+  switch (timeframe) {
+    case 'today': {
+      // Get current time in PT timezone
+      const nowInPT = toZonedTime(now, TIMEZONE)
+      // Start and end of today in PT timezone
+      const startOfTodayPT = startOfDay(nowInPT)
+      const endOfTodayPT = endOfDay(nowInPT)
+      // Convert back to UTC
+      const startUTC = fromZonedTime(startOfTodayPT, TIMEZONE)
+      const endUTC = fromZonedTime(endOfTodayPT, TIMEZONE)
+      return { start: startUTC, end: endUTC }
+    }
+    
+    case 'tomorrow': {
+      // Get current time in PT timezone
+      const nowInPT = toZonedTime(now, TIMEZONE)
+      // Tomorrow in PT timezone
+      const tomorrowPT = addDays(nowInPT, 1)
+      const startOfTomorrowPT = startOfDay(tomorrowPT)
+      const endOfTomorrowPT = endOfDay(tomorrowPT)
+      // Convert back to UTC
+      const startUTC = fromZonedTime(startOfTomorrowPT, TIMEZONE)
+      const endUTC = fromZonedTime(endOfTomorrowPT, TIMEZONE)
+      return { start: startUTC, end: endUTC }
+    }
+    
+    case 'weekend': {
+      // Get current time in PT timezone
+      const nowInPT = toZonedTime(now, TIMEZONE)
+      // Next Saturday and Sunday in PT timezone
+      const saturdayPT = nextSaturday(nowInPT)
+      const sundayPT = nextSunday(nowInPT)
+      const startOfSaturdayPT = startOfDay(saturdayPT)
+      const endOfSundayPT = endOfDay(sundayPT)
+      // Convert back to UTC
+      const startUTC = fromZonedTime(startOfSaturdayPT, TIMEZONE)
+      const endUTC = fromZonedTime(endOfSundayPT, TIMEZONE)
+      return { start: startUTC, end: endUTC }
+    }
+    
+    case 'next_7_days':
+    default: {
+      // Default 7-day window from now
+      const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+      return { start: now, end: sevenDaysLater }
     }
   }
 }
@@ -163,22 +251,21 @@ const getEventsNearTool = {
  * @returns {Promise<Object>} Events data
  */
 async function executeGetEventsNear(args, backendUrl) {
-  const { lat, lng, radius = 5 } = args
+  const { lat, lng, radius = 5, timeframe = 'next_7_days', start: customStart, end: customEnd } = args
   
   // Convert miles to kilometers for backend API (backend expects kilometers)
   const radiusMiles = Math.max(0, Number(radius))
   const radiusKm = radiusMiles * MILES_TO_KM
   
-  // Enforce fixed 7-day discovery window (server time)
-  const now = new Date()
-  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  // Calculate time window based on timeframe parameter
+  const { start, end } = calculateTimeframe(timeframe, customStart, customEnd)
   
   const params = new URLSearchParams()
   params.append('lat', lat.toString())
   params.append('lng', lng.toString())
   params.append('radius', radiusKm.toString())
-  params.append('start', now.toISOString())
-  params.append('end', sevenDaysLater.toISOString())
+  params.append('start', start.toISOString())
+  params.append('end', end.toISOString())
 
   const url = `${backendUrl}/v1/events/near?${params.toString()}`
   
@@ -405,13 +492,20 @@ Provide as helpful context, always with disclosure.
 
 When users ask about events or open houses:
 1. Use the getEventsNear tool to search for events near their location
-2. Present results using rich Markdown formatting
-3. Show only the freshest version per property using deduplication:
+2. **ALWAYS use the timeframe parameter** when users specify time-based queries:
+   - "today" → use timeframe='today'
+   - "tomorrow" → use timeframe='tomorrow'  
+   - "this weekend" or "weekend" → use timeframe='weekend'
+   - "next 7 days" or unspecified → use timeframe='next_7_days'
+   - Specific date ranges → use timeframe='custom' with start/end parameters
+3. Present results using rich Markdown formatting
+4. Show only the freshest version per property using deduplication:
    - Canonical key: streetAddress + postalCode + city + region + lat/lng + brokerageId
    - Freshness priority: submissionTimestamp → storedAt → updatedAt → createdAt → startDate
-4. Sort by distance or date as appropriate
-5. Include distance and travel time estimates when coordinates available
-6. Group properties by neighborhood or area when helpful
+5. Sort by distance or date as appropriate
+6. Include distance and travel time estimates when coordinates available
+7. Group properties by neighborhood or area when helpful
+8. **Display times in local timezone** (PT for California locations) when timezone information is available
 
 ## Anti-Hallucination Rules - CRITICAL
 
@@ -432,13 +526,14 @@ When users ask about events or open houses:
 
 ## Date & Time Filtering
 
-When users ask about "this weekend", "today", "tomorrow", etc.:
-- Calculate specific dates based on current date/time
-- Filter events to match the requested timeframe
-- If no matches, suggest nearest alternative dates
+The getEventsNear tool now supports timeframe-based filtering:
+- Use the **timeframe** parameter to filter events by time period
+- Supported timeframes: "today", "tomorrow", "weekend", "next_7_days", "custom"
+- When users ask about specific time periods, use the appropriate timeframe parameter
 - Examples:
-  - "this weekend" = Saturday and Sunday of current week
-  - "today" = current date only
+  - "What's open today?" → timeframe='today'
+  - "Show me open houses tomorrow" → timeframe='tomorrow'
+  - "What's happening this weekend?" → timeframe='weekend'
   - "next week" = Monday through Sunday of following week
 
 ## Required Disclaimers
