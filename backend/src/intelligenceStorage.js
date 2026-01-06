@@ -9,7 +9,8 @@
 
 import { 
   isFirestoreEnabled,
-  getFirestoreClient
+  getFirestoreClient,
+  lockOccurrence
 } from './firestoreClient.js'
 
 // In-memory stores
@@ -59,6 +60,16 @@ export async function storeAttendance(attendanceData) {
   // Store in memory
   attendanceStore.set(attendanceId, attendance)
   console.log(`📍 Stored attendance: ${attendanceId} for event ${attendance.eventId}`)
+  
+  // Lock occurrence if occurrenceId is present
+  if (attendance.occurrenceId && isFirestoreEnabled()) {
+    try {
+      await lockOccurrence(attendance.eventId, attendance.occurrenceId)
+    } catch (error) {
+      console.error('⚠️ Failed to lock occurrence:', error.message)
+      // Non-fatal - continue with attendance storage
+    }
+  }
   
   // Save to Firestore if enabled
   if (isFirestoreEnabled()) {
