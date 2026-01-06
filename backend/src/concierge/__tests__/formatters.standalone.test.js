@@ -1,50 +1,11 @@
 /**
  * Simple standalone test for formatLocalTime function
  * Run with: node backend/src/concierge/__tests__/formatters.standalone.test.js
+ * 
+ * NOTE: Uses testUtils.js to share test code without requiring npm dependencies
  */
 
-/**
- * Format event times in local timezone for display
- */
-function formatLocalTime(startISO, endISO, timezone) {
-  if (!startISO || !endISO || !timezone) {
-    return null
-  }
-
-  try {
-    const startDate = new Date(startISO)
-    const endDate = new Date(endISO)
-
-    // Validate dates
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      return null
-    }
-
-    // Format times in the local timezone
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: timezone
-    })
-
-    const startTimeLocal = formatter.format(startDate)
-    const endTimeLocal = formatter.format(endDate)
-
-    // Extract timezone abbreviation (e.g., "PT", "ET")
-    const tzFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZoneName: 'short',
-      timeZone: timezone
-    })
-    const tzParts = tzFormatter.formatToParts(startDate)
-    const tzName = tzParts.find(part => part.type === 'timeZoneName')?.value || ''
-
-    return `${startTimeLocal} – ${endTimeLocal} ${tzName}`.trim()
-  } catch (error) {
-    console.error('Error formatting local time:', error)
-    return null
-  }
-}
+import { formatLocalTime } from './testUtils.js'
 
 // Test cases
 console.log('Testing formatLocalTime function...\n')
