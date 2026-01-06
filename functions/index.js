@@ -469,7 +469,7 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
     const feedbackEventIds = [...new Set(feedbackDocs.map(f => f.eventId).filter(Boolean))]
     const attendanceEventIds = [...new Set(attendanceDocs.map(a => a.eventId).filter(Boolean))]
     const allEventIds = [...new Set([...feedbackEventIds, ...attendanceEventIds])]
-    console.log(`Step 3: Found ${allEventIds.length} unique event IDs (${feedbackEventIds.length} from feedback, ${attendanceEventIds.length} from attendance)`)
+    console.log(`Found ${allEventIds.length} unique event IDs (${feedbackEventIds.length} from feedback, ${attendanceEventIds.length} from attendance)`)
     
     // Batch query events for enrichment
     console.log('Step 3: Querying event documents...')
