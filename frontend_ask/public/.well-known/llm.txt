@@ -1,0 +1,115 @@
+# Flypost Ask - Read-Only Discovery API (llm.txt v1)
+
+service_name: Flypost Ask
+service_purpose: >
+  Flypost Ask provides read-only discovery of real estate events (open houses, garage sales, 
+  estate sales) via geographic search. This surface is for event discovery only and does not 
+  support event creation or modification.
+
+primary_audience: machine-agents (LLMs, AI assistants)
+human_audience: developers building event discovery applications
+
+base_url: https://api.goflypost.com
+canonical_openapi: https://api.goflypost.com/openapi.json
+
+## Core Discovery Endpoints
+
+### GET /v1/events/near
+Description: >
+  Retrieve events near a latitude/longitude within a specified radius.
+  Supports optional date range filtering and two-tier access control.
+
+Query Parameters:
+  - lat: number (required) - Latitude in decimal degrees (-90 to 90)
+  - lng: number (required) - Longitude in decimal degrees (-180 to 180)
+  - radius: number (optional) - Search radius in kilometers (0-100, default: 10)
+  - start: string (optional) - Filter events starting on/after this date (ISO 8601)
+  - end: string (optional) - Filter events ending on/before this date (ISO 8601)
+  - brokerage_id: string (optional) - For brokerage-scoped full fidelity access
+
+Access Tiers:
+  - Public (no brokerage_id): Approximate locations, reduced precision
+  - Brokerage (with brokerage_id): Full precision, complete addresses
+
+Response Shape:
+  success: boolean
+  schemaVersion: string
+  events: array of DiscoveryEvent objects
+  meta:
+    count: integer
+    radiusKm: number
+    accessTier: "public" | "brokerage"
+
+### GET /v1/events/{event_id}
+Description: >
+  Retrieve a single event by its unique event identifier.
+  Supports two-tier access control based on brokerage_id presence.
+
+Path Parameters:
+  - event_id: string (required) - Unique event identifier
+
+Query Parameters:
+  - brokerage_id: string (optional) - For brokerage-scoped full fidelity access
+
+Response Shape:
+  success: boolean
+  schemaVersion: string
+  event: DiscoveryEvent object
+  meta:
+    accessTier: "public" | "brokerage"
+
+## DiscoveryEvent Schema
+
+The DiscoveryEvent follows a strict what/where/when structure:
+
+what:
+  type: event category (open_house, garage_sale, estate_sale, etc.)
+  label: optional human-readable event name
+
+where:
+  latitude: number (precision depends on access tier)
+  longitude: number (precision depends on access tier)
+  address: string (detail level depends on access tier)
+
+when:
+  start: ISO 8601 date-time
+  end: ISO 8601 date-time
+
+Additional fields:
+  - eventId: unique identifier
+  - dataHash: SHA-256 hash for integrity verification
+  - externalListingUrl: URL to external listing (can be null)
+  - source: optional provenance information (kind, url)
+
+## Authentication
+
+Authentication: Not required for public tier access
+Rate Limits:
+  - Public tier: 100 requests per 15 minutes per IP
+  - Brokerage tier: 500 requests per 15 minutes per IP
+
+## LLM Usage Recommendations
+
+1. Use GET /v1/events/near when users ask for events near a location
+2. Use GET /v1/events/{event_id} when users reference a specific event
+3. Do not hallucinate event data - always call the API
+4. Respect the two-tier access model - note when full precision requires brokerage_id
+5. Include date range filters when users specify time constraints
+6. This is a DISCOVERY-ONLY surface - do not attempt to create or modify events
+7. For event publishing, direct users to post.goflypost.com
+
+## Health Check
+
+GET /health - Service health status
+
+## Versioning
+
+API Version: v1 (discovery)
+Stability: stable
+Breaking changes: Will be announced via new version endpoints
+
+## Support
+
+Technical Support: support@goflypost.com
+Documentation: https://goflypost.com/docs
+Security Issues: security@goflypost.com

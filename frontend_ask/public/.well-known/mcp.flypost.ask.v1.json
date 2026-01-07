@@ -1,0 +1,288 @@
+{
+  "name": "Flypost Ask - Event Discovery",
+  "version": "1.0.0",
+  "description": "Read-only discovery tools for Flypost events. Retrieve events by location or ID. This surface provides discovery-only capabilities with no write operations.",
+  "capabilities": [
+    "event_discovery",
+    "location_search",
+    "event_retrieval"
+  ],
+  "tools": [
+    {
+      "name": "get_events_near",
+      "description": "Retrieve events near a geographic location within a specified radius. Supports optional date filtering and two-tier access control (public vs brokerage).",
+      "input_schema": {
+        "type": "object",
+        "description": "Parameters for location-based event search",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "description": "Latitude in decimal degrees (-90 to 90)",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude in decimal degrees (-180 to 180)",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "radius": {
+            "type": "number",
+            "description": "Search radius in kilometers (0-100, default: 10)",
+            "minimum": 0,
+            "maximum": 100,
+            "default": 10
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Optional: Filter events starting on or after this date (ISO 8601)"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Optional: Filter events ending on or before this date (ISO 8601)"
+          },
+          "brokerage_id": {
+            "type": "string",
+            "description": "Optional: Brokerage identifier for full fidelity access"
+          }
+        },
+        "required": ["lat", "lng"]
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "Search results with events and metadata",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the request succeeded"
+          },
+          "schemaVersion": {
+            "type": "string",
+            "description": "Response schema version",
+            "example": "discovery.v1"
+          },
+          "events": {
+            "type": "array",
+            "description": "Array of discovery events",
+            "items": {
+              "$ref": "#/components/schemas/DiscoveryEvent"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "description": "Number of events returned"
+              },
+              "radiusKm": {
+                "type": "number",
+                "description": "Search radius used"
+              },
+              "accessTier": {
+                "type": "string",
+                "enum": ["public", "brokerage"],
+                "description": "Access tier used for this request"
+              }
+            }
+          }
+        },
+        "required": ["success", "events"]
+      },
+      "configuration": {
+        "endpoint": "https://api.goflypost.com/v1/events/near",
+        "method": "GET",
+        "auth": {
+          "type": "none",
+          "description": "No authentication required for public tier"
+        }
+      }
+    },
+    {
+      "name": "get_event_by_id",
+      "description": "Retrieve a single event by its unique event identifier. Supports two-tier access control based on brokerage_id presence.",
+      "input_schema": {
+        "type": "object",
+        "description": "Parameters for retrieving a specific event",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "description": "Unique event identifier (e.g., 'evt_20250115_abc123')"
+          },
+          "brokerage_id": {
+            "type": "string",
+            "description": "Optional: Brokerage identifier for full fidelity access"
+          }
+        },
+        "required": ["event_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "Single event with metadata",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the request succeeded"
+          },
+          "schemaVersion": {
+            "type": "string",
+            "description": "Response schema version",
+            "example": "discovery.v1"
+          },
+          "event": {
+            "$ref": "#/components/schemas/DiscoveryEvent"
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "accessTier": {
+                "type": "string",
+                "enum": ["public", "brokerage"],
+                "description": "Access tier used for this request"
+              }
+            }
+          }
+        },
+        "required": ["success", "event"]
+      },
+      "configuration": {
+        "endpoint": "https://api.goflypost.com/v1/events/{event_id}",
+        "method": "GET",
+        "auth": {
+          "type": "none",
+          "description": "No authentication required for public tier"
+        }
+      }
+    }
+  ],
+  "components": {
+    "schemas": {
+      "DiscoveryEvent": {
+        "type": "object",
+        "description": "Event in Discovery V1 format with strict what/where/when structure",
+        "required": ["eventId", "dataHash", "what", "where", "when", "externalListingUrl"],
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "description": "Unique event identifier"
+          },
+          "dataHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 hash for integrity verification"
+          },
+          "what": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["open_house", "garage_sale", "estate_sale", "moving_sale", "yard_sale", "other"],
+                "description": "Event category"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 80,
+                "description": "Optional human-readable event name"
+              }
+            }
+          },
+          "where": {
+            "type": "object",
+            "required": ["latitude", "longitude"],
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Latitude (precision depends on access tier)"
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Longitude (precision depends on access tier)"
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "Optional address (detail level depends on access tier)"
+              }
+            }
+          },
+          "when": {
+            "type": "object",
+            "required": ["start", "end"],
+            "properties": {
+              "start": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Event start date and time (ISO 8601 UTC)"
+              },
+              "end": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Event end date and time (ISO 8601 UTC)"
+              }
+            }
+          },
+          "externalListingUrl": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "URL to external listing (required field, can be null)"
+          },
+          "source": {
+            "type": "object",
+            "required": ["kind", "url"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["mls", "brokerage_roster", "manual", "third_party"],
+                "description": "Source type"
+              },
+              "url": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Source URL (can be null)"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "configuration": {
+    "base_url": "https://api.goflypost.com",
+    "rate_limits": {
+      "public_tier": "100 requests per 15 minutes per IP",
+      "brokerage_tier": "500 requests per 15 minutes per IP"
+    },
+    "timeout_ms": 10000,
+    "retry_policy": {
+      "max_retries": 3,
+      "backoff_strategy": "exponential"
+    }
+  },
+  "metrics": {
+    "performance_tracking": true,
+    "latency_ms": 5000,
+    "enable_error_logging": true
+  }
+}
