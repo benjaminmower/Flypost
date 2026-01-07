@@ -1,0 +1,277 @@
+{
+  "name": "Flypost Post - Event Publisher",
+  "version": "1.0.0",
+  "description": "Write/publish tools for Flypost events. Parse natural language descriptions and publish structured events. Authentication required.",
+  "capabilities": [
+    "event_publishing",
+    "natural_language_parsing",
+    "schema_validation",
+    "event_storage"
+  ],
+  "tools": [
+    {
+      "name": "parse_and_publish_event",
+      "description": "Parse a natural-language event description, validate it, compute a hash, and store it. Returns the stored event with Flypost metadata. IMPORTANT: List price is required for all events.",
+      "input_schema": {
+        "type": "object",
+        "description": "Parameters for parsing and publishing an event",
+        "properties": {
+          "naturalLanguageInput": {
+            "type": "string",
+            "description": "Full natural-language event description. MUST include a list price (e.g., 'List Price: $1,250,000' or '$2.5M'). Supported formats: $1,250,000 | $1250000 | $2.5M | $2.5 million"
+          },
+          "brokerageId": {
+            "type": "string",
+            "description": "Optional brokerage tenant identifier (e.g., 'compass', 'vista-sir'). Can also be injected via x-flypost-brokerage-id header."
+          },
+          "userContext": {
+            "type": "object",
+            "description": "Optional metadata about the caller or submission context",
+            "properties": {
+              "agentName": {
+                "type": "string",
+                "description": "Name of the agent submitting the event"
+              },
+              "agentEmail": {
+                "type": "string",
+                "description": "Email of the agent submitting the event"
+              },
+              "source": {
+                "type": "string",
+                "description": "Source of the submission (e.g., 'web', 'mobile', 'api')"
+              }
+            }
+          }
+        },
+        "required": ["naturalLanguageInput"]
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "Published event with processing metadata",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the publish operation succeeded"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "eventId": {
+                "type": "string",
+                "description": "Unique Flypost event identifier"
+              },
+              "event": {
+                "$ref": "#/components/schemas/FlypostEvent"
+              },
+              "processing": {
+                "type": "object",
+                "description": "Processing stage results",
+                "properties": {
+                  "parsed": {
+                    "type": "boolean",
+                    "description": "Whether parsing succeeded"
+                  },
+                  "validated": {
+                    "type": "boolean",
+                    "description": "Whether schema validation passed"
+                  },
+                  "hashed": {
+                    "type": "boolean",
+                    "description": "Whether hash was computed"
+                  },
+                  "stored": {
+                    "type": "boolean",
+                    "description": "Whether event was stored"
+                  }
+                }
+              }
+            }
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if success is false"
+          }
+        },
+        "required": ["success"]
+      },
+      "configuration": {
+        "endpoint": "https://api.goflypost.com/api/parse-and-publish",
+        "method": "POST",
+        "auth": {
+          "type": "api_key",
+          "in": "header",
+          "name": "x-flypost-write-token",
+          "description": "Required write token for authentication. Must be provided in request headers."
+        },
+        "content_type": "application/json",
+        "required_headers": [
+          "x-flypost-write-token"
+        ]
+      }
+    }
+  ],
+  "components": {
+    "schemas": {
+      "FlypostEvent": {
+        "type": "object",
+        "description": "Schema.org Event with Flypost extensions",
+        "required": ["name", "startDate", "location", "flypost"],
+        "properties": {
+          "@context": {
+            "type": "string",
+            "example": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "example": "Event"
+          },
+          "name": {
+            "type": "string",
+            "description": "Event name/title"
+          },
+          "description": {
+            "type": "string",
+            "description": "Full event description"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Event start date and time (ISO 8601)"
+          },
+          "endDate": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Event end date and time (ISO 8601, can be null)"
+          },
+          "location": {
+            "type": "object",
+            "description": "Schema.org Place object with address and geo coordinates"
+          },
+          "organizer": {
+            "type": "object",
+            "description": "Schema.org Person or Organization object (optional)"
+          },
+          "brokerageId": {
+            "type": "string",
+            "description": "Brokerage tenant identifier"
+          },
+          "offers": {
+            "type": "object",
+            "description": "Schema.org Offer (typically derived from flypost.listPrice)",
+            "properties": {
+              "@type": {
+                "type": "string",
+                "enum": ["Offer"]
+              },
+              "price": {
+                "type": "number",
+                "description": "Price value"
+              },
+              "priceCurrency": {
+                "type": "string",
+                "default": "USD",
+                "description": "Currency code"
+              }
+            }
+          },
+          "flypost": {
+            "type": "object",
+            "description": "Flypost metadata and extensions",
+            "required": ["eventId", "brokerageId"],
+            "properties": {
+              "eventId": {
+                "type": "string",
+                "description": "Unique Flypost event identifier"
+              },
+              "brokerageId": {
+                "type": "string",
+                "description": "Brokerage tenant identifier"
+              },
+              "category": {
+                "type": "string",
+                "description": "Event category (open_house, garage_sale, etc.)"
+              },
+              "submissionTimestamp": {
+                "type": "string",
+                "format": "date-time",
+                "description": "When the event was submitted"
+              },
+              "listPrice": {
+                "type": "number",
+                "description": "List price value (REQUIRED)"
+              },
+              "listPriceCurrency": {
+                "type": "string",
+                "default": "USD",
+                "description": "Currency code for list price"
+              },
+              "listPriceDisplay": {
+                "type": "string",
+                "description": "Formatted price string for display"
+              },
+              "priceConfidence": {
+                "type": "string",
+                "enum": ["verified", "inferred"],
+                "description": "Confidence level in the extracted price"
+              }
+            }
+          },
+          "hash": {
+            "type": "object",
+            "description": "Hash for data integrity",
+            "required": ["algorithm", "value"],
+            "properties": {
+              "algorithm": {
+                "type": "string",
+                "example": "sha256"
+              },
+              "value": {
+                "type": "string",
+                "description": "Hash value"
+              }
+            }
+          },
+          "storedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when event was stored"
+          }
+        }
+      }
+    }
+  },
+  "configuration": {
+    "base_url": "https://api.goflypost.com",
+    "auth": {
+      "type": "api_key",
+      "header_name": "x-flypost-write-token",
+      "description": "Write token must be obtained from Flypost admin or Firebase auth"
+    },
+    "rate_limits": {
+      "authenticated": "500 requests per 15 minutes"
+    },
+    "timeout_ms": 15000,
+    "retry_policy": {
+      "max_retries": 2,
+      "backoff_strategy": "exponential",
+      "retry_on": [500, 502, 503, 504]
+    }
+  },
+  "security_notes": {
+    "token_storage": "Never expose write tokens in client-side code or logs",
+    "https_required": "All API calls must use HTTPS",
+    "token_handling": "Store tokens securely in environment variables or secure vaults"
+  },
+  "metrics": {
+    "performance_tracking": true,
+    "latency_ms": 10000,
+    "enable_error_logging": true
+  }
+}

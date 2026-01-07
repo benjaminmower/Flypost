@@ -1,0 +1,30 @@
+{
+  "schema_version": "v1",
+  "name_for_model": "flypost_post",
+  "name_for_human": "Flypost Post - Event Publisher",
+  "description_for_model": "Flypost Post provides authenticated write access to parse and publish real estate events. Use this to help users create and publish open house listings and other events from natural language descriptions. Requires authentication via x-flypost-write-token header.",
+  "description_for_human": "Publish real estate events like open houses from natural language descriptions (authentication required).",
+  "auth": {
+    "type": "service_http",
+    "authorization_type": "bearer",
+    "verification_tokens": {
+      "x-flypost-write-token": "required"
+    }
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://api.goflypost.com/openapi.json",
+    "is_user_authenticated": true
+  },
+  "capabilities": {
+    "domain_specific": [
+      "event-publishing",
+      "natural-language-parsing",
+      "open-house-creation",
+      "event-validation"
+    ]
+  },
+  "contact_email": "support@goflypost.com",
+  "legal_info_url": "https://goflypost.com/legal",
+  "logo_url": "https://goflypost.com/logo.png"
+}
