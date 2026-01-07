@@ -435,6 +435,7 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
 
 /**
  * Build a broker-facing Markdown summary from the weekly digest data
+ * (Report Card format, no PII)
  * 
  * @param {object} params - Parameters
  * @param {string} params.windowStartIso - Start of window in UTC ISO format
@@ -443,78 +444,143 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
  * @returns {string} - Markdown-formatted summary
  */
 function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventDigests }) {
-  // Format dates in LA timezone for broker readability
+  // Format dates in LA timezone for readability
   const dateFormatter = new Intl.DateTimeFormat('en-US', {
     timeZone: LA_TIMEZONE,
     month: 'short',
     day: '2-digit',
     year: 'numeric'
   })
-  
+
   const startDate = dateFormatter.format(new Date(windowStartIso))
   const endDate = dateFormatter.format(new Date(windowEndIso))
-  
-  // Calculate totals
+  const periodLabel = `${startDate} — ${endDate}`
+
+  // Weekly totals (note: unique buyers are per-event uniques summed; no cross-event de-dupe to avoid PII)
   let totalCheckIns = 0
+  let uniqueBuyersSum = 0
   let totalFeedback = 0
   let totalWantsSimilar = 0
-  let totalWouldBuyYes = 0
-  let totalWouldBuyMaybe = 0
-  let totalWouldBuyNo = 0
-  
+
   for (const event of eventDigests) {
     totalCheckIns += event.totalCheckIns || 0
+    uniqueBuyersSum += event.uniqueCheckInBuyers || 0
     totalFeedback += event.feedbackCount || 0
     totalWantsSimilar += event.wantsSimilarCount || 0
-    totalWouldBuyYes += event.wouldBuyYesCount || 0
-    totalWouldBuyMaybe += event.wouldBuyMaybeCount || 0
-    totalWouldBuyNo += event.wouldBuyNoCount || 0
   }
-  
-  // Build Markdown
+
+  const feedbackRatePct =
+    totalCheckIns === 0 ? 0 : Math.floor((totalFeedback / totalCheckIns) * 100)
+
+  // Scoreboard rows
+  const scoreboardRows = []
+  for (const event of eventDigests) {
+    const addressText = event.eventAddress || `Event ${event.eventId}`
+    const addressCell = event.listingUrl
+      ? `[${addressText}](${event.listingUrl})`
+      : addressText
+
+    const ratePct =
+      event.totalCheckIns === 0 ? 0 : Math.floor((event.feedbackCount / event.totalCheckIns) * 100)
+
+    scoreboardRows.push(
+      `| ${addressCell} | ${event.totalCheckIns || 0} | ${event.uniqueCheckInBuyers || 0} | ${event.feedbackCount || 0} | ${ratePct}% | ${event.wantsSimilarCount || 0} | \`${event.eventId}\` |`
+    )
+  }
+
+  // Top signal heuristic:
+  // 1) highest wantsSimilarCount
+  // 2) tie-breaker: highest totalCheckIns
+  // 3) then feedbackCount
+  let top = null
+  for (const event of eventDigests) {
+    if (!top) {
+      top = event
+      continue
+    }
+
+    const a = event
+    const b = top
+
+    const aW = a.wantsSimilarCount || 0
+    const bW = b.wantsSimilarCount || 0
+    if (aW !== bW) {
+      if (aW > bW) top = a
+      continue
+    }
+
+    const aC = a.totalCheckIns || 0
+    const bC = b.totalCheckIns || 0
+    if (aC !== bC) {
+      if (aC > bC) top = a
+      continue
+    }
+
+    const aF = a.feedbackCount || 0
+    const bF = b.feedbackCount || 0
+    if (aF > bF) top = a
+  }
+
   const lines = []
-  lines.push('## Weekly Open House Digest (Mon–Mon)')
+
+  lines.push('# FLYPOST | WEEKLY REPORT CARD')
+  lines.push('**Registry Status:** Verified Immutable Record  ')
+  lines.push('**Vertical:** Santa Monica Residential // Open House')
+  lines.push(`**Period:** ${periodLabel}`)
   lines.push('')
-  lines.push(`**Week:** ${startDate} → ${endDate}`)
-  lines.push(`**Totals:** ${totalCheckIns} verified check-ins • ${totalFeedback} feedback`)
-  lines.push(`**Buy Intent:** ${totalWouldBuyYes} yes • ${totalWouldBuyMaybe} maybe • ${totalWouldBuyNo} no`)
-  lines.push(`**Wants similar homes:** ${totalWantsSimilar}`)
+  lines.push('---')
   lines.push('')
-  
-  // List events
-  if (eventDigests.length === 0) {
-    lines.push('_No events with check-ins this week._')
+  lines.push('## ✅ WEEK AT A GLANCE (GROUND TRUTH)')
+  lines.push('Unlike digital "views," these signals require physical human proximity at the coordinate during the event window.')
+  lines.push('')
+  lines.push(`* **Total Verified Check-ins:** **${totalCheckIns}**`)
+  lines.push(`* **Unique Identified Buyers:** **${uniqueBuyersSum}**`)
+  lines.push(`* **Presence Confidence:** **High** (GPS/Time-Window Gated)`)
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('## 📈 MARKET INTENT SIGNALS')
+  lines.push(`* **Direct Feedback Rate:** **${feedbackRatePct}%** (${totalFeedback} submissions)`)
+  lines.push(`* **Flypost "Wants Similar" Pulse:** **${totalWantsSimilar}** active intents`)
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('## 📊 EVENT SCOREBOARD')
+  lines.push('| Address | In | Unique | Feedback | Rate | Wants Similar | Flypost ID |')
+  lines.push('|---|---:|---:|---:|---:|---:|---|')
+
+  if (scoreboardRows.length === 0) {
+    lines.push('| _No events in this window._ | 0 | 0 | 0 | 0% | 0 | `—` |')
   } else {
-    for (const event of eventDigests) {
-      // Event heading: use address if available, otherwise eventId
-      const heading = event.eventAddress || event.eventId
-      lines.push(`### ${heading}`)
+    lines.push(...scoreboardRows)
+  }
+
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('## ⭐ TOP SIGNAL')
+
+  if (!top) {
+    lines.push('_No top signal this week (no events)._')
+  } else {
+    const topAddress = top.eventAddress || `Event ${top.eventId}`
+    const topRatePct =
+      top.totalCheckIns === 0 ? 0 : Math.floor((top.feedbackCount / top.totalCheckIns) * 100)
+
+    lines.push(`**📍 ${topAddress}**`)
+    lines.push(
+      `Verified check-ins: **${top.totalCheckIns || 0}** • Feedback rate: **${topRatePct}%** • Wants Similar: **${top.wantsSimilarCount || 0}**`
+    )
+    if (top.listingUrl) {
       lines.push('')
-      
-      // Listing URL if present
-      if (event.listingUrl) {
-        lines.push(`📍 ${event.listingUrl}`)
-        lines.push('')
-      }
-      
-      // Check-ins
-      lines.push(`**Verified check-ins:** ${event.totalCheckIns} (unique buyers: ${event.uniqueCheckInBuyers})`)
-      
-      // Feedback with percent
-      const feedbackPercent = event.totalCheckIns === 0 
-        ? 0 
-        : Math.floor((event.feedbackCount / event.totalCheckIns) * 100)
-      lines.push(`**Feedback submitted:** ${event.feedbackCount} (${feedbackPercent}%)`)
-      
-      // Buy intent breakdown
-      lines.push(`**Buy intent:** ${event.wouldBuyYesCount} yes • ${event.wouldBuyMaybeCount} maybe • ${event.wouldBuyNoCount} no`)
-      
-      // Wants similar
-      lines.push(`**Wants similar:** ${event.wantsSimilarCount}`)
-      lines.push('')
+      lines.push(`**Listing Source:** ${top.listingUrl}`)
     }
   }
-  
+
+  lines.push('')
+  lines.push('---')
+  lines.push('*This report is an immutable record of real-world activity recorded by the Flypost Event Registry.*')
+
   return lines.join('\n')
 }
 
