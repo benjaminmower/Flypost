@@ -4,6 +4,8 @@ frontend_ask/node_modules/
 frontend_ask/dist/
 frontend_post/node_modules/
 frontend_post/dist/
+frontend_presence/node_modules/
+frontend_presence/dist/
 proxy/node_modules/
 backend/node_modules/
 functions/node_modules/

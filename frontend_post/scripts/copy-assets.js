@@ -12,9 +12,9 @@ console.log('📦 Copying Post-specific capability assets to dist...')
 
 // Create public directory if it doesn't exist yet
 if (!existsSync(publicSource)) {
-  console.warn('⚠️  Warning: frontend_post/public directory not found')
-  console.log('ℹ️  Note: Post surface should have its own manifests in public/.well-known/')
-  process.exit(0)
+  console.error('❌ Error: frontend_post/public directory not found')
+  console.error('ℹ️  Post surface requires manifests in public/.well-known/')
+  process.exit(1)
 }
 
 // Copy .well-known directory from frontend_post/public
@@ -25,7 +25,9 @@ if (existsSync(wellKnownSrc)) {
   cpSync(wellKnownSrc, wellKnownDest, { recursive: true })
   console.log('✅ Copied .well-known/ (Post surface manifests)')
 } else {
-  console.warn('⚠️  Warning: .well-known directory not found in frontend_post/public')
+  console.error('❌ Error: .well-known directory not found in frontend_post/public')
+  console.error('ℹ️  Post surface requires ai.json, llm.txt, and MCP manifests')
+  process.exit(1)
 }
 
 console.log('✅ All Post capability assets copied successfully!')
