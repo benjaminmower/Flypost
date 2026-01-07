@@ -127,6 +127,87 @@ function enrichEventsWithPrice(events) {
 }
 
 /**
+ * Format event times in local timezone for display
+ * 
+ * @param {string} startISO - Start time in ISO 8601 format (UTC)
+ * @param {string} endISO - End time in ISO 8601 format (UTC)
+ * @param {string} timezone - IANA timezone string (e.g., "America/Los_Angeles")
+ * @returns {string|null} Formatted time string (e.g., "11:00 AM – 2:00 PM PT") or null if invalid
+ */
+function formatLocalTime(startISO, endISO, timezone) {
+  if (!startISO || !endISO || !timezone) {
+    return null
+  }
+
+  try {
+    const startDate = new Date(startISO)
+    const endDate = new Date(endISO)
+
+    // Validate dates
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return null
+    }
+
+    // Format times in the local timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: timezone
+    })
+
+    const startTimeLocal = formatter.format(startDate)
+    const endTimeLocal = formatter.format(endDate)
+
+    // Extract timezone abbreviation (e.g., "PT", "ET")
+    const tzFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZoneName: 'short',
+      timeZone: timezone
+    })
+    const tzParts = tzFormatter.formatToParts(startDate)
+    const tzName = tzParts.find(part => part.type === 'timeZoneName')?.value || ''
+
+    return `${startTimeLocal} – ${endTimeLocal} ${tzName}`.trim()
+  } catch (error) {
+    console.error('Error formatting local time:', error)
+    return null
+  }
+}
+
+/**
+ * Enrich events with local time display strings
+ * 
+ * @param {Array} events - Array of event objects
+ * @returns {Array} Events with when.displayLocal added
+ */
+function enrichEventsWithLocalTime(events) {
+  if (!events || !Array.isArray(events)) {
+    return events
+  }
+
+  return events.map(event => {
+    if (event.when && event.when.start && event.when.end && event.when.timezone) {
+      const displayLocal = formatLocalTime(
+        event.when.start,
+        event.when.end,
+        event.when.timezone
+      )
+      
+      if (displayLocal) {
+        return {
+          ...event,
+          when: {
+            ...event.when,
+            displayLocal
+          }
+        }
+      }
+    }
+    return event
+  })
+}
+
+/**
  * Define the getEventsNear tool for OpenAI function calling
  */
 const getEventsNearTool = {
@@ -520,7 +601,11 @@ When users ask about events or open houses:
 5. Sort by distance or date as appropriate
 6. Include distance and travel time estimates when coordinates available
 7. Group properties by neighborhood or area when helpful
-8. **Display times in local timezone** (PT for California locations) when timezone information is available
+8. **Display times in local timezone**:
+   - **CRITICAL**: If \`when.displayLocal\` is present in an event, you MUST use it verbatim for the open house time
+   - **NEVER** reformat or recalculate times when \`when.displayLocal\` exists
+   - \`when.displayLocal\` contains pre-formatted local time (e.g., "11:00 AM – 2:00 PM PT")
+   - Only fall back to \`when.start\` and \`when.end\` if \`when.displayLocal\` is not present
 
 ## Anti-Hallucination Rules - CRITICAL
 
@@ -687,6 +772,8 @@ The user's current location is approximately: ${locString}`
           // Enrich events with normalized price information
           if (result.success && result.events) {
             result.events = enrichEventsWithPrice(result.events)
+            // Enrich events with local time display strings
+            result.events = enrichEventsWithLocalTime(result.events)
             collectedEvents = result.events
           }
         } else {
@@ -816,3 +903,6 @@ The user's current location is approximately: ${locString}`
     }
   }
 }
+
+// Export helper functions for testing
+export { formatLocalTime, enrichEventsWithLocalTime }
