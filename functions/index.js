@@ -462,15 +462,25 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
   let totalFeedback = 0
   let totalWantsSimilar = 0
 
+  let totalWouldBuyYes = 0
+  let totalWouldBuyMaybe = 0
+  let totalWouldBuyNo = 0
+
   for (const event of eventDigests) {
     totalCheckIns += event.totalCheckIns || 0
     uniqueBuyersSum += event.uniqueCheckInBuyers || 0
     totalFeedback += event.feedbackCount || 0
     totalWantsSimilar += event.wantsSimilarCount || 0
+
+    totalWouldBuyYes += event.wouldBuyYesCount || 0
+    totalWouldBuyMaybe += event.wouldBuyMaybeCount || 0
+    totalWouldBuyNo += event.wouldBuyNoCount || 0
   }
 
   const feedbackRatePct =
     totalCheckIns === 0 ? 0 : Math.floor((totalFeedback / totalCheckIns) * 100)
+
+  const submissionWord = totalFeedback === 1 ? 'submission' : 'submissions'
 
   // Scoreboard rows
   const scoreboardRows = []
@@ -540,7 +550,8 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
   lines.push('---')
   lines.push('')
   lines.push('## 📈 MARKET INTENT SIGNALS')
-  lines.push(`* **Direct Feedback Rate:** **${feedbackRatePct}%** (${totalFeedback} submissions)`)
+  lines.push(`* **Direct Feedback Rate:** **${feedbackRatePct}%** (${totalFeedback} ${submissionWord})`)
+  lines.push(`* **Buy Intent (Would You Buy?):** **${totalWouldBuyYes} yes** • **${totalWouldBuyMaybe} maybe** • **${totalWouldBuyNo} no**`)
   lines.push(`* **Flypost "Wants Similar" Pulse:** **${totalWantsSimilar}** active intents`)
   lines.push('')
   lines.push('---')
@@ -570,6 +581,9 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
     lines.push(`**📍 ${topAddress}**`)
     lines.push(
       `Verified check-ins: **${top.totalCheckIns || 0}** • Feedback rate: **${topRatePct}%** • Wants Similar: **${top.wantsSimilarCount || 0}**`
+    )
+    lines.push(
+      `Buy intent: **${top.wouldBuyYesCount || 0} yes** • **${top.wouldBuyMaybeCount || 0} maybe** • **${top.wouldBuyNoCount || 0} no**`
     )
     if (top.listingUrl) {
       lines.push('')
