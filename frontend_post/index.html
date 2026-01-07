@@ -3,7 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Flypost | Post</title>
+
+    <!-- SEO / Open Graph -->
+    <title>Flypost Post | Publish an Open House</title>
+    <link rel="canonical" href="https://post.goflypost.com/" />
+    <meta name="description" content="Flypost Post is the authenticated publishing surface for agents and brokerages to post open houses into the Flypost registry." />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://post.goflypost.com/" />
+    <meta property="og:title" content="Flypost Post | Publish an Open House" />
+    <meta property="og:description" content="Authenticated posting for agents and brokerages. Publish open houses into the Flypost registry." />
+    <meta property="og:image" content="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695eaeeb6687c3be030ba5dd_3bade265ff941b27916be3edc7ae7ea0_flypost-ground-truth-registry-og.png.png" />
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -71,9 +82,9 @@
                 <p class="text-air_force_blue-700 text-[10px] md:text-xs mb-8 uppercase tracking-widest font-bold opacity-60">Magic Link Sign-In</p>
                 
                 <div class="flex flex-col gap-4">
-                    <input id="auth-email" type="email" placeholder="agent@brokerage.com" class="bg-ink_black/50 border border-white/10 p-4 md:p-5 rounded-xl md:rounded-2xl focus:outline-none focus:border-hot_berry text-white text-center text-sm md:text-lg transition-all">
+                    <input id="auth-email" type="email" placeholder="agent@brokerage.com" class="bg-ink_black/50 border border-white/10 p-4 md:p-5 rounded-xl md:rounded-2xl focus:outline-none focus:border-mint_leaf/50 transition-all text-white" />
                     
-                    <button id="send-link-btn" class="bg-hot_berry text-white py-4 md:py-6 rounded-xl md:rounded-2xl font-black text-lg md:text-2xl shadow-xl shadow-hot_berry/20 active:scale-95 transition-all uppercase tracking-tight">
+                    <button id="send-link-btn" class="bg-hot_berry text-white py-4 md:py-6 rounded-xl md:rounded-2xl font-black text-lg md:text-2xl shadow-xl shadow-hot_berry/20 active:scale-95 transition-all">
                         Send Magic Link
                     </button>
                 </div>
@@ -89,9 +100,9 @@
             </div>
             
             <form id="event-form" class="glass-card p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] border-mint_leaf/10 shadow-2xl">
-                <textarea id="event-input" rows="4" placeholder="Describe your event..." class="bg-ink_black/50 border border-white/10 w-full p-5 rounded-2xl focus:outline-none focus:border-mint_leaf text-white mb-6 resize-none text-sm md:text-base transition-all"></textarea>
+                <textarea id="event-input" rows="4" placeholder="Describe your event..." class="bg-ink_black/50 border border-white/10 w-full p-5 rounded-2xl focus:outline-none focus:border-mint_leaf/50 transition-all text-white"></textarea>
                 
-                <button id="publish-btn" type="submit" class="bg-bright_snow text-ink_black w-full py-4 md:py-6 rounded-2xl font-black text-lg md:text-2xl hover:bg-hot_berry hover:text-white transition-all transform active:scale-95 shadow-xl uppercase tracking-tight">
+                <button id="publish-btn" type="submit" class="bg-bright_snow text-ink_black w-full py-4 md:py-6 rounded-2xl font-black text-lg md:text-2xl hover:bg-hot_berry hover:text-white transition-all">
                     Publish Event
                 </button>
             </form>
