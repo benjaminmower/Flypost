@@ -10,6 +10,13 @@ const publicSource = join(projectRoot, 'public')
 
 console.log('📦 Copying Ask-specific capability assets to dist...')
 
+// Verify public directory exists
+if (!existsSync(publicSource)) {
+  console.error('❌ Error: frontend_ask/public directory not found')
+  console.error('ℹ️  Ask surface requires manifests in public/.well-known/')
+  process.exit(1)
+}
+
 // Copy .well-known directory from frontend_ask/public
 const wellKnownSrc = join(publicSource, '.well-known')
 const wellKnownDest = join(distDir, '.well-known')
@@ -18,7 +25,9 @@ if (existsSync(wellKnownSrc)) {
   cpSync(wellKnownSrc, wellKnownDest, { recursive: true })
   console.log('✅ Copied .well-known/ (Ask surface manifests)')
 } else {
-  console.warn('⚠️  Warning: .well-known directory not found in frontend_ask/public')
+  console.error('❌ Error: .well-known directory not found in frontend_ask/public')
+  console.error('ℹ️  Ask surface requires ai.json, llm.txt, and MCP manifests')
+  process.exit(1)
 }
 
 // Copy openapi.yaml if it exists (Ask-specific or cached)
