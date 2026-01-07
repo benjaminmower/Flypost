@@ -1,37 +1,34 @@
 #!/usr/bin/env node
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { cpSync, mkdirSync, existsSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
 const distDir = join(projectRoot, 'dist')
-const publicSource = join(projectRoot, '..', 'frontend', 'public')
+const publicSource = join(projectRoot, 'public')
 
-console.log('📦 Copying capability assets from frontend/public to dist...')
+console.log('📦 Copying Post-specific capability assets to dist...')
 
-// Copy .well-known directory
+// Create public directory if it doesn't exist yet
+if (!existsSync(publicSource)) {
+  console.error('❌ Error: frontend_post/public directory not found')
+  console.error('ℹ️  Post surface requires manifests in public/.well-known/')
+  process.exit(1)
+}
+
+// Copy .well-known directory from frontend_post/public
 const wellKnownSrc = join(publicSource, '.well-known')
 const wellKnownDest = join(distDir, '.well-known')
-mkdirSync(wellKnownDest, { recursive: true })
-cpSync(wellKnownSrc, wellKnownDest, { recursive: true })
-console.log('✅ Copied .well-known/')
+if (existsSync(wellKnownSrc)) {
+  mkdirSync(wellKnownDest, { recursive: true })
+  cpSync(wellKnownSrc, wellKnownDest, { recursive: true })
+  console.log('✅ Copied .well-known/ (Post surface manifests)')
+} else {
+  console.error('❌ Error: .well-known directory not found in frontend_post/public')
+  console.error('ℹ️  Post surface requires ai.json, llm.txt, and MCP manifests')
+  process.exit(1)
+}
 
-// Update ai.json to use relative path for this site
-const aiJsonPath = join(wellKnownDest, 'ai.json')
-const aiJsonContent = readFileSync(aiJsonPath, 'utf-8')
-const aiJson = JSON.parse(aiJsonContent)
-aiJson.api.url = '/openapi.json'
-writeFileSync(aiJsonPath, JSON.stringify(aiJson, null, 2))
-console.log('✅ Updated .well-known/ai.json to use relative URL')
-
-// Copy root-level files
-const rootFiles = ['llm.txt', 'openapi.json', 'mcp.flypost.get.v1.json', 'mcp.flypost.parse.v1.json']
-rootFiles.forEach(file => {
-  const src = join(publicSource, file)
-  const dest = join(distDir, file)
-  cpSync(src, dest)
-  console.log(`✅ Copied ${file}`)
-})
-
-console.log('✅ All capability assets copied successfully!')
+console.log('✅ All Post capability assets copied successfully!')
+console.log('ℹ️  Note: Post surface serves write/publish manifests only')
