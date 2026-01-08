@@ -1,10 +1,11 @@
 /**
  * Generates a deterministic event identity (brokerage-agnostic).
- * Format: <normalized-address>|<start-time-window>
+ * Format: <normalized-address>|<start-time-window>|<normalized-url> (URL optional)
  * 
  * This replaces the previous brokerage-scoped canonical key with a global identity.
- * Events are now uniquely identified by location + time window, enabling cross-brokerage
- * event recognition and post-visit intelligence tracking.
+ * Events are now uniquely identified by location + time window + listing URL (when available).
+ * This enables cross-brokerage event recognition while preventing different properties
+ * from overwriting each other when they share similar time windows or addresses.
  * 
  * @param {object} event - The Schema.org Event object
  * @returns {string|null} The event identity or null if address/startDate is missing
@@ -39,7 +40,16 @@ export function computeEventIdentity(event) {
   const timeWindow = computeStartTimeWindow(event.startDate)
   if (!timeWindow) return null
 
-  // Format: <normalized-address>|<start-time-window>
+  // Extract and normalize listing URL if available
+  const listingUrl = extractListingUrl(event)
+  const normalizedUrl = listingUrl ? normalizeUrl(listingUrl) : null
+
+  // Format: <normalized-address>|<start-time-window>|<normalized-url>
+  // If no URL, preserve backward compatibility with two-part format
+  if (normalizedUrl) {
+    return `${normalizedAddress}|${timeWindow}|${normalizedUrl}`
+  }
+  
   return `${normalizedAddress}|${timeWindow}`
 }
 
@@ -73,6 +83,85 @@ export function computeStartTimeWindow(startDate) {
     console.error('Error computing time window:', error)
     return null
   }
+}
+
+/**
+ * Extract listing URL from the event.
+ * Checks multiple possible locations for the URL.
+ * 
+ * @param {object} event - The Schema.org Event object
+ * @returns {string|null} The listing URL or null if not present
+ */
+export function extractListingUrl(event) {
+  // Prefer event.url (Schema.org Event.url)
+  if (event.url && typeof event.url === 'string') {
+    return event.url
+  }
+  
+  // Fallback to event.offers.url
+  if (event.offers?.url && typeof event.offers.url === 'string') {
+    return event.offers.url
+  }
+  
+  // Fallback to first source URL in flypost.sources
+  if (event.flypost?.sources && Array.isArray(event.flypost.sources)) {
+    for (const source of event.flypost.sources) {
+      if (source.sourceUrl && typeof source.sourceUrl === 'string') {
+        return source.sourceUrl
+      }
+    }
+  }
+  
+  return null
+}
+
+/**
+ * Normalize a URL for canonical identity comparison.
+ * - Lowercase the entire URL
+ * - Strip protocol (http://, https://)
+ * - Strip leading 'www.'
+ * - Remove trailing slash
+ * - Drop querystring and fragment
+ * 
+ * Example: "HTTPS://WWW.Zillow.com/homedetails/123-Main-St/?utm=1#photos"
+ *       -> "zillow.com/homedetails/123-main-st"
+ * 
+ * @param {string} url - The URL to normalize
+ * @returns {string|null} The normalized URL suitable for identity comparison, or null if invalid
+ */
+export function normalizeUrl(url) {
+  if (!url || typeof url !== 'string') {
+    return null
+  }
+  
+  let normalized = url.trim().toLowerCase()
+  
+  // If after trimming we have an empty string, return null
+  if (!normalized) {
+    return null
+  }
+  
+  // Strip protocol
+  normalized = normalized.replace(/^https?:\/\//, '')
+  
+  // Strip leading www.
+  normalized = normalized.replace(/^www\./, '')
+  
+  // Remove querystring and fragment more robustly
+  // Split by ? first, then by # to handle all cases
+  const withoutQuery = normalized.split('?')[0]
+  const withoutFragment = withoutQuery.split('#')[0]
+  normalized = withoutFragment
+  
+  // Remove trailing slash
+  normalized = normalized.replace(/\/$/, '')
+  
+  // If after all normalization we end up with empty string, return null
+  if (!normalized) {
+    return null
+  }
+  
+  return normalized
 }
 
 /**
