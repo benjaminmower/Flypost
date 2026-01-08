@@ -365,6 +365,13 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
 
+    // 1.05) STRIP CLIENT-SUPPLIED EVENTID (defense in depth)
+    // Prevent LLM/client from influencing eventId - server generates on insert
+    if (parsedEvent.flypost?.eventId) {
+      delete parsedEvent.flypost.eventId
+      console.log(`🛡️  Stripped client-supplied eventId (server will generate)`)
+    }
+
     // 1.1) DETERMINISTIC URL EXTRACTION
     // Extract external listing URL from raw input (deterministic, no LLM)
     const extractedUrl = extractFirstUrl(naturalLanguageInput)
@@ -974,6 +981,13 @@ app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
     
     // 3. Apply North Star enforcement: strip Layer 2 intelligence fields
     let event = sanitizeEvent(body.event)
+    
+    // 3.5. STRIP CLIENT-SUPPLIED EVENTID (defense in depth)
+    // Prevent client/MLS/scraper from influencing eventId - server generates on insert
+    if (event.flypost?.eventId) {
+      delete event.flypost.eventId
+      console.log(`🛡️  Stripped client-supplied eventId (server will generate)`)
+    }
     
     // 4. Normalize dates
     normalizeEventDates(event)
