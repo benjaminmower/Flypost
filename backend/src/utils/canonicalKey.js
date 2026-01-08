@@ -127,14 +127,19 @@ export function extractListingUrl(event) {
  *       -> "zillow.com/homedetails/123-main-st"
  * 
  * @param {string} url - The URL to normalize
- * @returns {string} The normalized URL suitable for identity comparison
+ * @returns {string|null} The normalized URL suitable for identity comparison, or null if invalid
  */
 export function normalizeUrl(url) {
   if (!url || typeof url !== 'string') {
-    return ''
+    return null
   }
   
   let normalized = url.trim().toLowerCase()
+  
+  // If after trimming we have an empty string, return null
+  if (!normalized) {
+    return null
+  }
   
   // Strip protocol
   normalized = normalized.replace(/^https?:\/\//, '')
@@ -142,11 +147,19 @@ export function normalizeUrl(url) {
   // Strip leading www.
   normalized = normalized.replace(/^www\./, '')
   
-  // Remove querystring and fragment
-  normalized = normalized.split('?')[0].split('#')[0]
+  // Remove querystring and fragment more robustly
+  // Split by ? first, then by # to handle all cases
+  const withoutQuery = normalized.split('?')[0]
+  const withoutFragment = withoutQuery.split('#')[0]
+  normalized = withoutFragment
   
   // Remove trailing slash
   normalized = normalized.replace(/\/$/, '')
+  
+  // If after all normalization we end up with empty string, return null
+  if (!normalized) {
+    return null
+  }
   
   return normalized
 }
