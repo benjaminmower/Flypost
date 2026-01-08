@@ -385,6 +385,21 @@ function testUrlNormalization() {
       input: 'https://listing.com/home?id=123&source=email#description',
       expected: 'listing.com/home',
       description: 'Both querystring and fragment'
+    },
+    {
+      input: '',
+      expected: null,
+      description: 'Empty string returns null'
+    },
+    {
+      input: '   ',
+      expected: null,
+      description: 'Whitespace only returns null'
+    },
+    {
+      input: null,
+      expected: null,
+      description: 'Null input returns null'
     }
   ]
 
