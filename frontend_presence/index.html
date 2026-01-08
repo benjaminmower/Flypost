@@ -97,9 +97,25 @@
             <h2 class="text-xl md:text-3xl font-bold mb-4 italic tracking-tight opacity-90">Arrived?</h2>
             <p class="text-air_force_blue-700 text-sm md:text-lg mb-8 md:mb-12 opacity-70">Check in to receive property details.</p>
             
-            <button id="btn-checkin" class="w-full bg-lemon_lime text-ink_black py-5 md:py-7 rounded-2xl md:rounded-3xl font-black text-xl md:text-3xl shadow-xl shadow-lemon_lime/20 active:scale-95 transition-all uppercase tracking-tight">
+            <button id="btn-checkin" class="w-full bg-lemon_lime text-ink_black py-5 md:py-7 rounded-2xl md:rounded-3xl font-black text-xl md:text-3xl shadow-xl shadow-lemon_lime/20 active:scale-95 transition-all">
                 Check In Now
             </button>
+
+            <!-- Consent / disclosure -->
+            <label class="mt-4 flex items-start gap-2 text-xs text-gray-600 leading-snug text-left">
+              <input id="consent-checkbox" type="checkbox" class="mt-1" />
+              <span>
+                By checking in, you agree to our
+                <a href="https://goflypost.com/terms" target="_blank" rel="noopener noreferrer" class="underline">
+                  Terms of Service
+                </a>
+                and
+                <a href="https://goflypost.com/privacy" target="_blank" rel="noopener noreferrer" class="underline">
+                  Privacy Policy
+                </a>.
+                We use your GPS and a browser token to verify your visit.
+              </span>
+            </label>
             
             <p id="status-msg" class="mt-6 text-[9px] uppercase tracking-[0.2em] text-air_force_blue-900 font-bold min-h-[14px]"></p>
         </div>
@@ -136,6 +152,7 @@
              <!-- Text feedback fields -->
              <textarea id="feedback-liked" rows="2" class="w-full bg-ink_black/50 border border-white/10 rounded-2xl p-5 text-white mb-6 outline-none" placeholder="What did you like?"></textarea>
              <textarea id="feedback-disliked" rows="2" class="w-full bg-ink_black/50 border border-white/10 rounded-2xl p-5 text-white mb-8 outline-none" placeholder="What didn't you like?"></textarea>
+             
              <button id="btn-submit-feedback" class="w-full bg-lemon_lime text-ink_black py-5 rounded-2xl font-black text-xl">Submit</button>
         </div>
     </main>
