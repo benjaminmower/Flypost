@@ -336,7 +336,7 @@ POST /v1/events/upsert
 ```
 
 **Description:**
-Canonical structured ingestion endpoint for machine sources (MLS, calendar scraper, manual entry, LLM adapter). Accepts full Schema.org Event objects and upserts by `eventIdentity` (location + time window).
+Canonical structured ingestion endpoint for machine sources (MLS, calendar scraper, manual entry, LLM adapter). Accepts full Schema.org Event objects and upserts by `eventIdentity` (location + time window + listing URL).
 
 **Request:**
 ```json
@@ -381,7 +381,7 @@ Canonical structured ingestion endpoint for machine sources (MLS, calendar scrap
   "operation": "insert",
   "data": {
     "eventId": "evt_abc123_1234567890",
-    "eventIdentity": "123mainstreet-santamonica-ca-90405|2025-01-20T14",
+    "eventIdentity": "123mainstreet-santamonica-ca-90405|2025-01-20T14|zillow.com/homedetails/123-main-st",
     "updateCount": 0,
     "event": {/* Full stored event */}
   }
@@ -395,7 +395,7 @@ Canonical structured ingestion endpoint for machine sources (MLS, calendar scrap
   "operation": "update",
   "data": {
     "eventId": "evt_abc123_1234567890",
-    "eventIdentity": "123mainstreet-santamonica-ca-90405|2025-01-20T14",
+    "eventIdentity": "123mainstreet-santamonica-ca-90405|2025-01-20T14|zillow.com/homedetails/123-main-st",
     "updateCount": 1,
     "event": {/* Updated event with merged sources */}
   }
@@ -414,9 +414,12 @@ Canonical structured ingestion endpoint for machine sources (MLS, calendar scrap
 **Behavior:**
 - **North Star Enforcement**: Strips Layer 2 intelligence fields (attendance, buyerToken, presenceProof, feedback, sentiment, insights, brokerageAffiliation, intelligence*)
 - **Server Authority**: Always sets/overwrites `flypost.eventIdentity`, `flypost.eventId`, `flypost.submissionTimestamp`, `flypost.updateCount`
-- **Upsert by Identity**: Uses `eventIdentity` (location + time window) as unique key
+- **Upsert by Identity**: Uses `eventIdentity` (location + time window + listing URL) as unique key
+  - Identity format: `<normalized-address>|<start-time-window>|<normalized-url>` (URL optional)
+  - URL normalization: lowercase, strip protocol/www, remove trailing slash/querystring/fragment
   - If identity exists: Updates event, preserves `eventId`, increments `updateCount`
   - If new: Creates event with `updateCount: 0`
+  - Without URL: Falls back to two-part format for backward compatibility
 - **Source Provenance**: Tracks sources in `flypost.sources` array, deduplicates by `sourceType + sourceId`
 - **Defaults**: Sets `realTimeData: true`, `crawlable: true`, `queryable: true` if missing
 

@@ -1,9 +1,14 @@
 /*
  * Test script for brokerage-agnostic event identity functionality
- * Tests the new global event identity system
+ * Tests the new global event identity system with URL normalization
  */
 
-import { computeEventIdentity, computeStartTimeWindow } from './src/utils/canonicalKey.js'
+import { 
+  computeEventIdentity, 
+  computeStartTimeWindow,
+  extractListingUrl,
+  normalizeUrl
+} from './src/utils/canonicalKey.js'
 
 // Test 1: Time window computation with hour precision
 function testTimeWindowHourBucket() {
@@ -351,6 +356,276 @@ function testAddressNormalization() {
   }
 }
 
+// Test 9: URL normalization
+function testUrlNormalization() {
+  console.log('\n🧪 Test 9: URL Normalization...')
+  
+  const testCases = [
+    {
+      input: 'HTTPS://WWW.Zillow.com/homedetails/123-Main-St/?utm=1#photos',
+      expected: 'zillow.com/homedetails/123-main-st',
+      description: 'Full URL with protocol, www, querystring, and fragment'
+    },
+    {
+      input: 'http://example.com/page/',
+      expected: 'example.com/page',
+      description: 'HTTP with trailing slash'
+    },
+    {
+      input: 'www.realtor.com/property/12345',
+      expected: 'realtor.com/property/12345',
+      description: 'No protocol, with www'
+    },
+    {
+      input: 'redfin.com/CA/Los-Angeles/123-Main-St',
+      expected: 'redfin.com/ca/los-angeles/123-main-st',
+      description: 'No protocol or www, with path'
+    },
+    {
+      input: 'https://listing.com/home?id=123&source=email#description',
+      expected: 'listing.com/home',
+      description: 'Both querystring and fragment'
+    },
+    {
+      input: '',
+      expected: null,
+      description: 'Empty string returns null'
+    },
+    {
+      input: '   ',
+      expected: null,
+      description: 'Whitespace only returns null'
+    },
+    {
+      input: null,
+      expected: null,
+      description: 'Null input returns null'
+    }
+  ]
+
+  let passed = 0
+  for (const test of testCases) {
+    const result = normalizeUrl(test.input)
+    if (result === test.expected) {
+      console.log(`   ✅ ${test.description}`)
+      passed++
+    } else {
+      console.error(`   ❌ ${test.description}`)
+      console.error(`      Expected: ${test.expected}`)
+      console.error(`      Got: ${result}`)
+    }
+  }
+
+  console.log(`   ${passed}/${testCases.length} tests passed`)
+  return passed === testCases.length
+}
+
+// Test 10: Extract listing URL from various event structures
+function testExtractListingUrl() {
+  console.log('\n🧪 Test 10: Extract Listing URL...')
+  
+  let passed = 0
+  
+  // Test event.url (preferred)
+  const eventWithUrl = {
+    url: 'https://zillow.com/property/123',
+    offers: { url: 'https://other.com/property/456' }
+  }
+  if (extractListingUrl(eventWithUrl) === 'https://zillow.com/property/123') {
+    console.log('   ✅ Prefers event.url')
+    passed++
+  } else {
+    console.error('   ❌ Failed to prefer event.url')
+  }
+  
+  // Test event.offers.url fallback
+  const eventWithOffersUrl = {
+    offers: { url: 'https://realtor.com/property/789' }
+  }
+  if (extractListingUrl(eventWithOffersUrl) === 'https://realtor.com/property/789') {
+    console.log('   ✅ Falls back to event.offers.url')
+    passed++
+  } else {
+    console.error('   ❌ Failed to fallback to event.offers.url')
+  }
+  
+  // Test event.flypost.sources[].sourceUrl fallback
+  const eventWithSourceUrl = {
+    flypost: {
+      sources: [
+        { sourceType: 'mls', sourceUrl: 'https://mls.com/listing/999' }
+      ]
+    }
+  }
+  if (extractListingUrl(eventWithSourceUrl) === 'https://mls.com/listing/999') {
+    console.log('   ✅ Falls back to flypost.sources[].sourceUrl')
+    passed++
+  } else {
+    console.error('   ❌ Failed to fallback to flypost.sources[].sourceUrl')
+  }
+  
+  // Test no URL returns null
+  const eventWithoutUrl = {
+    name: 'Event without URL'
+  }
+  if (extractListingUrl(eventWithoutUrl) === null) {
+    console.log('   ✅ Returns null when no URL present')
+    passed++
+  } else {
+    console.error('   ❌ Should return null when no URL present')
+  }
+
+  console.log(`   ${passed}/4 tests passed`)
+  return passed === 4
+}
+
+// Test 11: Different URLs produce different identities
+function testDifferentUrlsDifferentIdentities() {
+  console.log('\n🧪 Test 11: Different URLs Produce Different Identities...')
+  
+  const baseEvent = {
+    location: {
+      address: {
+        streetAddress: '123 Main Street',
+        addressLocality: 'Santa Monica',
+        addressRegion: 'CA',
+        postalCode: '90405'
+      }
+    },
+    startDate: '2025-01-15T14:30:00.000Z'
+  }
+  
+  const event1 = {
+    ...baseEvent,
+    url: 'https://zillow.com/property/listing-1'
+  }
+  
+  const event2 = {
+    ...baseEvent,
+    url: 'https://realtor.com/property/listing-2'
+  }
+  
+  const identity1 = computeEventIdentity(event1)
+  const identity2 = computeEventIdentity(event2)
+  
+  if (identity1 !== identity2) {
+    console.log('   ✅ Different URLs produce different identities:')
+    console.log(`      Event 1: ${identity1}`)
+    console.log(`      Event 2: ${identity2}`)
+    return true
+  } else {
+    console.error('   ❌ Same identity for different URLs:')
+    console.error(`      ${identity1}`)
+    return false
+  }
+}
+
+// Test 12: Same URL (normalized) produces same identity
+function testSameUrlSameIdentity() {
+  console.log('\n🧪 Test 12: Same URL (Normalized) Produces Same Identity...')
+  
+  const baseEvent = {
+    location: {
+      address: {
+        streetAddress: '123 Main Street',
+        addressLocality: 'Santa Monica',
+        addressRegion: 'CA',
+        postalCode: '90405'
+      }
+    },
+    startDate: '2025-01-15T14:30:00.000Z'
+  }
+  
+  const event1 = {
+    ...baseEvent,
+    url: 'HTTPS://WWW.Zillow.com/property/123/?utm=source'
+  }
+  
+  const event2 = {
+    ...baseEvent,
+    url: 'http://zillow.com/property/123/#photos'
+  }
+  
+  const identity1 = computeEventIdentity(event1)
+  const identity2 = computeEventIdentity(event2)
+  
+  if (identity1 === identity2) {
+    console.log('   ✅ URLs normalize to same identity:')
+    console.log(`      ${identity1}`)
+    return true
+  } else {
+    console.error('   ❌ Normalized URLs should produce same identity:')
+    console.error(`      Event 1: ${identity1}`)
+    console.error(`      Event 2: ${identity2}`)
+    return false
+  }
+}
+
+// Test 13: Backward compatibility - events without URL
+function testBackwardCompatibilityNoUrl() {
+  console.log('\n🧪 Test 13: Backward Compatibility (No URL)...')
+  
+  const eventWithoutUrl = {
+    location: {
+      address: {
+        streetAddress: '789 Oak Avenue',
+        addressLocality: 'Los Angeles',
+        addressRegion: 'CA',
+        postalCode: '90001'
+      }
+    },
+    startDate: '2025-02-20T10:00:00.000Z'
+  }
+  
+  const identity = computeEventIdentity(eventWithoutUrl)
+  
+  // Should be two-part format (address|time)
+  const parts = identity ? identity.split('|') : []
+  
+  if (parts.length === 2) {
+    console.log('   ✅ Events without URL use two-part identity format:')
+    console.log(`      ${identity}`)
+    return true
+  } else {
+    console.error('   ❌ Expected two-part identity for event without URL:')
+    console.error(`      Got: ${identity} (${parts.length} parts)`)
+    return false
+  }
+}
+
+// Test 14: Events with URL use three-part format
+function testThreePartFormatWithUrl() {
+  console.log('\n🧪 Test 14: Three-Part Format With URL...')
+  
+  const eventWithUrl = {
+    location: {
+      address: {
+        streetAddress: '456 Pine Street',
+        addressLocality: 'Seattle',
+        addressRegion: 'WA',
+        postalCode: '98101'
+      }
+    },
+    startDate: '2025-03-10T15:00:00.000Z',
+    url: 'https://redfin.com/property/456'
+  }
+  
+  const identity = computeEventIdentity(eventWithUrl)
+  
+  // Should be three-part format (address|time|url)
+  const parts = identity ? identity.split('|') : []
+  
+  if (parts.length === 3 && parts[2] === 'redfin.com/property/456') {
+    console.log('   ✅ Events with URL use three-part identity format:')
+    console.log(`      ${identity}`)
+    return true
+  } else {
+    console.error('   ❌ Expected three-part identity with normalized URL:')
+    console.error(`      Got: ${identity} (${parts.length} parts)`)
+    return false
+  }
+}
+
 // Run all tests
 async function runAllTests() {
   console.log('🧪 Event Identity Test Suite')
@@ -364,7 +639,13 @@ async function runAllTests() {
     testDifferentTimeWindows(),
     testBrokerageAgnostic(),
     testMissingDataHandling(),
-    testAddressNormalization()
+    testAddressNormalization(),
+    testUrlNormalization(),
+    testExtractListingUrl(),
+    testDifferentUrlsDifferentIdentities(),
+    testSameUrlSameIdentity(),
+    testBackwardCompatibilityNoUrl(),
+    testThreePartFormatWithUrl()
   ]
 
   const passed = results.filter(Boolean).length
