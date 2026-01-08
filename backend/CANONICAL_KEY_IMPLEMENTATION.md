@@ -6,10 +6,13 @@ This implementation introduces a **brokerage-agnostic event identity** system th
 ## Key Features
 
 ### 1. Global Event Identity (NEW)
-- **Format**: `<normalized-address>|<start-time-window>`
+- **Format**: `<normalized-address>|<start-time-window>|<normalized-url>` (URL optional)
 - **Time Window**: ISO hour bucket (YYYY-MM-DDTHH) for events with time, or date bucket (YYYY-MM-DD) for date-only events
-- **Example**: `123mainstreet-santamonica-ca-90405|2025-01-15T14`
+- **URL Component**: Normalized listing URL when available (prevents property collision)
+- **Example with URL**: `123mainstreet-santamonica-ca-90405|2025-01-15T14|zillow.com/homedetails/123-main-st`
+- **Example without URL**: `123mainstreet-santamonica-ca-90405|2025-01-15T14` (backward compatible)
 - **Brokerage-Agnostic**: Multiple brokerages can reference the same canonical event
+- **Property Differentiation**: Different listings at same address/time are distinguished by URL
 
 ### 2. Edit Instead of Create (Cross-Brokerage)
 When Firestore is enabled:
@@ -31,9 +34,12 @@ When Firestore is enabled:
 1. **`backend/src/utils/canonicalKey.js`**
    - **NEW**: Exports `computeEventIdentity(event)` function - brokerage-agnostic identity
    - **NEW**: Exports `computeStartTimeWindow(startDate)` helper - time bucket computation
+   - **NEW**: Exports `extractListingUrl(event)` helper - extracts URL from multiple sources
+   - **NEW**: Exports `normalizeUrl(url)` helper - deterministic URL normalization
    - **LEGACY**: Exports `computeCanonicalKey(event, brokerageId)` function - deprecated
    - Handles address normalization
    - Returns `null` if address/startDate data is missing
+   - URL normalization: lowercase, strip protocol/www, remove trailing slash/querystring/fragment
 
 2. **`backend/src/intelligenceStorage.js`** (NEW)
    - Post-visit intelligence storage layer
@@ -72,10 +78,13 @@ When Firestore is enabled:
    - Tests normalization, case insensitivity, partial addresses
    - Tests brokerage namespacing and key consistency
 
-2. **`backend/test-edit-instead-of-create.js`**
-   - 4 integration tests for the full behavior
-   - Tests canonical key preservation through storage
-   - Tests different addresses and different brokerages
+2. **`backend/test-event-identity.js`**
+   - 14 comprehensive tests for event identity with URL support
+   - Tests time window computation and address normalization
+   - Tests URL extraction from multiple sources (event.url, offers.url, sources[].sourceUrl)
+   - Tests URL normalization (protocol, www, trailing slash, querystring, fragment)
+   - Tests identity differentiation with URLs vs backward compatibility without URLs
+   - All tests passing ✅
 
 ## Testing Results
 
@@ -97,38 +106,58 @@ Server tested with:
 ```javascript
 // Address: "123 Main Street, Santa Monica, CA 90405"
 // Start Date: "2025-01-15T14:30:00Z"
-// Brokerage: "brokerage-abc"
-// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14"
+// URL: "https://zillow.com/property/abc123"
+// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14|zillow.com/property/abc123"
 // Result: New event created with eventId "evt_xyz123"
 ```
 
-### Example 2: Same Event Re-ingested (Same Brokerage)
+### Example 2: Same Event Re-ingested (Same Property)
 ```javascript
 // Address: "123 Main Street, Santa Monica, CA 90405" (same)
 // Start Date: "2025-01-15T14:45:00Z" (within same hour bucket)
-// Brokerage: "brokerage-abc" (same)
-// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14" (same)
+// URL: "https://zillow.com/property/abc123" (same)
+// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14|zillow.com/property/abc123" (same)
 // Result: With Firestore - Updates existing event "evt_xyz123" (version 2)
 // Result: Without Firestore - Creates new event (identity infrastructure in place)
 ```
 
-### Example 3: Same Event from Different Brokerage (NEW BEHAVIOR)
+### Example 3: Different Property at Same Address & Time (NEW BEHAVIOR)
+```javascript
+// Address: "123 Main Street, Santa Monica, CA 90405" (SAME)
+// Start Date: "2025-01-15T14:50:00Z" (SAME hour bucket)
+// URL: "https://redfin.com/property/xyz789" (DIFFERENT)
+// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14|redfin.com/property/xyz789" (DIFFERENT)
+// Result: New event created (different listing URL = different property)
+// NEW: Prevents recycled eventIds for different properties at same location/time!
+```
+
+### Example 4: Same Event from Different Brokerage
 ```javascript
 // Address: "123 Main Street, Santa Monica, CA 90405" (same)
 // Start Date: "2025-01-15T14:50:00Z" (same hour bucket)
+// URL: "https://zillow.com/property/abc123" (same)
 // Brokerage: "brokerage-xyz" (DIFFERENT)
-// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14" (SAME)
+// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T14|zillow.com/property/abc123" (SAME)
 // Result: With Firestore - Updates existing event "evt_xyz123" (version 3)
-// NEW: Cross-brokerage recognition - same canonical event!
+// Cross-brokerage recognition - same canonical event!
 ```
 
-### Example 4: Different Time Window
+### Example 5: Different Time Window
 ```javascript
 // Address: "123 Main Street, Santa Monica, CA 90405" (same)
 // Start Date: "2025-01-15T15:30:00Z" (different hour)
-// Brokerage: "brokerage-abc" (same)
-// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T15" (different)
+// URL: "https://zillow.com/property/abc123" (same)
+// Event Identity: "123mainstreet-santamonica-ca-90405|2025-01-15T15|zillow.com/property/abc123" (different)
 // Result: New event created (different time window)
+```
+
+### Example 6: Event Without URL (Backward Compatible)
+```javascript
+// Address: "456 Oak Ave, Portland, OR 97201"
+// Start Date: "2025-01-20T10:00:00Z"
+// URL: (none)
+// Event Identity: "456oakave-portland-or-97201|2025-01-20T10" (two-part format)
+// Result: Backward compatible - works exactly as before URL feature was added
 ```
 
 ## Notes
