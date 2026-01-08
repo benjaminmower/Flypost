@@ -111,7 +111,10 @@ Shared utilities for enriching events with server-side metadata:
 
 **Server Authority**: Always sets/overwrites:
 - `flypost.eventIdentity`: Brokerage-agnostic identity
-- `flypost.eventId`: Unique identifier (generated or preserved)
+- `flypost.eventId`: Unique identifier (generated on insert, preserved on update)
+  - **INSERT**: Server ALWAYS generates new eventId, ignoring any client-supplied value
+  - **UPDATE**: Server preserves existing eventId from storage
+  - Client/LLM-supplied eventIds are stripped at API boundaries for security
 - `flypost.submissionTimestamp`: Current timestamp
 - `flypost.updateCount`: Increment on update
 - `flypost.realTimeData`, `flypost.crawlable`, `flypost.queryable`: Defaults if missing
@@ -169,9 +172,13 @@ Events are uniquely identified by location + time window, not by eventId:
 
 ### 2. Server-Side Authority
 The server always controls identity and metadata fields:
-- Prevents clients from manipulating eventId or updateCount
+- **EventId Generation**: Server ALWAYS generates new eventId on insert
+  - Client/LLM-supplied eventIds are ignored and stripped at API boundaries
+  - Prevents eventId reuse across distinct events
+  - Update operations preserve the original server-generated eventId
+- Prevents clients from manipulating updateCount
 - Ensures consistent eventIdentity computation
-- Maintains data integrity
+- Maintains data integrity and prevents overwrites
 
 ### 3. Hybrid Storage Support
 Both in-memory and Firestore modes work seamlessly:
