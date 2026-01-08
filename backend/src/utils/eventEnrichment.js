@@ -48,11 +48,15 @@ export function enrichEventMetadata(event, options = {}) {
     console.warn('⚠️ Could not generate event identity (missing address or startDate?)')
   }
   
-  // 2. Set or preserve eventId
+  // 2. Set or preserve eventId (SERVER AUTHORITY)
+  // On update: preserve existing eventId
+  // On insert: ALWAYS generate new eventId (ignore client-supplied value)
   if (isUpdate && existingEventId) {
     event.flypost.eventId = existingEventId
     console.log(`🔄 Preserving existing eventId: ${existingEventId}`)
-  } else if (!event.flypost.eventId) {
+  } else {
+    // INSERT PATH: Always generate fresh eventId (server-authoritative)
+    // This overwrites any client/LLM-supplied eventId to prevent ID reuse
     event.flypost.eventId = generateEventId()
     console.log(`🆕 Generated new eventId: ${event.flypost.eventId}`)
   }
