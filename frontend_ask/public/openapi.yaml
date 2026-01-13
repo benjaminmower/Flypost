@@ -3,8 +3,8 @@ info:
   title: Flypost Ask - Public Discovery API
   description: |
     Read-only public API for discovering real estate events (open houses, garage sales, etc.).
-    This API provides two endpoints for event discovery with optional date range filtering.
-    All responses are Layer-1 registry-safe, with no Layer-2 intelligence fields.
+    This API provides full-fidelity event discovery with optional date range filtering.
+    All responses provide complete location and event details.
   version: 1.0.0
   contact:
     name: Flypost Support
@@ -128,7 +128,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /events/{event_id}:
+  /v1/events/{event_id}:
     get:
       summary: Get a single event by ID
       description: Retrieves a single event by its unique event ID.
