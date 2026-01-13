@@ -1,7 +1,7 @@
 {
   "name": "Flypost Ask - Event Discovery",
   "version": "1.0.0",
-  "description": "Read-only discovery tools for Flypost events. Retrieve events by location or ID. This surface provides discovery-only capabilities with no write operations.",
+  "description": "Read-only discovery tools for Flypost events. Retrieve events by location or ID. This surface provides full-fidelity event discovery with no write operations.",
   "capabilities": [
     "event_discovery",
     "location_search",
@@ -10,7 +10,7 @@
   "tools": [
     {
       "name": "get_events_near",
-      "description": "Retrieve events near a geographic location within a specified radius. Supports optional date filtering and two-tier access control (public vs brokerage).",
+      "description": "Retrieve events near a geographic location within a specified radius. Supports optional date filtering.",
       "input_schema": {
         "type": "object",
         "description": "Parameters for location-based event search",
@@ -43,10 +43,6 @@
             "type": "string",
             "format": "date-time",
             "description": "Optional: Filter events ending on or before this date (ISO 8601)"
-          },
-          "brokerage_id": {
-            "type": "string",
-            "description": "Optional: Brokerage identifier for full fidelity access"
           }
         },
         "required": ["lat", "lng"]
@@ -81,11 +77,6 @@
               "radiusKm": {
                 "type": "number",
                 "description": "Search radius used"
-              },
-              "accessTier": {
-                "type": "string",
-                "enum": ["public", "brokerage"],
-                "description": "Access tier used for this request"
               }
             }
           }
@@ -97,13 +88,13 @@
         "method": "GET",
         "auth": {
           "type": "none",
-          "description": "No authentication required for public tier"
+          "description": "No authentication required"
         }
       }
     },
     {
       "name": "get_event_by_id",
-      "description": "Retrieve a single event by its unique event identifier. Supports two-tier access control based on brokerage_id presence.",
+      "description": "Retrieve a single event by its unique event identifier.",
       "input_schema": {
         "type": "object",
         "description": "Parameters for retrieving a specific event",
@@ -111,10 +102,6 @@
           "event_id": {
             "type": "string",
             "description": "Unique event identifier (e.g., 'evt_20250115_abc123')"
-          },
-          "brokerage_id": {
-            "type": "string",
-            "description": "Optional: Brokerage identifier for full fidelity access"
           }
         },
         "required": ["event_id"]
@@ -134,16 +121,6 @@
           },
           "event": {
             "$ref": "#/components/schemas/DiscoveryEvent"
-          },
-          "meta": {
-            "type": "object",
-            "properties": {
-              "accessTier": {
-                "type": "string",
-                "enum": ["public", "brokerage"],
-                "description": "Access tier used for this request"
-              }
-            }
           }
         },
         "required": ["success", "event"]
@@ -153,7 +130,7 @@
         "method": "GET",
         "auth": {
           "type": "none",
-          "description": "No authentication required for public tier"
+          "description": "No authentication required"
         }
       }
     }
@@ -198,18 +175,18 @@
                 "type": "number",
                 "minimum": -90,
                 "maximum": 90,
-                "description": "Latitude (precision depends on access tier)"
+                "description": "Latitude coordinate"
               },
               "longitude": {
                 "type": "number",
                 "minimum": -180,
                 "maximum": 180,
-                "description": "Longitude (precision depends on access tier)"
+                "description": "Longitude coordinate"
               },
               "address": {
                 "type": "string",
                 "maxLength": 200,
-                "description": "Optional address (detail level depends on access tier)"
+                "description": "Optional complete address"
               }
             }
           },
@@ -271,8 +248,7 @@
   "configuration": {
     "base_url": "https://api.goflypost.com",
     "rate_limits": {
-      "public_tier": "100 requests per 15 minutes per IP",
-      "brokerage_tier": "500 requests per 15 minutes per IP"
+      "requests_per_window": "100 requests per 15 minutes per IP"
     },
     "timeout_ms": 10000,
     "retry_policy": {
