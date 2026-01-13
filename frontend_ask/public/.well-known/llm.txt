@@ -4,20 +4,21 @@ service_name: Flypost Ask
 service_purpose: >
   Flypost Ask provides read-only discovery of real estate events (open houses, garage sales, 
   estate sales) via geographic search. This surface is for event discovery only and does not 
-  support event creation or modification.
+  support event creation or modification. All responses provide full-fidelity location and 
+  event details.
 
 primary_audience: machine-agents (LLMs, AI assistants)
 human_audience: developers building event discovery applications
 
 base_url: https://api.goflypost.com
-canonical_openapi: https://api.goflypost.com/openapi.json
+canonical_openapi: https://ask.goflypost.com/openapi.json
 
 ## Core Discovery Endpoints
 
 ### GET /v1/events/near
 Description: >
   Retrieve events near a latitude/longitude within a specified radius.
-  Supports optional date range filtering and two-tier access control.
+  Supports optional date range filtering.
 
 Query Parameters:
   - lat: number (required) - Latitude in decimal degrees (-90 to 90)
@@ -25,11 +26,6 @@ Query Parameters:
   - radius: number (optional) - Search radius in kilometers (0-100, default: 10)
   - start: string (optional) - Filter events starting on/after this date (ISO 8601)
   - end: string (optional) - Filter events ending on/before this date (ISO 8601)
-  - brokerage_id: string (optional) - For brokerage-scoped full fidelity access
-
-Access Tiers:
-  - Public (no brokerage_id): Approximate locations, reduced precision
-  - Brokerage (with brokerage_id): Full precision, complete addresses
 
 Response Shape:
   success: boolean
@@ -38,25 +34,18 @@ Response Shape:
   meta:
     count: integer
     radiusKm: number
-    accessTier: "public" | "brokerage"
 
 ### GET /v1/events/{event_id}
 Description: >
   Retrieve a single event by its unique event identifier.
-  Supports two-tier access control based on brokerage_id presence.
 
 Path Parameters:
   - event_id: string (required) - Unique event identifier
-
-Query Parameters:
-  - brokerage_id: string (optional) - For brokerage-scoped full fidelity access
 
 Response Shape:
   success: boolean
   schemaVersion: string
   event: DiscoveryEvent object
-  meta:
-    accessTier: "public" | "brokerage"
 
 ## DiscoveryEvent Schema
 
@@ -67,9 +56,9 @@ what:
   label: optional human-readable event name
 
 where:
-  latitude: number (precision depends on access tier)
-  longitude: number (precision depends on access tier)
-  address: string (detail level depends on access tier)
+  latitude: number (full precision)
+  longitude: number (full precision)
+  address: string (complete address)
 
 when:
   start: ISO 8601 date-time
@@ -83,20 +72,18 @@ Additional fields:
 
 ## Authentication
 
-Authentication: Not required for public tier access
+Authentication: Not required
 Rate Limits:
-  - Public tier: 100 requests per 15 minutes per IP
-  - Brokerage tier: 500 requests per 15 minutes per IP
+  - 100 requests per 15 minutes per IP
 
 ## LLM Usage Recommendations
 
 1. Use GET /v1/events/near when users ask for events near a location
 2. Use GET /v1/events/{event_id} when users reference a specific event
 3. Do not hallucinate event data - always call the API
-4. Respect the two-tier access model - note when full precision requires brokerage_id
-5. Include date range filters when users specify time constraints
-6. This is a DISCOVERY-ONLY surface - do not attempt to create or modify events
-7. For event publishing, direct users to post.goflypost.com
+4. Include date range filters when users specify time constraints
+5. This is a DISCOVERY-ONLY surface - do not attempt to create or modify events
+6. For event publishing, direct users to post.goflypost.com
 
 ## Health Check
 

@@ -1,0 +1,435 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Flypost Ask - Public Discovery API",
+    "description": "Read-only public API for discovering real estate events (open houses, garage sales, etc.).\nThis API provides full-fidelity event discovery with optional date range filtering.\nAll responses provide complete location and event details.\n",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Flypost Support",
+      "url": "https://goflypost.com",
+      "email": "support@goflypost.com"
+    },
+    "license": {
+      "name": "Apache 2.0",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.goflypost.com",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:3001",
+      "description": "Development server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "discovery",
+      "description": "Event discovery endpoints (read-only)"
+    }
+  ],
+  "paths": {
+    "/v1/events/near": {
+      "get": {
+        "summary": "Find events near a location",
+        "description": "Retrieves events near a specified geographic location within a given radius.\nSupports optional date range filtering for time-based queries.\n",
+        "operationId": "getEventsNear",
+        "tags": [
+          "discovery"
+        ],
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Latitude of search center",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "example": 34.0195
+          },
+          {
+            "name": "lng",
+            "in": "query",
+            "description": "Longitude of search center",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "minimum": -180,
+              "maximum": 180
+            },
+            "example": -118.4912
+          },
+          {
+            "name": "radius",
+            "in": "query",
+            "description": "Search radius in kilometers",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 10
+            },
+            "example": 5
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "description": "Filter events starting on or after this date (ISO 8601 date-time)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2025-01-01T00:00:00Z"
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "description": "Filter events ending on or before this date (ISO 8601 date-time)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2025-12-31T23:59:59Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with list of events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "schemaVersion": {
+                      "type": "string",
+                      "example": "discovery.v1"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DiscoveryEvent"
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "count": {
+                          "type": "integer",
+                          "example": 5
+                        },
+                        "radiusKm": {
+                          "type": "number",
+                          "example": 10
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/events/{event_id}": {
+      "get": {
+        "summary": "Get a single event by ID",
+        "description": "Retrieves a single event by its unique event ID.",
+        "operationId": "getEventById",
+        "tags": [
+          "discovery"
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "description": "Unique event identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "evt_20250115_abc123"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with event details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "schemaVersion": {
+                      "type": "string",
+                      "example": "discovery.v1"
+                    },
+                    "event": {
+                      "$ref": "#/components/schemas/DiscoveryEvent"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DiscoveryEvent": {
+        "type": "object",
+        "description": "Event in Discovery V1 format with strict what/where/when structure (M2M Oracle contract).",
+        "required": [
+          "eventId",
+          "dataHash",
+          "what",
+          "where",
+          "when",
+          "externalListingUrl"
+        ],
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "description": "Unique event identifier",
+            "example": "evt_20250115_abc123"
+          },
+          "dataHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 hash of canonical event data for integrity verification",
+            "example": "a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890"
+          },
+          "what": {
+            "type": "object",
+            "description": "What is happening (event type and optional label)",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "Event category",
+                "enum": [
+                  "open_house",
+                  "garage_sale",
+                  "estate_sale",
+                  "moving_sale",
+                  "yard_sale",
+                  "other"
+                ],
+                "example": "open_house"
+              },
+              "label": {
+                "type": "string",
+                "description": "Optional human-readable event name/title (max 80 chars)",
+                "maxLength": 80,
+                "example": "Beautiful 4BR Home"
+              }
+            }
+          },
+          "where": {
+            "type": "object",
+            "description": "Where is it happening (coordinates and optional address)",
+            "required": [
+              "latitude",
+              "longitude"
+            ],
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "format": "double",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Latitude coordinate",
+                "example": 34.0522
+              },
+              "longitude": {
+                "type": "number",
+                "format": "double",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Longitude coordinate",
+                "example": -118.2437
+              },
+              "address": {
+                "type": "string",
+                "description": "Optional flattened address string (max 200 chars)",
+                "maxLength": 200,
+                "example": "123 Main Street, Los Angeles, CA, 90001"
+              }
+            }
+          },
+          "when": {
+            "type": "object",
+            "description": "When is it happening (start and end times)",
+            "required": [
+              "start",
+              "end"
+            ],
+            "properties": {
+              "start": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Event start date and time (ISO 8601 UTC)",
+                "example": "2025-01-15T10:00:00.000Z"
+              },
+              "end": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Event end date and time (ISO 8601 UTC)",
+                "example": "2025-01-15T14:00:00.000Z"
+              }
+            }
+          },
+          "externalListingUrl": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uri",
+                "description": "URL to external listing or detail page",
+                "example": "https://www.zillow.com/homedetails/123-Main-St"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "External listing URL (required field, can be null)"
+          },
+          "source": {
+            "type": "object",
+            "description": "Optional source provenance information",
+            "required": [
+              "kind",
+              "url"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "mls",
+                  "brokerage_roster",
+                  "manual",
+                  "third_party"
+                ],
+                "description": "Source type",
+                "example": "mls"
+              },
+              "url": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Source URL",
+                    "example": "https://api.mls.com/listings/123"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Source URL (can be null)"
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string",
+            "example": "Error message"
+          },
+          "details": {
+            "type": "string",
+            "description": "Additional error details (optional)"
+          }
+        }
+      }
+    }
+  },
+  "security": []
+}
