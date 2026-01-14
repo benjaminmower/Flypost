@@ -1,143 +1,102 @@
-# Flypost Post - Write/Publish API (llm.txt v1)
+# Flypost Ask - Read-Only Discovery API (llm.txt v1)
 
-service_name: Flypost Post
+service_name: Flypost Ask
 service_purpose: >
-  Flypost Post provides authenticated write access to parse natural-language event descriptions
-  and publish them as structured events. This surface is for event creation and publishing only.
+  Flypost Ask provides read-only discovery of real estate events (open houses, garage sales, 
+  estate sales) via geographic search. This surface is for event discovery only and does not 
+  support event creation or modification. All responses provide full-fidelity location and 
+  event details.
 
-primary_audience: machine-agents (LLMs, AI assistants with write capabilities)
-human_audience: developers building event publishing applications, real estate agents
+primary_audience: machine-agents (LLMs, AI assistants)
+human_audience: developers building event discovery applications
 
 base_url: https://api.goflypost.com
-canonical_openapi: https://api.goflypost.com/openapi.json
+canonical_openapi: https://ask.goflypost.com/openapi.json
 
-## Core Publishing Endpoint
+## Core Discovery Endpoints
 
-### POST /api/parse-and-publish
+### GET /v1/events/near
 Description: >
-  Parse a natural-language event description using AI, validate it against the schema,
-  compute a hash, and store it. Returns the stored event with Flypost metadata.
+  Retrieve events near a latitude/longitude within a specified radius.
+  Supports optional date range filtering.
 
-Authentication: REQUIRED
-  - Browser (post.goflypost.com): Authorization: Bearer <firebase_id_token> (Firebase)
-  - Machine/server-to-server: provide a static write token via x-flypost-write-token header OR as the Bearer token
-
-Request Body (JSON):
-  naturalLanguageInput: string (required) - Raw event description
-  brokerageId: string (optional) - Brokerage tenant identifier
-  userContext: object (optional) - Additional metadata about the caller
-
-Important Requirements:
-  - List price is REQUIRED for all published events
-  - Include price in description (e.g., "List Price: $1,250,000" or "$2.5 million")
-  - Supported price formats: $1,250,000 | $1250000 | $2.5M | $2.5 million
-  - Returns 400 if price is missing
+Query Parameters:
+  - lat: number (required) - Latitude in decimal degrees (-90 to 90)
+  - lng: number (required) - Longitude in decimal degrees (-180 to 180)
+  - radius: number (optional) - Search radius in kilometers (0-100, default: 10)
+  - start: string (optional) - Filter events starting on/after this date (ISO 8601)
+  - end: string (optional) - Filter events ending on/before this date (ISO 8601)
 
 Response Shape:
   success: boolean
-  data:
-    eventId: string - Flypost event identifier
-    event: FlypostEvent object (Schema.org Event + Flypost metadata)
-    processing:
-      parsed: boolean
-      validated: boolean
-      hashed: boolean
-      stored: boolean
+  schemaVersion: string
+  events: array of DiscoveryEvent objects
+  meta:
+    count: integer
+    radiusKm: number
 
-Error Responses:
-  - 400: Validation error (schema validation failed or missing price)
-  - 401: Authentication required (missing or invalid credentials)
-  - 500: Internal server error
+### GET /v1/events/{event_id}
+Description: >
+  Retrieve a single event by its unique event identifier.
 
-## FlypostEvent Schema
+Path Parameters:
+  - event_id: string (required) - Unique event identifier
 
-The published event follows Schema.org Event structure with Flypost extensions:
+Response Shape:
+  success: boolean
+  schemaVersion: string
+  event: DiscoveryEvent object
 
-Core Schema.org fields:
-  - @context: "https://schema.org"
-  - @type: "Event"
-  - name: string (event name/title)
-  - description: string (full description)
-  - startDate: ISO 8601 date-time
-  - endDate: ISO 8601 date-time (can be null)
-  - location: Schema.org Place object
-  - organizer: Schema.org Person/Organization object (optional)
-  - offers: Schema.org Offer object (derived from flypost.listPrice)
+## DiscoveryEvent Schema
 
-Flypost metadata (in flypost object):
+The DiscoveryEvent follows a strict what/where/when structure:
+
+what:
+  type: event category (open_house, garage_sale, estate_sale, etc.)
+  label: optional human-readable event name
+
+where:
+  latitude: number (full precision)
+  longitude: number (full precision)
+  address: string (complete address)
+
+when:
+  start: ISO 8601 date-time
+  end: ISO 8601 date-time
+
+Additional fields:
   - eventId: unique identifier
-  - brokerageId: tenant identifier
-  - category: event type (open_house, garage_sale, etc.)
-  - submissionTimestamp: when event was created
-  - listPrice: numeric price value
-  - listPriceCurrency: currency code (default: "USD")
-  - listPriceDisplay: formatted price string
-  - priceConfidence: "verified" | "inferred"
+  - dataHash: SHA-256 hash for integrity verification
+  - externalListingUrl: URL to external listing (can be null)
+  - source: optional provenance information (kind, url)
 
-Hash object:
-  - algorithm: "sha256"
-  - value: SHA-256 hash of canonical event data
+## Authentication
 
-storedAt: ISO 8601 timestamp of when event was stored
-
-## Authentication & Authorization
-
-Authentication Methods:
-  - Browser publishing: Firebase ID token via Authorization: Bearer <firebase_id_token>
-  - Machine/server-to-server publishing: static token via x-flypost-write-token header OR as the Bearer token
-
-Brokerage Tenancy:
-  - brokerageId can be provided in request body
-  - Or injected via x-flypost-brokerage-id header (proxy-based)
-  - Header takes precedence over body value
-
+Authentication: Not required
 Rate Limits:
-  - Authenticated: 500 requests per 15 minutes
-  - Per brokerage/user depending on configuration
+  - 100 requests per 15 minutes per IP
 
 ## LLM Usage Recommendations
 
-1. Use POST /api/parse-and-publish when users provide a new event description to publish
-2. For machine/server-to-server calls, include a valid static token (x-flypost-write-token header OR Bearer token)
-3. Ensure the description includes a list price (REQUIRED)
-4. Validate user has appropriate permissions before attempting to publish
-5. Parse the response to extract eventId and confirm successful storage
-6. Handle validation errors gracefully - inform user if price is missing
-7. This is a WRITE-ONLY surface - for event discovery, use ask.goflypost.com
-8. Do not cache tokens or expose them in logs
-
-## Example Natural Language Input
-
-Good examples (include price):
-  - "Open house at 123 Main St, Santa Monica, CA on Jan 15 from 1-3pm. Beautiful 4BR/3BA home. List Price: $2,850,000"
-  - "Garage sale Saturday 9am-2pm at 456 Oak Ave. $50-$500 items. Contact: John 555-1234"
-  - "Estate sale Dec 10-12, 8am-4pm daily. 789 Pine Rd, Beverly Hills. Furniture, art, collectibles. Prices vary $10-$10,000"
-
-Bad examples (missing price):
-  - "Open house next Saturday at 123 Main St" ❌ No price
-  - "Beautiful home in Santa Monica" ❌ No price, no date
+1. Use GET /v1/events/near when users ask for events near a location
+2. Use GET /v1/events/{event_id} when users reference a specific event
+3. Do not hallucinate event data - always call the API
+4. Include date range filters when users specify time constraints
+5. This is a DISCOVERY-ONLY surface - do not attempt to create or modify events
+6. For event publishing, direct users to post.goflypost.com
 
 ## Health Check
 
-GET /health - Service health status (no authentication required)
+GET /health - Service health status
 
 ## Versioning
 
-API Version: v4 (current)
+API Version: v1 (discovery)
 Stability: stable
-Breaking changes: Will be announced with migration path
-
-## Security Notes
-
-1. Never expose write tokens in client-side code
-2. Always use HTTPS for API calls
-3. Tokens should be stored securely (environment variables, secure vaults)
-4. Report security issues to security@goflypost.com immediately
-5. Follow coordinated disclosure practices
+Breaking changes: Will be announced via new version endpoints
 
 ## Support
 
 Technical Support: support@goflypost.com
-API Documentation: https://goflypost.com/docs
-Security Issues: security@goflypost.com
-Canonical OpenAPI: https://api.goflypost.com/openapi.json
+Documentation: https://goflypost.com/docs
+Security Issues: support@goflypost.com
