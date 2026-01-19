@@ -9,39 +9,90 @@ This document explains how AI/LLM manifests (ai.json, llm.txt, MCP manifests, Op
 Flypost has three frontend surfaces, each with different capabilities:
 
 ### 1. **Ask** (ask.goflypost.com) - Read-Only Discovery
-- **Purpose**: Anonymous event discovery via geographic search
-- **Capabilities**: Read-only access to events
+- **Purpose**: Anonymous event discovery via geographic search using Discovery Protocol V1
+- **Capabilities**: Read-only access to events with tiered access (public vs brokerage-scoped)
 - **Manifests Location**: `frontend_ask/public/.well-known/`
+- **OpenAPI Spec**: `frontend_ask/public/openapi.yaml` (source), `openapi.json` (generated)
 - **Advertised APIs**: 
-  - `GET /v1/events/near` - Location-based search
+  - `GET /v1/events/near` - Location-based search (lat/lng optional, defaults to Santa Monica; radius_mi preferred)
   - `GET /v1/events/{event_id}` - Retrieve single event
+- **Protocol**: Flypost Discovery Protocol V1 (protocol/version/success/events/meta structure)
+- **Access Tiers**:
+  - Public anonymous: Registry-safe allowlist fields, reduced geo precision (2 decimals)
+  - Brokerage-scoped: Full event details with brokerageId or api_key
+- **Rate Limits**: 100 req/15min (public), 500 req/15min (brokerage)
 
 ### 2. **Post** (post.goflypost.com) - Write/Publish
 - **Purpose**: Authenticated event publishing from natural language
-- **Capabilities**: Write access to create events
+- **Capabilities**: Write access to create events (NOT truth-writing)
 - **Manifests Location**: `frontend_post/public/.well-known/`
 - **Advertised APIs**:
-  - `POST /api/parse-and-publish` - Parse and store events
-- **Authentication**: Required (x-flypost-write-token header)
+  - `POST /api/parse-and-publish` - Parse natural language and store events
+  - `POST /v1/events/upsert` - Structured event ingestion (MLS, scrapers)
+- **Authentication**: Required (origin-gated by proxy)
+  - Browser origins (post.goflypost.com, app.goflypost.com): Firebase Bearer token REQUIRED
+  - Machine/server: Static write token (x-flypost-write-token header OR Bearer)
+- **NOT Accessible Here**: Truth-writing endpoints (/v1/presence/*, /v1/feedback/*) - origin-restricted to presence.goflypost.com
 
-### 3. **Presence** (presence.goflypost.com) - Buyer UX Only
-- **Purpose**: Check-in and feedback for open house visitors
-- **Capabilities**: Browser-only UI (no machine-addressable APIs)
-- **Manifests**: **NONE** - Presence must not serve any AI/LLM manifests
-- **Rationale**: Captures proximity-verified truth; must remain browser-only
+### 3. **Presence** (presence.goflypost.com) - Truth-Writing (Origin-Restricted)
+- **Purpose**: Check-in and feedback for open house visitors (truth-minting)
+- **Capabilities**: 
+  - `POST /v1/presence/check-in` - Record attendance at events
+  - `POST /v1/feedback/submit` - Submit feedback for attended events
+- **Authentication**: Firebase Bearer token from presence.goflypost.com origin ONLY
+- **Origin Restriction**: ALL truth-writing endpoints require Origin: https://presence.goflypost.com
+  - Requests from other origins receive 403 Forbidden regardless of authentication
+  - This prevents machines/GPTs/browsers from other origins from minting truth
+- **Manifests**: **NONE** - Presence should not serve machine-addressable AI/LLM manifests
+- **Rationale**: Captures proximity-verified truth; must remain browser-only via origin restriction
 
 ## Canonical Source of Truth
 
-**Canonical OpenAPI**: https://api.goflypost.com/openapi.json
+### OpenAPI Specifications
 
-This is the **single source of truth** for all API endpoints, schemas, and authentication requirements. All surface manifests must reference and align with this canonical spec.
+**Ask Surface (Discovery Protocol V1)**:
+- **Source of Truth**: `frontend_ask/public/openapi.yaml` (human-editable YAML)
+- **Generated**: `frontend_ask/public/openapi.json` (machine-canonical, auto-generated)
+- **Regeneration**: `cd frontend_ask && npm run generate:openapi`
+- **Deployed URLs**: 
+  - https://ask.goflypost.com/.well-known/openapi.yaml
+  - https://ask.goflypost.com/.well-known/openapi.json (generated)
+  - https://ask.goflypost.com/openapi.yaml (root alias)
+  - https://ask.goflypost.com/openapi.json (root alias)
+
+**Backend API Contract**:
+- **Implementation**: `backend/src/server.js` (actual endpoint behavior)
+- **Discovery Mapper**: `backend/src/utils/discoveryMapper.js` (response format)
+- **Schema**: `backend/schemas/flypost-discovery-v1.schema.json`
+
+**Proxy Auth Contract**:
+- **Implementation**: `proxy/src/forward.js` (origin-gated authentication)
+- **Documentation**: `proxy/README.md`
 
 ### Important Rules:
 
-1. **Never diverge from canonical OpenAPI** - If an endpoint doesn't exist in the canonical spec, don't advertise it
-2. **Surface manifests are projections** - Each surface (ask, post) advertises only the subset of APIs relevant to its purpose
-3. **Link, don't duplicate** - Reference the canonical OpenAPI URL rather than copying the full spec
-4. **Validate alignment** - When canonical OpenAPI changes, update surface manifests in the same PR
+1. **OpenAPI YAML is source of truth for Ask surface** - Edit `openapi.yaml`, regenerate `openapi.json`
+2. **Backend implementation is ground truth** - OpenAPI specs must match actual backend behavior
+3. **Surface manifests must align** - ai.json, llm.txt, MCP manifests reference OpenAPI and match backend
+4. **Never manually edit openapi.json** - Always regenerate from YAML
+5. **Validate alignment** - When backend changes, update OpenAPI YAML and regenerate JSON in same PR
+
+### Regenerating OpenAPI JSON from YAML
+
+When you update `frontend_ask/public/openapi.yaml`:
+
+```bash
+cd frontend_ask
+npm install  # If dependencies missing
+npm run generate:openapi
+```
+
+This script (`scripts/generate-openapi-json.js`):
+1. Reads `public/openapi.yaml`
+2. Parses YAML using js-yaml
+3. Writes `public/openapi.json`
+
+**Always commit both files together** when making OpenAPI changes.
 
 ## Manifest Files by Surface
 
@@ -49,20 +100,27 @@ This is the **single source of truth** for all API endpoints, schemas, and authe
 
 | File | Purpose |
 |------|---------|
+| `openapi.yaml` | **SOURCE OF TRUTH** - Human-editable OpenAPI spec for Discovery Protocol V1 |
+| `openapi.json` | **GENERATED** - Machine-canonical JSON (regenerate from YAML via npm script) |
 | `ai.json` | OpenAI-compatible plugin manifest for discovery |
-| `llm.txt` | Human-readable guidance for LLMs (read-only scope) |
+| `ai-plugin.json` | Legacy OpenAI plugin manifest |
+| `llm.txt` | Human-readable guidance for LLMs (read-only scope, Discovery Protocol V1) |
 | `mcp.flypost.ask.v1.json` | Model Context Protocol tools (discovery only) |
 
 **What to advertise:**
-- ✅ GET endpoints for event discovery
+- ✅ GET /v1/events/near (lat/lng optional, defaults to Santa Monica)
+- ✅ GET /v1/events/{event_id} (returns events array with 1 item)
+- ✅ Discovery Protocol V1 response format (protocol/version/success/events/meta)
+- ✅ radius_mi parameter (preferred, miles) and radius fallback (km)
+- ✅ Tiered access (public vs brokerage-scoped)
+- ✅ Optional timezone field in when object
 - ✅ Read-only operations
-- ✅ Public tier access (no auth required)
-- ✅ Brokerage tier access (optional brokerage_id parameter)
 
 **What NOT to advertise:**
 - ❌ POST endpoints
 - ❌ Write operations
-- ❌ Authentication-required endpoints
+- ❌ Claims of "full-fidelity public" access (access is tiered)
+- ❌ Truth-writing endpoints (/v1/presence/*, /v1/feedback/*)
 
 ### Post Surface (`frontend_post/public/.well-known/`)
 
@@ -74,13 +132,16 @@ This is the **single source of truth** for all API endpoints, schemas, and authe
 
 **What to advertise:**
 - ✅ POST /api/parse-and-publish endpoint
-- ✅ Authentication requirements (x-flypost-write-token)
-- ✅ Price requirement for all events
+- ✅ POST /v1/events/upsert endpoint
+- ✅ Authentication requirements (origin-gated: Firebase for browsers, static token for machines)
+- ✅ List price is OPTIONAL (not required, but if present must be valid)
 - ✅ Write operations and validation rules
+- ✅ Geo coordinates required (will attempt geocoding from address)
 
 **What NOT to advertise:**
 - ❌ Read-only discovery endpoints (those belong on Ask)
 - ❌ Public/unauthenticated access
+- ❌ Truth-writing endpoints (/v1/presence/*, /v1/feedback/*) - origin-restricted to presence.goflypost.com
 
 ### Presence Surface
 
@@ -101,8 +162,17 @@ Each frontend has its own build script that copies only its own manifests:
 cd frontend_ask
 npm run build
 # Runs: vite build && node scripts/copy-assets.js
-# Copies from: frontend_ask/public/.well-known/
-# Copies to: frontend_ask/dist/.well-known/
+# Also runs: npm run generate:openapi (if openapi.yaml changed)
+# Copies from: frontend_ask/public/ (includes openapi.yaml and openapi.json)
+# Copies to: frontend_ask/dist/
+```
+
+**Regenerating OpenAPI JSON**:
+```bash
+cd frontend_ask
+npm run generate:openapi
+# Reads: public/openapi.yaml
+# Writes: public/openapi.json
 ```
 
 ### Post Build
@@ -122,82 +192,127 @@ npm run build
 # No manifests are copied
 ```
 
-## Legacy Shared Manifests (Deprecated)
+## Legacy Shared Manifests & Root Canonical Manifest
 
-**Location**: `frontend/public/`
+### Root Canonical Manifest (NEW)
 
-**Status**: DEPRECATED - Do not use for new deployments
+**Location**: `frontend/public/.well-known/`
 
-The shared manifests in `frontend/public/` were used historically when all frontends copied from a single location. This caused:
-- Wrong APIs advertised on wrong domains
-- Drift from canonical OpenAPI
-- Security concerns (write endpoints on read-only surfaces)
+**Purpose**: Root-level manifest for goflypost.com that references all three surfaces
 
-**Migration**: Each surface now maintains its own manifests. The shared location may be removed in a future cleanup.
+**Files**:
+- `llm.txt` - Overview of all three surfaces (ASK, POST, PRESENCE) with references
+- `ai.json` - Root AI manifest pointing to surface-specific manifests
+
+**Status**: ACTIVE - Use for goflypost.com domain
+
+### Legacy Shared Manifests (Deprecated for Surface-Specific)
+
+**Location**: `frontend/public/` (non-.well-known files)
+
+**Status**: DEPRECATED for surface-specific deployments
+
+The shared manifests were used historically when all frontends copied from a single location. Now:
+- Each surface maintains its own manifests
+- Root manifest in `frontend/public/.well-known/` serves as canonical overview
+- Surface-specific manifests are deployed to their respective domains
 
 ## How to Update Manifests Safely
 
-### When Canonical OpenAPI Changes
+### When Backend Behavior Changes
 
-1. **Update the canonical spec first**: https://api.goflypost.com/openapi.json
-2. **Identify affected surfaces**:
-   - Does the change affect discovery? → Update Ask manifests
-   - Does the change affect publishing? → Update Post manifests
-   - Is it a new endpoint? → Decide which surface should advertise it
-3. **Update surface manifests in the same PR**:
-   - Update `ai.json` if API structure changes
-   - Update `llm.txt` with new guidance
+1. **Identify the change**:
+   - Endpoint added/removed/modified in `backend/src/server.js`?
+   - Response format changed in `backend/src/utils/discoveryMapper.js`?
+   - Auth policy changed in `proxy/src/forward.js`?
+
+2. **Update OpenAPI YAML** (for Ask surface):
+   ```bash
+   # Edit the source of truth
+   vim frontend_ask/public/openapi.yaml
+   
+   # Regenerate JSON
+   cd frontend_ask
+   npm run generate:openapi
+   ```
+
+3. **Update surface manifests**:
+   - Update `llm.txt` with new behavior/guidance
    - Update MCP manifests if tools change
-4. **Test builds**:
+   - Update `ai.json` if significant structural changes
+
+4. **Identify affected surfaces**:
+   - Discovery changes? → Update Ask manifests
+   - Publishing changes? → Update Post manifests
+   - Truth-writing changes? → Update Presence (no manifests, but document in root llm.txt)
+
+5. **Test builds**:
    ```bash
    cd frontend_ask && npm run build
    cd ../frontend_post && npm run build
    ```
-5. **Verify no drift**: Ensure advertised endpoints exist in canonical OpenAPI
+
+6. **Commit all changes together**: OpenAPI YAML + JSON + all aligned manifests in one PR
 
 ### Adding a New Endpoint
 
-1. **Add to canonical OpenAPI** first
+1. **Implement in backend** first (`backend/src/server.js`)
 2. **Determine surface**:
-   - Read-only? → Ask
-   - Write/auth required? → Post
-   - Neither? → Don't advertise (presence or internal only)
-3. **Update appropriate surface manifest(s)**
-4. **Add to llm.txt** with clear usage guidance
-5. **Add to MCP manifest** if it should be a tool
+   - Read-only discovery? → Ask (update openapi.yaml)
+   - Write/auth required? → Post (update llm.txt)
+   - Truth-writing? → Presence (origin-restricted, don't advertise)
+3. **Update appropriate surface manifests**:
+   - Ask: Edit `openapi.yaml`, regenerate `openapi.json`, update llm.txt/MCP
+   - Post: Update llm.txt and MCP manifest
+4. **Update root manifest** if it affects surface overview
+5. **Test and commit all changes together**
 
 ### Changing Authentication
 
-1. **Update canonical OpenAPI** security schemes
-2. **Update Post manifests** (auth requirements live on Post)
-3. **Update llm.txt** with new auth expectations
-4. **Update MCP manifest** configuration section
+1. **Update proxy auth logic** in `proxy/src/forward.js`
+2. **Update proxy documentation** in `proxy/README.md`
+3. **Update Post manifests** (auth requirements live on Post):
+   - Update `llm.txt` with new auth policy
+   - Update MCP manifest configuration
+   - Update `ai.json` auth description
+4. **Update root manifest** to reflect new auth policy
+5. **Test with both browser and machine clients**
 
 ## Validation Checklist
 
 Before deploying manifest changes:
 
-- [ ] Canonical OpenAPI is up to date
-- [ ] Surface manifests reference canonical OpenAPI URL
-- [ ] Ask manifests advertise only read-only endpoints
-- [ ] Post manifests advertise only write endpoints with auth
-- [ ] Presence has no manifests
+- [ ] Backend implementation matches documented behavior
+- [ ] OpenAPI YAML edited (if Ask surface changed)
+- [ ] OpenAPI JSON regenerated from YAML (if YAML changed)
+- [ ] Surface manifests reference correct OpenAPI URLs
+- [ ] Ask manifests advertise only Discovery Protocol V1 read-only endpoints
+- [ ] Ask manifests document tiered access (not "full-fidelity public")
+- [ ] Post manifests advertise only write endpoints with origin-gated auth
+- [ ] Post manifests clarify list price is optional (not required)
+- [ ] Truth-writing endpoints documented as origin-restricted (presence.goflypost.com only)
+- [ ] Presence has no AI/LLM manifests
+- [ ] Root manifest references all three surfaces accurately
 - [ ] llm.txt guidance is accurate and scoped to surface
-- [ ] MCP tools reference real endpoints from canonical OpenAPI
-- [ ] No cross-surface contamination (Ask doesn't advertise write, Post doesn't advertise read)
-- [ ] Build scripts copy from correct locations
+- [ ] MCP tools reference real endpoints from backend
+- [ ] No cross-surface contamination (Ask doesn't advertise write, Post doesn't advertise truth-writing)
+- [ ] Build scripts work correctly
 - [ ] Test builds complete successfully
 
 ## Common Mistakes to Avoid
 
-1. **❌ Copying manifests between surfaces** - Each surface has its own
-2. **❌ Advertising write endpoints on Ask** - Ask is read-only
-3. **❌ Advertising read endpoints on Post** - Post is write-only (for API purposes)
-4. **❌ Adding manifests to Presence** - Presence must remain browser-only
-5. **❌ Creating endpoints not in canonical OpenAPI** - Canonical is source of truth
-6. **❌ Duplicating OpenAPI content** - Link to canonical, don't copy
-7. **❌ Forgetting to update llm.txt** - It's the human-readable contract
-8. **❌ Inconsistent MCP/ai.json/llm.txt** - Keep all three aligned
+1. **❌ Manually editing openapi.json** - Always edit YAML and regenerate JSON
+2. **❌ Forgetting to regenerate openapi.json** - Run `npm run generate:openapi` after YAML changes
+3. **❌ Copying manifests between surfaces** - Each surface has its own
+4. **❌ Advertising write endpoints on Ask** - Ask is read-only discovery
+5. **❌ Advertising truth-writing endpoints on Post** - Origin-restricted to presence.goflypost.com
+6. **❌ Claiming "full-fidelity public"** - Access is tiered (public vs brokerage-scoped)
+7. **❌ Claiming "list price required"** - List price is optional
+8. **❌ Adding manifests to Presence** - Presence must remain browser-only
+9. **❌ Documenting endpoints not in backend** - Backend is ground truth
+10. **❌ Forgetting to update llm.txt** - It's the human-readable contract
+11. **❌ Inconsistent MCP/ai.json/llm.txt** - Keep all three aligned
+12. **❌ Missing Discovery Protocol V1 response format** - Must include protocol/version/success/events/meta
 
 ## Testing Manifest Deployments
 
@@ -215,7 +330,13 @@ curl http://localhost:5174/.well-known/mcp.flypost.ask.v1.json
 
 ### Production Testing
 ```bash
+# Root manifest
+curl https://goflypost.com/.well-known/llm.txt
+curl https://goflypost.com/.well-known/ai.json
+
 # Ask surface
+curl https://ask.goflypost.com/.well-known/openapi.yaml
+curl https://ask.goflypost.com/.well-known/openapi.json
 curl https://ask.goflypost.com/.well-known/ai.json
 curl https://ask.goflypost.com/.well-known/llm.txt
 curl https://ask.goflypost.com/.well-known/mcp.flypost.ask.v1.json
@@ -241,9 +362,11 @@ curl https://presence.goflypost.com/.well-known/llm.txt  # Should fail
 - Check for accidental copies in build directory
 
 ### "Canonical OpenAPI and surface manifests are out of sync"
-- Compare advertised endpoints with https://api.goflypost.com/openapi.json
-- Update surface manifests to match canonical spec
-- Remove any endpoints not present in canonical
+- Check backend behavior in `backend/src/server.js` and `backend/src/utils/discoveryMapper.js`
+- Edit `frontend_ask/public/openapi.yaml` to match backend
+- Regenerate JSON: `cd frontend_ask && npm run generate:openapi`
+- Update llm.txt and MCP manifests to match
+- Commit YAML + JSON + manifests together
 
 ### "Build fails with missing files"
 - Ensure surface has its own manifests in `public/.well-known/`
@@ -257,6 +380,18 @@ For questions about manifest maintenance:
 - Documentation: https://goflypost.com/docs
 
 ## Version History
+
+- **v2.0** (2026-01-19): Discovery Protocol V1 alignment
+  - Updated Ask manifests to match Discovery Protocol V1 (protocol/version/success/events/meta)
+  - Made lat/lng optional (defaults to Santa Monica)
+  - Added radius_mi parameter (preferred, miles)
+  - Documented tiered access (public vs brokerage-scoped)
+  - Added timezone field to when object
+  - Clarified list price is optional (not required)
+  - Added root canonical manifest for goflypost.com
+  - Documented truth-writing origin restrictions (presence.goflypost.com only)
+  - Established openapi.yaml as source of truth with generated openapi.json
+  - Added regeneration workflow (npm run generate:openapi)
 
 - **v1.0** (2026-01-07): Initial manifest separation by surface
   - Split ai.json, llm.txt, MCP manifests per surface
