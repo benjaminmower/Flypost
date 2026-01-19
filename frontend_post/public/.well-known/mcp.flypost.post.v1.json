@@ -11,14 +11,14 @@
   "tools": [
     {
       "name": "parse_and_publish_event",
-      "description": "Parse a natural-language event description, validate it, compute a hash, and store it. Returns the stored event with Flypost metadata. IMPORTANT: List price is required for all events.",
+      "description": "Parse a natural-language event description, validate it, compute a hash, and store it. Returns the stored event with Flypost metadata. Note: List price is optional (not required). Authentication required via x-flypost-write-token header (machine/server) or Firebase Bearer token (browser).",
       "input_schema": {
         "type": "object",
         "description": "Parameters for parsing and publishing an event",
         "properties": {
           "naturalLanguageInput": {
             "type": "string",
-            "description": "Full natural-language event description. MUST include a list price (e.g., 'List Price: $1,250,000' or '$2.5M'). Supported formats: $1,250,000 | $1250000 | $2.5M | $2.5 million"
+            "description": "Full natural-language event description. Should include event type, address, date/time, and optionally price. List price is optional but if included must be valid (e.g., '$1,250,000' or '$2.5M'). Supported formats: $1,250,000 | $1250000 | $2.5M | $2.5 million"
           },
           "brokerageId": {
             "type": "string",
@@ -101,7 +101,7 @@
           "type": "api_key",
           "in": "header",
           "name": "x-flypost-write-token",
-          "description": "Required write token for authentication. Must be provided in request headers."
+          "description": "Required write token for machine/server authentication. Browser origins (post.goflypost.com, app.goflypost.com) must use Firebase Bearer token instead."
         },
         "content_type": "application/json",
         "required_headers": [
@@ -205,7 +205,7 @@
               },
               "listPrice": {
                 "type": "number",
-                "description": "List price value (REQUIRED)"
+                "description": "List price value (OPTIONAL - not required, but if present must be valid)"
               },
               "listPriceCurrency": {
                 "type": "string",
@@ -252,7 +252,7 @@
     "auth": {
       "type": "api_key",
       "header_name": "x-flypost-write-token",
-      "description": "Write token must be obtained from Flypost admin or Firebase auth"
+      "description": "Write token for machine/server authentication. Browser origins must use Firebase Bearer token instead. See llm.txt for complete auth requirements."
     },
     "rate_limits": {
       "authenticated": "500 requests per 15 minutes"
