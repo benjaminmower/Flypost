@@ -1,0 +1,120 @@
+# Flypost - AI Native Event Platform (Root Canonical Manifest)
+
+service_name: Flypost
+service_purpose: >
+  Flypost is an AI-native event platform that provides three specialized surfaces
+  for different use cases: discovery (ASK), publishing (POST), and truth-writing (PRESENCE).
+  
+  Each surface has dedicated manifests with specific capabilities and access controls.
+
+primary_audience: machine-agents (LLMs, AI assistants)
+human_audience: developers, real estate professionals, event organizers
+
+## Surface Overview
+
+### ASK Surface (Discovery) - ask.goflypost.com
+Purpose: Read-only event discovery via geographic search
+Canonical Manifest: https://ask.goflypost.com/.well-known/llm.txt
+OpenAPI Spec: https://ask.goflypost.com/.well-known/openapi.yaml
+Protocol: Flypost Discovery Protocol V1
+
+Capabilities:
+  - GET /v1/events/near - Search events by location with optional date filtering
+  - GET /v1/events/{event_id} - Retrieve specific event by ID
+
+Access: Public (no authentication required)
+  - Tiered data access: registry-safe allowlist fields for public, full details for brokerage-scoped queries
+  - Rate limits: 100 req/15min (public), 500 req/15min (brokerage-scoped)
+
+### POST Surface (Publishing) - post.goflypost.com
+Purpose: Authenticated event publishing (parse natural language → structured events)
+Canonical Manifest: https://post.goflypost.com/.well-known/llm.txt
+
+Capabilities:
+  - POST /api/parse-and-publish - Parse natural language event descriptions
+  - POST /v1/events/upsert - Structured event ingestion (MLS, scrapers, etc.)
+
+Authentication: REQUIRED (origin-gated)
+  - Browser origins (post.goflypost.com, app.goflypost.com): Firebase Bearer token
+  - Machine/server-to-server: Static write token (x-flypost-write-token header)
+
+### PRESENCE Surface (Truth-Writing) - presence.goflypost.com
+Purpose: Record real-world attendance and feedback (truth-minting)
+
+Capabilities:
+  - POST /v1/presence/check-in - Record attendance at events
+  - POST /v1/feedback/submit - Submit feedback for attended events
+
+Authentication: REQUIRED
+  - Firebase Bearer token from presence.goflypost.com origin
+
+**CRITICAL RESTRICTION**: Truth-writing endpoints are ORIGIN-RESTRICTED to
+  https://presence.goflypost.com
+  
+Requests from any other origin (including post.goflypost.com, machines, GPTs, etc.)
+will receive 403 Forbidden regardless of authentication. This ensures truth-minting
+can only happen through the verified Presence web application.
+
+## Architecture & Security
+
+### Origin-Gated Authentication (Proxy-Enforced)
+
+The Flypost proxy (`proxy/src/forward.js`) enforces different authentication
+requirements based on request origin:
+
+1. **Browser Origins** (app.goflypost.com, post.goflypost.com)
+   - MUST use Firebase ID token: `Authorization: Bearer <firebase_id_token>`
+   - Static tokens NOT accepted (security: prevent token exposure in browser)
+
+2. **Read-Only Ask Origin** (ask.goflypost.com)
+   - Can only access GET /api/chat (no authentication required)
+   - All other POST /api/* endpoints rejected with 401
+
+3. **Presence Origin** (presence.goflypost.com)
+   - Required for ALL truth-writing endpoints (/v1/presence/*, /v1/feedback/*)
+   - Other origins receive 403 Forbidden regardless of auth
+
+4. **Machine/Server Callers** (no origin or non-browser origin)
+   - Can use Firebase Bearer OR static write token
+   - Static token accepted in: x-flypost-write-token header OR Authorization: Bearer
+   - Token mapped to brokerageId by proxy
+
+### Surface Separation Rationale
+
+- **ASK**: Public discovery minimizes barriers, enables broad search/exploration
+- **POST**: Authenticated publishing with tenancy (brokerageId) for event ownership
+- **PRESENCE**: Strict origin restriction prevents fabricated attendance/feedback
+
+## Base URLs
+- API Backend: https://api.goflypost.com
+- Ask Surface: https://ask.goflypost.com
+- Post Surface: https://post.goflypost.com
+- Presence Surface: https://presence.goflypost.com
+
+## Support
+Technical Support: support@goflypost.com
+Security Issues: support@goflypost.com
+
+## Versioning
+- Discovery Protocol: v1 (stable)
+- Backend API: v4 (current)
+
+## LLM Usage Guidelines
+
+1. **For Discovery Queries**: Use ASK surface (GET /v1/events/near)
+2. **For Publishing Events**: Use POST surface (POST /api/parse-and-publish)
+3. **For Presence/Feedback**: Direct users to https://presence.goflypost.com
+   - Do NOT attempt to call presence/feedback endpoints from machines/GPTs
+   - These endpoints are origin-restricted and will return 403
+
+4. **Authentication**:
+   - Discovery: No auth needed
+   - Publishing: Requires static token (machines) or Firebase token (browsers)
+   - Presence: Requires presence.goflypost.com origin + Firebase token
+
+5. **Error Handling**:
+   - 401: Authentication required/invalid
+   - 403: Forbidden (wrong origin for truth-writing endpoints)
+   - 429: Rate limit exceeded
+   - 400: Validation error
+   - 500: Internal error
