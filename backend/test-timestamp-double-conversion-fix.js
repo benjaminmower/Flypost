@@ -1,10 +1,10 @@
 /*
  * Test: Timestamp Double-Conversion Fix
- * 
+ *
  * Tests that open-house timestamp normalization only reinterprets ambiguous timestamps.
  * When raw input lacks explicit timezone markers but timestamps have explicit timezone
  * info (Z or offset), those timestamps should NOT be reinterpreted.
- * 
+ *
  * This test does NOT require OPENAI_API_KEY - it tests pure normalization logic.
  */
 
