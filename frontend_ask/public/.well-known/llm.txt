@@ -3,14 +3,20 @@
 service_name: Flypost Ask
 service_purpose: >
   Flypost Ask provides read-only discovery of real estate events (open houses, garage sales,
-  estate sales) via geographic search. This surface is for event discovery only and does not
-  support event creation, modification, presence check-ins, or feedback submissions.
+  estate sales) via geographic search using the Flypost Discovery Protocol V1.
+  
+  This surface is for event discovery only and does not support event creation, modification,
+  presence check-ins, or feedback submissions.
+  
+  Access is tiered:
+  - Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields with reduced geo precision
+  - Brokerage-scoped reads (with brokerageId or api_key): Full-fidelity event details
 
 primary_audience: machine-agents (LLMs, AI assistants)
 human_audience: developers building event discovery applications
 
 base_url: https://api.goflypost.com
-canonical_openapi: https://ask.goflypost.com/openapi.json
+canonical_openapi: https://ask.goflypost.com/.well-known/openapi.yaml
 
 ## Core Discovery Endpoints (Protocol Contract)
 
@@ -20,8 +26,8 @@ Description: >
   Supports optional date range filtering.
 
 Query Parameters:
-  - lat: number (optional; defaults to Santa Monica if omitted) - Latitude in decimal degrees (-90 to 90)
-  - lng: number (optional; defaults to Santa Monica if omitted) - Longitude in decimal degrees (-180 to 180)
+  - lat: number (optional; defaults to Santa Monica, CA if omitted) - Latitude in decimal degrees (-90 to 90)
+  - lng: number (optional; defaults to Santa Monica, CA if omitted) - Longitude in decimal degrees (-180 to 180)
 
   - radius_mi: number (optional, preferred) - Search radius in miles (0.1 to 50)
   - radius: number (optional, fallback) - Search radius in kilometers (0 to 100, default: 10)
@@ -30,7 +36,7 @@ Query Parameters:
   - start: string (optional) - Filter events that overlap this date range start (ISO 8601)
   - end: string (optional) - Filter events that overlap this date range end (ISO 8601)
 
-Response Shape (Discovery Protocol v1):
+Response Shape (Discovery Protocol V1):
   protocol: string ("flypost-discovery")
   version: string ("v1")
   success: boolean
@@ -41,11 +47,12 @@ Response Shape (Discovery Protocol v1):
 ### GET /v1/events/{event_id}
 Description: >
   Retrieve a single event by its unique event identifier.
+  Returns a Discovery Protocol V1 response with events array containing exactly one item.
 
 Path Parameters:
   - event_id: string (required) - Unique event identifier
 
-Response Shape (Discovery Protocol v1):
+Response Shape (Discovery Protocol V1):
   protocol: string ("flypost-discovery")
   version: string ("v1")
   success: boolean
@@ -58,21 +65,38 @@ This is a registry-safe allowlist projection of stored events.
 It includes what/where/when and selected metadata, but excludes any intelligence/truth-writing fields
 (attendance, buyerToken, presenceProof, feedback, insights, brokerageAffiliation, etc.).
 
+Fields:
+  - eventId: string (unique identifier)
+  - dataHash: string (SHA-256 hash for integrity, lowercase hex)
+  - what: { type: enum, label?: string }
+    - type: "open_house" | "garage_sale" | "estate_sale" | "moving_sale" | "yard_sale" | "other"
+    - label: optional event name/title (max 80 chars)
+  - where: { latitude: number, longitude: number, address?: string }
+    - latitude/longitude: full precision for brokerage tier, 2-decimal precision for public tier
+    - address: optional flattened address string (max 200 chars)
+  - when: { start: ISO8601, end: ISO8601, timezone?: string }
+    - start/end: UTC timestamps
+    - timezone: optional IANA timezone (e.g., "America/Los_Angeles")
+  - externalListingUrl: string | null (required key, nullable value)
+  - source?: { kind: enum, url: string | null }
+    - kind: "mls" | "brokerage_roster" | "manual" | "third_party"
+
 ## Authentication
 Authentication: Not required for GET discovery endpoints.
 
 Rate Limits:
   - Public anonymous reads (no brokerageId / no api_key): 100 requests per 15 minutes per IP
   - Brokerage-scoped reads (brokerageId or api_key present): 500 requests per 15 minutes per IP
-  Note: actual limits are enforced by the backend and may change; handle 429-like responses gracefully.
+  Note: actual limits are enforced by the backend and may change; handle 429 responses gracefully.
 
 ## LLM Usage Recommendations
 1. Use GET /v1/events/near when users ask for events near a location
 2. Use GET /v1/events/{event_id} when users reference a specific event
 3. Do not hallucinate event data — always call the API
 4. Use start/end filters when users specify time constraints
-5. This is a DISCOVERY-ONLY surface — do not attempt to create or modify events
-6. For publishing, direct users to post.goflypost.com
+5. Use radius_mi (preferred) for miles or radius for kilometers
+6. This is a DISCOVERY-ONLY surface — do not attempt to create or modify events
+7. For publishing, direct users to post.goflypost.com
 
 ## Health Check
 GET /health - Service health status

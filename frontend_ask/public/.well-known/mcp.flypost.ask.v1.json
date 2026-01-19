@@ -1,7 +1,7 @@
 {
   "name": "Flypost Ask - Event Discovery",
   "version": "1.0.0",
-  "description": "Read-only discovery tools for Flypost events. Retrieve events by location or ID. This surface provides full-fidelity event discovery with no write operations.",
+  "description": "Read-only discovery tools for Flypost events using Discovery Protocol V1. Retrieve events by location or ID. This surface provides tiered access: registry-safe allowlist fields for public queries, full details for brokerage-scoped queries. No write operations.",
   "capabilities": [
     "event_discovery",
     "location_search",
@@ -17,19 +17,25 @@
         "properties": {
           "lat": {
             "type": "number",
-            "description": "Latitude in decimal degrees (-90 to 90)",
+            "description": "Latitude in decimal degrees (-90 to 90). Optional; defaults to Santa Monica, CA if omitted.",
             "minimum": -90,
             "maximum": 90
           },
           "lng": {
             "type": "number",
-            "description": "Longitude in decimal degrees (-180 to 180)",
+            "description": "Longitude in decimal degrees (-180 to 180). Optional; defaults to Santa Monica, CA if omitted.",
             "minimum": -180,
             "maximum": 180
           },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius in miles (0.1-50, preferred). If provided, 'radius' parameter is ignored.",
+            "minimum": 0.1,
+            "maximum": 50
+          },
           "radius": {
             "type": "number",
-            "description": "Search radius in kilometers (0-100, default: 10)",
+            "description": "Search radius in kilometers (0-100, default: 10). Fallback if 'radius_mi' not provided.",
             "minimum": 0,
             "maximum": 100,
             "default": 10
@@ -45,24 +51,29 @@
             "description": "Optional: Filter events ending on or before this date (ISO 8601)"
           }
         },
-        "required": ["lat", "lng"]
+        "required": []
       },
       "output_schema": {
         "type": "object",
         "description": "Search results with events and metadata",
         "properties": {
+          "protocol": {
+            "type": "string",
+            "enum": ["flypost-discovery"],
+            "description": "Protocol identifier"
+          },
+          "version": {
+            "type": "string",
+            "enum": ["v1"],
+            "description": "Protocol version"
+          },
           "success": {
             "type": "boolean",
             "description": "Whether the request succeeded"
           },
-          "schemaVersion": {
-            "type": "string",
-            "description": "Response schema version",
-            "example": "discovery.v1"
-          },
           "events": {
             "type": "array",
-            "description": "Array of discovery events",
+            "description": "Array of discovery events (allowlisted fields for public tier, full details for brokerage tier)",
             "items": {
               "$ref": "#/components/schemas/DiscoveryEvent"
             }
@@ -73,15 +84,11 @@
               "count": {
                 "type": "integer",
                 "description": "Number of events returned"
-              },
-              "radiusKm": {
-                "type": "number",
-                "description": "Search radius used"
               }
             }
           }
         },
-        "required": ["success", "events"]
+        "required": ["protocol", "version", "success", "events", "meta"]
       },
       "configuration": {
         "endpoint": "https://api.goflypost.com/v1/events/near",
@@ -110,20 +117,41 @@
         "type": "object",
         "description": "Single event with metadata",
         "properties": {
+          "protocol": {
+            "type": "string",
+            "enum": ["flypost-discovery"],
+            "description": "Protocol identifier"
+          },
+          "version": {
+            "type": "string",
+            "enum": ["v1"],
+            "description": "Protocol version"
+          },
           "success": {
             "type": "boolean",
             "description": "Whether the request succeeded"
           },
-          "schemaVersion": {
-            "type": "string",
-            "description": "Response schema version",
-            "example": "discovery.v1"
+          "events": {
+            "type": "array",
+            "description": "Array containing exactly one event",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/DiscoveryEvent"
+            }
           },
-          "event": {
-            "$ref": "#/components/schemas/DiscoveryEvent"
+          "meta": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "enum": [1],
+                "description": "Number of events returned (always 1)"
+              }
+            }
           }
         },
-        "required": ["success", "event"]
+        "required": ["protocol", "version", "success", "events", "meta"]
       },
       "configuration": {
         "endpoint": "https://api.goflypost.com/v1/events/{event_id}",
@@ -203,6 +231,10 @@
                 "type": "string",
                 "format": "date-time",
                 "description": "Event end date and time (ISO 8601 UTC)"
+              },
+              "timezone": {
+                "type": "string",
+                "description": "Optional IANA timezone identifier (e.g., 'America/Los_Angeles')"
               }
             }
           },
