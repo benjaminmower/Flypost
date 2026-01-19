@@ -7,7 +7,7 @@
 
 import crypto from 'crypto'
 import { toZonedTime, fromZonedTime } from 'date-fns-tz'
-import { parseISO } from 'date-fns'
+import { parseISO, addDays, isValid } from 'date-fns'
 import { isoTimestampHasExplicitTz } from './timezone.js'
 
 /**
@@ -241,7 +241,8 @@ export function localIntentToUTC(localDate, localTime, timezone) {
     // Parse as if this is wall-clock time (no timezone)
     const wallClockDate = parseISO(wallClockStr)
     
-    if (isNaN(wallClockDate.getTime())) {
+    // Validate the parsed date is actually valid
+    if (!isValid(wallClockDate)) {
       throw new Error(`Invalid date/time combination: ${wallClockStr}`)
     }
     
@@ -339,10 +340,9 @@ export function convertOpenHouseLocalIntent(event, timezone) {
       const endMinutes = endHour * 60 + endMin
       
       if (endMinutes < startMinutes) {
-        // Cross-midnight: add one day to end date
-        const dateParts = date.split('-').map(Number)
-        const nextDay = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]))
-        nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+        // Cross-midnight: add one day to end date using date-fns
+        const baseDate = parseISO(date)
+        const nextDay = addDays(baseDate, 1)
         endDate = nextDay.toISOString().split('T')[0]
         console.log(`  🌙 Cross-midnight detected for occurrence ${i + 1}: endTime ${endTime} on ${endDate}`)
       }
