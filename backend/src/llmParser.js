@@ -57,35 +57,42 @@ PARSING RULES:
    - startDate: REQUIRED. Parse to ISO 8601 (YYYY-MM-DDTHH:MM:SS.000Z)
    - endDate: REQUIRED for open-houses. Optional for other categories
    - For open-houses:
-     * If a time range is present (e.g., "2-4pm"), endDate MUST be provided
-     * If multiple time slots exist, use top-level occurrences[] (see section 3)
-   - If only date given (no time), default to 09:00:00.000Z
-   - If relative dates ("tomorrow", "next Saturday"), calculate from current time
+     * CRITICAL: DO NOT output startDate/endDate directly - use local intent structure instead (see section 3)
+     * The backend will derive canonical UTC timestamps from local intent + geo-inferred timezone
+   - For other categories:
+     * If only date given (no time), default to 09:00:00.000Z
+     * If relative dates ("tomorrow", "next Saturday"), calculate from current time
 
-3. MULTI-SLOT OPEN HOUSES:
-   - If input describes multiple time slots for an open house (e.g., Saturday 11am-1pm AND Sunday 2pm-4pm),
-     you MUST use the TOP-LEVEL occurrences[] array (NOT flypost.occurrences)
-   - Each occurrence MUST include:
-     * startDate: ISO 8601 timestamp for this slot's start (REQUIRED)
-     * endDate: ISO 8601 timestamp for this slot's end (REQUIRED)
+3. OPEN-HOUSES LOCAL INTENT (CRITICAL):
+   - For open-houses category, you MUST output occurrences[] with LOCAL INTENT structure
+   - Each occurrence MUST include a "local" object with:
+     * local.date: Local date in YYYY-MM-DD format (e.g., "2026-01-19")
+     * local.startTime: Local start time in HH:mm 24-hour format (e.g., "14:00")
+     * local.endTime: Local end time in HH:mm 24-hour format (e.g., "16:00")
      * label: Short human-readable label (e.g., "Saturday", "Sunday", "Morning", "Afternoon")
-   - Example occurrences structure:
+   - DO NOT include startDate/endDate in occurrences for open-houses - backend will generate from local intent
+   - Example open-house occurrences structure:
      "occurrences": [
        {
-         "startDate": "2026-01-04T11:00:00.000Z",
-         "endDate": "2026-01-04T13:00:00.000Z",
+         "local": {
+           "date": "2026-01-19",
+           "startTime": "14:00",
+           "endTime": "16:00"
+         },
          "label": "Saturday"
        },
        {
-         "startDate": "2026-01-05T14:30:00.000Z",
-         "endDate": "2026-01-05T17:30:00.000Z",
+         "local": {
+           "date": "2026-01-20",
+           "startTime": "11:00",
+           "endTime": "13:00"
+         },
          "label": "Sunday"
        }
      ]
-   - IMPORTANT: When outputting occurrences[], you MUST ALSO set top-level startDate and endDate:
-     * Set top-level startDate to the first occurrence's startDate
-     * Set top-level endDate to the first occurrence's endDate
-   - For multi-slot open houses, ALWAYS include occurrences[] with all slots
+   - DO NOT output top-level startDate/endDate for open-houses - backend will generate from first occurrence
+   - If single open-house time slot, still use occurrences[] with one entry
+   - If input says "2-4pm" interpret as "14:00" to "16:00" in 24-hour format
 
 4. LOCATION (REQUIRED):
    - location.@type: Always "Place"
