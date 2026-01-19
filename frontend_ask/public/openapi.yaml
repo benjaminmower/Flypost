@@ -42,7 +42,7 @@ paths:
       parameters:
         - name: lat
           in: query
-          description: Latitude of search center (optional; defaults to Santa Monica, CA if omitted)
+          description: Latitude of search center (optional; defaults to 34.0195 - Santa Monica, CA)
           required: false
           schema:
             type: number
@@ -53,7 +53,7 @@ paths:
           example: 34.0195
         - name: lng
           in: query
-          description: Longitude of search center (optional; defaults to Santa Monica, CA if omitted)
+          description: Longitude of search center (optional; defaults to -118.4912 - Santa Monica, CA)
           required: false
           schema:
             type: number
