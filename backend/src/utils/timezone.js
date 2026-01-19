@@ -123,6 +123,38 @@ export function hasExplicitTimezone(text) {
 }
 
 /**
+ * Detect if an ISO timestamp string contains explicit timezone information
+ * Returns true if timestamp ends with:
+ * - Z or z (UTC indicator)
+ * - ±HH:MM (e.g., +08:00, -05:00)
+ * - ±HHMM (e.g., +0800, -0500)
+ * 
+ * This is distinct from hasExplicitTimezone() which checks raw input text.
+ * This function specifically checks if an ISO timestamp string has timezone markers.
+ * 
+ * @param {string} isoTimestamp - ISO 8601 timestamp string
+ * @returns {boolean} True if timestamp has explicit timezone info
+ */
+export function isoTimestampHasExplicitTz(isoTimestamp) {
+  if (typeof isoTimestamp !== 'string') {
+    return false
+  }
+
+  // Check for Z (UTC) at the end
+  if (/[Zz]$/.test(isoTimestamp)) {
+    return true
+  }
+
+  // Check for numeric offset: ±HH:MM or ±HHMM
+  // Examples: +08:00, -05:00, +0800, -0500
+  if (/[+-]\d{2}:?\d{2}$/.test(isoTimestamp)) {
+    return true
+  }
+
+  return false
+}
+
+/**
  * Clear the timezone cache (useful for testing)
  */
 export function clearTimezoneCache() {

@@ -8,6 +8,7 @@
 import crypto from 'crypto'
 import { toZonedTime, fromZonedTime } from 'date-fns-tz'
 import { parseISO } from 'date-fns'
+import { isoTimestampHasExplicitTz } from './timezone.js'
 
 /**
  * Strip timezone info from ISO timestamp and reinterpret in a different timezone
@@ -72,38 +73,56 @@ export function normalizeOpenHouseTimestamps(event, hasExplicitTz, inferredTimez
   }
 
   // If no explicit timezone, reinterpret timestamps as local wall-clock time
+  // BUT: only reinterpret timestamps that are timezone-ambiguous
+  // If a timestamp already has Z or offset, skip reinterpretation
   if (!inferredTimezone) {
     console.warn('⚠️  No timezone inferred - cannot reinterpret timestamps')
     return event
   }
 
-  console.log(`🕐 No explicit timezone - reinterpreting timestamps as local time in ${inferredTimezone}`)
+  console.log(`🕐 No explicit timezone in raw input - reinterpreting ambiguous timestamps as local time in ${inferredTimezone}`)
   
-  // Reinterpret top-level timestamps
+  // Reinterpret top-level timestamps (only if ambiguous)
   if (event.startDate) {
-    const originalStart = event.startDate
-    event.startDate = reinterpretTimestampInTimezone(event.startDate, inferredTimezone)
-    console.log(`  startDate: ${originalStart} → ${event.startDate} (as ${inferredTimezone} local)`)
+    if (isoTimestampHasExplicitTz(event.startDate)) {
+      console.log(`  startDate: ${event.startDate} - has explicit TZ, skipping reinterpretation`)
+    } else {
+      const originalStart = event.startDate
+      event.startDate = reinterpretTimestampInTimezone(event.startDate, inferredTimezone)
+      console.log(`  startDate: ${originalStart} → ${event.startDate} (as ${inferredTimezone} local)`)
+    }
   }
   
   if (event.endDate) {
-    const originalEnd = event.endDate
-    event.endDate = reinterpretTimestampInTimezone(event.endDate, inferredTimezone)
-    console.log(`  endDate: ${originalEnd} → ${event.endDate} (as ${inferredTimezone} local)`)
+    if (isoTimestampHasExplicitTz(event.endDate)) {
+      console.log(`  endDate: ${event.endDate} - has explicit TZ, skipping reinterpretation`)
+    } else {
+      const originalEnd = event.endDate
+      event.endDate = reinterpretTimestampInTimezone(event.endDate, inferredTimezone)
+      console.log(`  endDate: ${originalEnd} → ${event.endDate} (as ${inferredTimezone} local)`)
+    }
   }
 
-  // Reinterpret occurrences timestamps if present
+  // Reinterpret occurrences timestamps if present (only if ambiguous)
   if (event.occurrences && Array.isArray(event.occurrences)) {
     for (const occ of event.occurrences) {
       if (occ.startDate) {
-        const originalStart = occ.startDate
-        occ.startDate = reinterpretTimestampInTimezone(occ.startDate, inferredTimezone)
-        console.log(`  occurrence startDate: ${originalStart} → ${occ.startDate}`)
+        if (isoTimestampHasExplicitTz(occ.startDate)) {
+          console.log(`  occurrence startDate: ${occ.startDate} - has explicit TZ, skipping reinterpretation`)
+        } else {
+          const originalStart = occ.startDate
+          occ.startDate = reinterpretTimestampInTimezone(occ.startDate, inferredTimezone)
+          console.log(`  occurrence startDate: ${originalStart} → ${occ.startDate}`)
+        }
       }
       if (occ.endDate) {
-        const originalEnd = occ.endDate
-        occ.endDate = reinterpretTimestampInTimezone(occ.endDate, inferredTimezone)
-        console.log(`  occurrence endDate: ${originalEnd} → ${occ.endDate}`)
+        if (isoTimestampHasExplicitTz(occ.endDate)) {
+          console.log(`  occurrence endDate: ${occ.endDate} - has explicit TZ, skipping reinterpretation`)
+        } else {
+          const originalEnd = occ.endDate
+          occ.endDate = reinterpretTimestampInTimezone(occ.endDate, inferredTimezone)
+          console.log(`  occurrence endDate: ${originalEnd} → ${occ.endDate}`)
+        }
       }
     }
   }
