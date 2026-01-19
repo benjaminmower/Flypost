@@ -394,7 +394,11 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
     }
   }
 
-  // Validate and normalize dates
+ // Validate and normalize dates
+// For open-houses, start/end are derived later from occurrences[].local + geo-inferred timezone.
+const isOpenHouse = parsedEvent.flypost?.category === 'open-houses'
+
+if (!isOpenHouse) {
   if (!parsedEvent.startDate) {
     throw new Error('Parsed event missing required startDate field')
   }
@@ -420,6 +424,7 @@ export async function parseEventWithLLM(naturalLanguageText, userContext = {}) {
       delete parsedEvent.endDate // Remove invalid endDate
     }
   }
+}
 
   // Normalize and derive price information
   // If flypost.listPrice exists, ensure offers object is created/updated
