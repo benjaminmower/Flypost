@@ -1,9 +1,10 @@
-# Flypost Post - Write/Publish API (llm.txt v1)
+# Flypost Post - Write/Publish API (llm.txt v2)
 
 service_name: Flypost Post
 service_purpose: >
-  Flypost Post provides authenticated write access to parse natural-language event descriptions
-  and publish them as structured events. This surface is for event creation and publishing only.
+  Flypost Post provides authenticated write access to publish events.
+  It parses natural-language event descriptions into structured Schema.org Event objects,
+  validates them, computes integrity hashes, and stores them.
 
 primary_audience: machine-agents (LLMs, AI assistants with write capabilities)
 human_audience: developers building event publishing applications, real estate agents, brokerages
@@ -11,35 +12,41 @@ human_audience: developers building event publishing applications, real estate a
 base_url: https://api.goflypost.com
 canonical_openapi: https://api.goflypost.com/openapi.json
 
-## Core Publishing Endpoint
+## Core Publishing Endpoints
 
 ### POST /api/parse-and-publish
 Description: >
   Parse a natural-language event description using AI, validate it against the schema,
-  compute an integrity hash, and store it. Returns the stored event with Flypost metadata.
+  enforce required geo/time constraints, compute an integrity hash, and store it.
+  Returns the stored event with Flypost metadata.
 
-Authentication: REQUIRED
-  - Browser (post.goflypost.com): Authorization: Bearer <firebase_id_token> (Firebase)
-  - Machine/server-to-server: provide a static write token via x-flypost-write-token header OR as the Bearer token
+Authentication: REQUIRED (proxy-enforced)
+  - Browser (https://post.goflypost.com, https://app.goflypost.com):
+      Authorization: Bearer <firebase_id_token>  (Firebase required; static tokens not accepted)
+  - Machine/server-to-server (no origin / non-browser origin):
+      Provide a static write token either as:
+        - x-flypost-write-token: <token>   (recommended), OR
+        - Authorization: Bearer <token>    (also accepted)
+    The proxy maps the token to a brokerageId and injects x-flypost-brokerage-id.
 
 Request Body (JSON):
   naturalLanguageInput: string (required) - Raw event description
   text: string (optional alias)
   input: string (optional alias)
-  brokerageId: string (optional) - Usually injected from token by the proxy
-  userContext: object (optional) - Additional metadata about the caller
+  userContext: object (optional) - Additional metadata about the caller/channel
+  brokerageId: string (optional) - Usually injected from token by the proxy (header takes precedence)
 
-Important Requirements:
-  - Provide clear what/where/when details (event type, address/location, date, and time window)
-  - Include an external listing URL when available (recommended; the first https:// URL may be stored as event.url)
-  - For machine/static-token calls, brokerageId is typically injected by the proxy from the write token
-  - Returns 400 if required event fields cannot be parsed/validated
+Important Requirements / Enforcement (server-side):
+  - Provide clear what/where/when (type/category, address, date, and time window)
+  - Geo coordinates are required for publishing:
+      - The server will attempt geocoding from the address; if geocoding fails, it returns 400.
+  - For open houses, endDate is required (time-gating + presence integrity)
 
 Response Shape:
   success: boolean
   data:
-    eventId: string - Flypost event identifier
-    event: FlypostEvent object (Schema.org Event + Flypost metadata)
+    eventId: string
+    event: FlypostEvent object (Schema.org Event + Flypost metadata + hash)
     processing:
       parsed: boolean
       validated: boolean
@@ -47,96 +54,46 @@ Response Shape:
       stored: boolean
 
 Error Responses:
-  - 400: Validation error (required fields missing or invalid)
-  - 401: Authentication required (missing or invalid credentials)
+  - 400: Validation or enforcement error (missing/invalid fields, missing geo, timezone requirements)
+  - 401: Authentication required (missing/invalid credentials)
   - 500: Internal server error
 
-## FlypostEvent Schema
+### POST /v1/events/upsert
+Description: >
+  Structured ingestion endpoint for machine sources (MLS, calendar, scraper, adapter).
+  Validates the provided event object, strips forbidden Layer-2 fields, computes identity,
+  upserts by identity, computes hash, and stores.
 
-The published event follows Schema.org Event structure with Flypost extensions:
+Authentication: REQUIRED (same policy as above)
 
-Core Schema.org fields (common):
-  - @context: "https://schema.org"
-  - @type: "Event"
-  - name: string (event title)
-  - description: string (full description)
-  - startDate: ISO 8601 date-time
-  - endDate: ISO 8601 date-time (can be null)
-  - location: Schema.org Place object
-  - organizer: Schema.org Person/Organization object (optional)
-  - url: string (optional, stored when provided)
+Request Body (JSON):
+  event: object (required) - Full Schema.org Event object (Flypost extensions allowed)
+  source: object (optional) - { sourceType: string, sourceId?: string, sourceUrl?: string }
 
-Flypost metadata (in flypost object):
-  - eventId: unique identifier
-  - brokerageId: tenant identifier (injected from write token when applicable)
-  - category: event type (open_house, garage_sale, etc.)
-  - submissionTimestamp: when event was created
-  - timezone: IANA timezone string when known
-  - eventIdentity: brokerage-agnostic identity for deduplication
+Response Shape:
+  success: boolean
+  operation: string ("insert" | "update")
+  data:
+    eventId: string
+    eventIdentity: string
+    updateCount: number
+    event: FlypostEvent object
 
-Hash object:
-  - algorithm: "SHA-256"
-  - value: SHA-256 hash of canonical event data
-
-storedAt: ISO 8601 timestamp of when event was stored
-
-## Authentication & Authorization
-
-Authentication Methods:
-  - Browser publishing: Firebase ID token via Authorization: Bearer <firebase_id_token>
-  - Machine/server-to-server publishing: static token via x-flypost-write-token header OR as the Bearer token
-
-Brokerage Tenancy:
-  - For brokerage-scoped static tokens, the proxy injects x-flypost-brokerage-id automatically
-  - brokerageId can also be provided in the request body if needed
-  - Header takes precedence over body value
-
-Rate Limits:
-  - Authenticated: 500 requests per 15 minutes
-  - Per brokerage/user depending on configuration
-
-## LLM Usage Recommendations
-
-1. Use POST /api/parse-and-publish when users provide a new event description to publish
-2. For machine/server-to-server calls, include a valid static token (x-flypost-write-token header OR Bearer token)
-3. Ensure the input includes what/where/when; ask follow-up questions if details are missing
-4. Prefer including an external listing URL (https://...) when available
-5. Parse the response to extract eventId and confirm successful storage
-6. Handle validation errors gracefully - request missing fields from the user
-7. This is a WRITE-ONLY surface - for event discovery, use ask.goflypost.com
-8. Do not cache tokens or expose them in logs
-
-## Example Natural Language Input
-
-Good examples:
-  - "Open house at 123 Main St, Santa Monica, CA on Jan 15 from 1-3pm. https://example.com/listing/123"
-  - "Garage sale Saturday 9am-2pm at 456 Oak Ave, Santa Monica, CA. https://example.com/garage-sale"
-
-Bad examples (missing required details):
-  - "Open house next Saturday" ❌ Missing address/location
-  - "Open house at 123 Main St" ❌ Missing date/time window
+## Non-goals / Not supported here
+- Presence check-ins and feedback submissions are "truth-writing" endpoints and are restricted to the Presence app origin.
+  Do not attempt to call:
+  - POST /v1/presence/*
+  - POST /v1/feedback/*
 
 ## Health Check
-
 GET /health - Service health status (no authentication required)
 
 ## Versioning
-
-API Version: v4 (current)
+API Version: v4 (current backend)
 Stability: stable
-Breaking changes: Will be announced with migration path
 
 ## Security Notes
-
 1. Never expose write tokens in client-side code
 2. Always use HTTPS for API calls
-3. Tokens should be stored securely (environment variables, secure vaults)
-4. Report security issues to security@goflypost.com immediately
-5. Follow coordinated disclosure practices
-
-## Support
-
-Technical Support: support@goflypost.com
-API Documentation: https://goflypost.com/docs
-Security Issues: security@goflypost.com
-Canonical OpenAPI: https://api.goflypost.com/openapi.json
+3. Do not log tokens
+4. Report security issues to security@goflypost.com
