@@ -2,7 +2,7 @@
   "schema_version": "v1",
   "name_for_model": "flypost_post",
   "name_for_human": "Flypost Post - Event Publisher",
-  "description_for_model": "Flypost Post provides authenticated write access to parse and publish real estate events from natural language descriptions. Browser publishing on post.goflypost.com uses Firebase authentication (Authorization: Bearer <firebase_id_token>). Machine/server-to-server publishing uses a static write token, provided via the x-flypost-write-token header or as the Bearer token.",
+  "description_for_model": "Flypost Post provides authenticated write access to parse and publish real estate events from natural language descriptions. Browser origins (post.goflypost.com, app.goflypost.com) MUST use Firebase authentication (Authorization: Bearer <firebase_id_token>). Machine/server-to-server callers use static write token via x-flypost-write-token header or Bearer token. The proxy maps tokens to brokerageId. Truth-writing endpoints (presence check-ins, feedback submissions) are restricted to presence.goflypost.com origin and NOT accessible via this surface.",
   "description_for_human": "Publish real estate events like open houses from natural language descriptions (authentication required).",
   "auth": {
     "type": "service_http",
