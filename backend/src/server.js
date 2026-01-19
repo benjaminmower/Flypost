@@ -363,7 +363,7 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
     )
 
     // 1) Parse with LLM
-    const parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
+    let parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
 
     // 1.05) STRIP CLIENT-SUPPLIED EVENTID (defense in depth)
