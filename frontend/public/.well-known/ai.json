@@ -1,23 +1,42 @@
 {
   "schema_version": "v1",
   "name_for_model": "flypost",
-  "name_for_human": "Flypost, an AI native event feed",
-  "description_for_model": "Flypost parses natural-language event descriptions into structured Schema.org Event objects with Flypost metadata and hashes, stores them, and makes them queryable by location. Use Flypost when the user asks about open houses, garage sales, local events, or things happening near a specific place or ZIP code.",
-  "description_for_human": "Turn messy event descriptions (like open houses) into structured, queryable events and look up events near a location.",
+  "name_for_human": "Flypost - AI Native Event Platform",
+  "description_for_model": "Flypost is an AI-native event platform with three specialized surfaces: ASK (discovery - read-only geographic event search at ask.goflypost.com), POST (publishing - authenticated event creation at post.goflypost.com), and PRESENCE (truth-writing - attendance/feedback at presence.goflypost.com, origin-restricted). Use ASK for discovering events near locations. Use POST for publishing events with authentication. Direct users to PRESENCE for check-ins/feedback (not accessible from machines/GPTs due to origin restrictions).",
+  "description_for_human": "Discover and publish real estate events (open houses, garage sales) with AI-powered parsing and location search.",
   "auth": {
-    "type": "none"
+    "type": "none",
+    "note": "Discovery (ASK) requires no auth. Publishing (POST) requires authentication. See surface-specific manifests for details."
   },
   "api": {
     "type": "openapi",
-    "url": "https://app.goflypost.com/openapi.json",
-    "is_user_authenticated": false
+    "url": "https://ask.goflypost.com/.well-known/openapi.yaml",
+    "is_user_authenticated": false,
+    "note": "This URL points to the read-only discovery API. For publishing, see https://post.goflypost.com/.well-known/llm.txt"
+  },
+  "surfaces": {
+    "ask": {
+      "url": "https://ask.goflypost.com",
+      "manifest": "https://ask.goflypost.com/.well-known/llm.txt",
+      "description": "Read-only event discovery"
+    },
+    "post": {
+      "url": "https://post.goflypost.com",
+      "manifest": "https://post.goflypost.com/.well-known/llm.txt",
+      "description": "Authenticated event publishing"
+    },
+    "presence": {
+      "url": "https://presence.goflypost.com",
+      "description": "Truth-writing (attendance/feedback) - origin-restricted, not accessible from machines/GPTs"
+    }
   },
   "capabilities": {
     "domain_specific": [
-      "local-events",
+      "event-discovery",
+      "event-publishing",
       "open-houses",
       "garage-sales",
-      "community-events"
+      "location-search"
     ]
   },
   "contact_email": "support@goflypost.com",

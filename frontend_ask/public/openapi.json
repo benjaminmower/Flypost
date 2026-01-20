@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Flypost Ask - Public Discovery API",
-    "description": "Read-only public API for discovering real estate events (open houses, garage sales, etc.).\nThis API provides full-fidelity event discovery with optional date range filtering.\nAll responses provide complete location and event details.\n",
+    "description": "Read-only public API for discovering real estate events (open houses, garage sales, etc.)\nusing the Flypost Discovery Protocol V1.\n\nThis API provides tiered access to event data:\n- Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields only\n- Brokerage-scoped reads (with brokerageId or api_key): Full event details\n\nAll responses follow the Discovery Protocol V1 format with protocol/version/success/events/meta structure.\n",
     "version": "1.0.0",
     "contact": {
       "name": "Flypost Support",
@@ -43,33 +43,48 @@
           {
             "name": "lat",
             "in": "query",
-            "description": "Latitude of search center",
-            "required": true,
+            "description": "Latitude of search center (optional; defaults to 34.0195 - Santa Monica, CA)",
+            "required": false,
             "schema": {
               "type": "number",
               "format": "double",
               "minimum": -90,
-              "maximum": 90
+              "maximum": 90,
+              "default": 34.0195
             },
             "example": 34.0195
           },
           {
             "name": "lng",
             "in": "query",
-            "description": "Longitude of search center",
-            "required": true,
+            "description": "Longitude of search center (optional; defaults to -118.4912 - Santa Monica, CA)",
+            "required": false,
             "schema": {
               "type": "number",
               "format": "double",
               "minimum": -180,
-              "maximum": 180
+              "maximum": 180,
+              "default": -118.4912
             },
             "example": -118.4912
           },
           {
+            "name": "radius_mi",
+            "in": "query",
+            "description": "Search radius in miles (preferred; 0.1 to 50 miles). If provided, 'radius' parameter is ignored.",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "minimum": 0.1,
+              "maximum": 50
+            },
+            "example": 5
+          },
+          {
             "name": "radius",
             "in": "query",
-            "description": "Search radius in kilometers",
+            "description": "Search radius in kilometers (fallback; 0 to 100 km; default 10 km). Ignored if 'radius_mi' is provided.",
             "required": false,
             "schema": {
               "type": "number",
@@ -78,7 +93,7 @@
               "maximum": 100,
               "default": 10
             },
-            "example": 5
+            "example": 10
           },
           {
             "name": "start",
@@ -105,36 +120,57 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful response with list of events",
+            "description": "Successful response with list of events (Discovery Protocol V1)",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "protocol",
+                    "version",
+                    "success",
+                    "events",
+                    "meta"
+                  ],
                   "properties": {
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "flypost-discovery"
+                      ],
+                      "description": "Protocol identifier",
+                      "example": "flypost-discovery"
+                    },
+                    "version": {
+                      "type": "string",
+                      "enum": [
+                        "v1"
+                      ],
+                      "description": "Protocol version",
+                      "example": "v1"
+                    },
                     "success": {
                       "type": "boolean",
+                      "description": "Whether the request succeeded",
                       "example": true
-                    },
-                    "schemaVersion": {
-                      "type": "string",
-                      "example": "discovery.v1"
                     },
                     "events": {
                       "type": "array",
+                      "description": "Array of discovery events (allowlisted fields only for public access)",
                       "items": {
                         "$ref": "#/components/schemas/DiscoveryEvent"
                       }
                     },
                     "meta": {
                       "type": "object",
+                      "required": [
+                        "count"
+                      ],
                       "properties": {
                         "count": {
                           "type": "integer",
+                          "description": "Number of events returned",
                           "example": 5
-                        },
-                        "radiusKm": {
-                          "type": "number",
-                          "example": 10
                         }
                       }
                     }
@@ -179,7 +215,7 @@
     "/v1/events/{event_id}": {
       "get": {
         "summary": "Get a single event by ID",
-        "description": "Retrieves a single event by its unique event ID.",
+        "description": "Retrieves a single event by its unique event ID.\nReturns the event in a Discovery Protocol V1 response with an events array containing exactly one item.\n",
         "operationId": "getEventById",
         "tags": [
           "discovery"
@@ -198,22 +234,64 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful response with event details",
+            "description": "Successful response with event details (Discovery Protocol V1)",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "protocol",
+                    "version",
+                    "success",
+                    "events",
+                    "meta"
+                  ],
                   "properties": {
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "flypost-discovery"
+                      ],
+                      "description": "Protocol identifier",
+                      "example": "flypost-discovery"
+                    },
+                    "version": {
+                      "type": "string",
+                      "enum": [
+                        "v1"
+                      ],
+                      "description": "Protocol version",
+                      "example": "v1"
+                    },
                     "success": {
                       "type": "boolean",
+                      "description": "Whether the request succeeded",
                       "example": true
                     },
-                    "schemaVersion": {
-                      "type": "string",
-                      "example": "discovery.v1"
+                    "events": {
+                      "type": "array",
+                      "description": "Array containing exactly one event",
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "items": {
+                        "$ref": "#/components/schemas/DiscoveryEvent"
+                      }
                     },
-                    "event": {
-                      "$ref": "#/components/schemas/DiscoveryEvent"
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "count"
+                      ],
+                      "properties": {
+                        "count": {
+                          "type": "integer",
+                          "description": "Number of events returned (always 1 for single event lookup)",
+                          "enum": [
+                            1
+                          ],
+                          "example": 1
+                        }
+                      }
                     }
                   }
                 }
@@ -341,7 +419,7 @@
           },
           "when": {
             "type": "object",
-            "description": "When is it happening (start and end times)",
+            "description": "When is it happening (start and end times, with optional timezone)",
             "required": [
               "start",
               "end"
@@ -358,6 +436,11 @@
                 "format": "date-time",
                 "description": "Event end date and time (ISO 8601 UTC)",
                 "example": "2025-01-15T14:00:00.000Z"
+              },
+              "timezone": {
+                "type": "string",
+                "description": "Optional IANA timezone identifier (e.g., 'America/Los_Angeles')",
+                "example": "America/Los_Angeles"
               }
             }
           },
@@ -414,18 +497,42 @@
       },
       "Error": {
         "type": "object",
+        "required": [
+          "success",
+          "error"
+        ],
         "properties": {
           "success": {
             "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Always false for error responses",
             "example": false
           },
           "error": {
             "type": "string",
+            "description": "Error message",
             "example": "Error message"
           },
           "details": {
             "type": "string",
-            "description": "Additional error details (optional)"
+            "description": "Additional error details (optional)",
+            "example": "Validation failed on field 'lat'"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "flypost-discovery"
+            ],
+            "description": "Protocol identifier (included in Discovery Protocol responses)"
+          },
+          "version": {
+            "type": "string",
+            "enum": [
+              "v1"
+            ],
+            "description": "Protocol version (included in Discovery Protocol responses)"
           }
         }
       }

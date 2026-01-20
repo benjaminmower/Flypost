@@ -3,7 +3,7 @@
   "name_for_human": "Flypost Ask",
   "name_for_model": "flypost_ask",
   "description_for_human": "Discover real estate events like open houses and garage sales near you.",
-  "description_for_model": "Flypost Ask provides read-only access to discover real estate events (open houses, garage sales, estate sales, etc.) based on geographic location and optional date ranges. Use this plugin to help users find events near them or at specific addresses. The API supports two endpoints: /v1/events/near for location-based search with optional date filtering, and /v1/events/{event_id} for retrieving specific events. All responses provide full-fidelity location and event details.",
+  "description_for_model": "Flypost Ask provides read-only access to discover real estate events (open houses, garage sales, estate sales, etc.) using the Flypost Discovery Protocol V1. Tiered access: registry-safe allowlist fields for public queries (reduced precision), full details for brokerage-scoped queries. Use this plugin to help users find events near them or at specific addresses. The API supports /v1/events/near for location-based search (lat/lng optional, defaults to Santa Monica; supports radius_mi in miles or radius in km) and /v1/events/{event_id} for retrieving specific events. All responses follow Discovery Protocol V1 format with protocol/version/success/events/meta structure.",
   "auth": {
     "type": "none"
   },
