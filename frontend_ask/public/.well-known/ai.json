@@ -2,7 +2,7 @@
   "schema_version": "v1",
   "name_for_model": "flypost_ask",
   "name_for_human": "Flypost Ask - Event Discovery",
-  "description_for_model": "Flypost Ask provides read-only access to discover real estate events (open houses, garage sales, estate sales) based on geographic location. Use this to help users find events near them. This surface is discovery-only and does not support event creation or modification.",
+  "description_for_model": "Flypost Ask provides read-only access to discover real estate events (open houses, garage sales, estate sales) using the Flypost Discovery Protocol V1. Tiered access: registry-safe allowlist fields for public queries (reduced precision), full details for brokerage-scoped queries. This surface is discovery-only and does not support event creation or modification.",
   "description_for_human": "Discover real estate events like open houses and garage sales near you (read-only).",
   "auth": {
     "type": "none"

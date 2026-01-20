@@ -5,6 +5,10 @@ service_purpose: >
   Flypost Post provides authenticated write access to publish events.
   It parses natural-language event descriptions into structured Schema.org Event objects,
   validates them, computes integrity hashes, and stores them.
+  
+  NOTE: This surface is for EVENT PUBLISHING only. Truth-writing endpoints (presence check-ins
+  and feedback submissions) are restricted to the Presence surface and require
+  origin: https://presence.goflypost.com.
 
 primary_audience: machine-agents (LLMs, AI assistants with write capabilities)
 human_audience: developers building event publishing applications, real estate agents, brokerages
@@ -20,14 +24,17 @@ Description: >
   enforce required geo/time constraints, compute an integrity hash, and store it.
   Returns the stored event with Flypost metadata.
 
-Authentication: REQUIRED (proxy-enforced)
-  - Browser (https://post.goflypost.com, https://app.goflypost.com):
-      Authorization: Bearer <firebase_id_token>  (Firebase required; static tokens not accepted)
-  - Machine/server-to-server (no origin / non-browser origin):
-      Provide a static write token either as:
+Authentication: REQUIRED (proxy-enforced, origin-gated)
+  - Browser origins (https://post.goflypost.com, https://app.goflypost.com):
+      MUST use Firebase authentication:
+        Authorization: Bearer <firebase_id_token>
+      Static tokens are NOT accepted from browser origins for security.
+  
+  - Machine/server-to-server (no origin header or non-browser origin):
+      Use static write token in either:
         - x-flypost-write-token: <token>   (recommended), OR
         - Authorization: Bearer <token>    (also accepted)
-    The proxy maps the token to a brokerageId and injects x-flypost-brokerage-id.
+      The proxy validates the token, maps it to a brokerageId, and injects x-flypost-brokerage-id header.
 
 Request Body (JSON):
   naturalLanguageInput: string (required) - Raw event description
@@ -41,6 +48,7 @@ Important Requirements / Enforcement (server-side):
   - Geo coordinates are required for publishing:
       - The server will attempt geocoding from the address; if geocoding fails, it returns 400.
   - For open houses, endDate is required (time-gating + presence integrity)
+  - List price is OPTIONAL (not required). If provided, must be valid format.
 
 Response Shape:
   success: boolean
@@ -56,6 +64,7 @@ Response Shape:
 Error Responses:
   - 400: Validation or enforcement error (missing/invalid fields, missing geo, timezone requirements)
   - 401: Authentication required (missing/invalid credentials)
+  - 403: Forbidden (wrong origin for endpoint)
   - 500: Internal server error
 
 ### POST /v1/events/upsert
@@ -64,7 +73,7 @@ Description: >
   Validates the provided event object, strips forbidden Layer-2 fields, computes identity,
   upserts by identity, computes hash, and stores.
 
-Authentication: REQUIRED (same policy as above)
+Authentication: REQUIRED (same origin-gated policy as above)
 
 Request Body (JSON):
   event: object (required) - Full Schema.org Event object (Flypost extensions allowed)
@@ -79,11 +88,21 @@ Response Shape:
     updateCount: number
     event: FlypostEvent object
 
-## Non-goals / Not supported here
-- Presence check-ins and feedback submissions are "truth-writing" endpoints and are restricted to the Presence app origin.
-  Do not attempt to call:
-  - POST /v1/presence/*
-  - POST /v1/feedback/*
+## Truth-Writing Endpoints (NOT accessible via this surface)
+
+The following endpoints are ORIGIN-RESTRICTED to https://presence.goflypost.com and
+CANNOT be accessed from post.goflypost.com, machine/GPT callers, or any other origin:
+
+  - POST /v1/presence/check-in
+  - POST /v1/presence/* (all presence endpoints)
+  - POST /v1/feedback/submit
+  - POST /v1/feedback/* (all feedback endpoints)
+
+These endpoints mint "truth" (attendance/feedback records) and are exclusively available
+through the Presence web application to prevent abuse. Requests from other origins will
+receive 403 Forbidden regardless of authentication.
+
+For presence check-ins and feedback, direct users to: https://presence.goflypost.com
 
 ## Health Check
 GET /health - Service health status (no authentication required)
@@ -96,4 +115,5 @@ Stability: stable
 1. Never expose write tokens in client-side code
 2. Always use HTTPS for API calls
 3. Do not log tokens
-4. Report security issues to security@goflypost.com
+4. Browser origins MUST use Firebase auth (static tokens not accepted)
+5. Report security issues to security@goflypost.com
