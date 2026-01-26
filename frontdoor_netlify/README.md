@@ -85,7 +85,7 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 # Test root domain (should show Webflow site)
 curl -I https://goflypost.com/
 
-# Test share page route (should return Cannot GET /e/test until handler exists)
+# Test share page route (should return Cannot GET /e/test until handler exists.)
 curl -I https://goflypost.com/e/test
 
 # Test arbitrary path (should show Webflow site)
@@ -124,7 +124,7 @@ When share page functionality is implemented:
 ### Issue: "Cannot GET /e/*" errors
 - **Expected**: This is normal behavior - the backend handler is not yet implemented
 - **Solution**: Implement the `/e/:shareId` endpoint in the API backend
-- **Note**: The routing itself is working correctly; the proxy surface just doesn't have a handler to respond
+- **Note**: The routing itself is working correctly; the proxy surface just doesn't have a handler to respond.
 
 ### Issue: Webflow content not loading
 - **Check**: Verify `https://flypost.webflow.io/` is accessible
