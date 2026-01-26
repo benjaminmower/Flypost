@@ -1,0 +1,11 @@
+[[redirects]]
+  from = "/e/*"
+  to = "https://api.goflypost.com/e/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "https://flypost.webflow.io/:splat"
+  status = 200
+  force = true
