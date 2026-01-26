@@ -177,6 +177,9 @@ module.exports = function createForward() {
       // 2. Read-only ask origin: ask.goflypost.com (only /api/chat allowed)
       // 3. Machine/server writes: require static token in x-flypost-write-token
       // 4. /api/chat and /api/chat/* exempt from auth (but not /api/chatbot)
+      //
+      // NOTE: /e/* share pages are GET-only and filtered in cloudrun-proxy.js
+      // before reaching this forwarder.
       //-------------------------------------
       let firebaseUser = null
       let resolvedBrokerageId = null

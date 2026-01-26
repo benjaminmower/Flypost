@@ -1,98 +1,73 @@
-// v14 – Cloud Run proxy with separated access control for "ask" and "post"
+// v15 – Cloud Run proxy restricted to GET /e/* share pages only
 
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const createForward = require('./src/forward');
 
 const app = express();
 
-// Define origins and their allowed methods
-const allowedOrigins = {
-  'https://ask.goflypost.com': ['GET', 'POST'], // GET + POST for chat queries
-  'https://post.goflypost.com': ['GET', 'POST'], // Allow GET and POST for post
-  'https://presence.goflypost.com': ['GET', 'POST'],
-  'https://flypost.netlify.app': ['GET'],
-  'https://app.goflypost.com': ['GET'],
-  'http://localhost:5173': ['GET', 'POST'],
-  'https://www.goflypost.com': ['GET', 'POST'],
-  'https://api.goflypost.com': ['GET', 'POST'],
-};
+function getRequestPath(req) {
+  try {
+    return new URL(req.originalUrl, 'http://localhost').pathname;
+  } catch {
+    return req.originalUrl.split('?')[0].split('#')[0];
+  }
+}
 
-// CORS middleware
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // Allow non-origin requests (e. g., server-to-server)
-      const allowedMethods = allowedOrigins[origin];
-      if (allowedMethods) return cb(null, true);
-      return cb(new Error('Not allowed by CORS: ' + origin));
-    },
-    credentials:  true,
-  }),
-);
+function isSharePath(pathname) {
+  return pathname.startsWith('/e/');
+}
+
+// Share-only surface: allow any origin since access is limited to GET /e/*.
+app.use(cors({ origin: '*' }));
 
 app.use(express.json({ limit: '1mb' }));
 
-app.use((req, res, next) => {
-  if (req.method === 'OPTIONS') {
-    // Handle preflight requests
-    res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.set(
-      'Access-Control-Allow-Methods',
-      'GET,POST,OPTIONS',
-    );
-    res.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-flypost-write-token');
-    res.sendStatus(204); // Preflight response
-    return;
-  }
-  console.log('proxy incoming:', req.method, req.originalUrl, 'from', req.headers.origin);
-  next();
+const shareLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-// Middleware to enforce origin-specific METHOD restrictions
-function enforceOriginMethods(req, res, next) {
-  const origin = req.headers.origin;
-  const allowedMethods = allowedOrigins[origin];
-  if (allowedMethods && ! allowedMethods.includes(req.method)) {
-    console.log(`⛔ Method ${req.method} not allowed for origin ${origin}`);
-    return res.status(405).json({
+app.use((req, res, next) => {
+  const pathname = getRequestPath(req);
+  const isShareRequest = isSharePath(pathname);
+
+  if (req.method === 'OPTIONS') {
+    if (!isShareRequest) {
+      return res.sendStatus(404);
+    }
+    res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.set('Access-Control-Allow-Methods', 'GET,OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-flypost-write-token');
+    res.sendStatus(204);
+    return;
+  }
+
+  // Share page allowlist: only GET /e/* is served by this proxy.
+  if (!isShareRequest) {
+    console.log(`⛔ Blocked ${req.method} ${pathname} (allowlist: GET /e/* only)`);
+    return res.sendStatus(404);
+  }
+  if (req.method !== 'GET') {
+    console.log(`⛔ Blocked ${req.method} ${pathname} (allowlist: GET /e/* only)`);
+    return res.status(403).json({
       success: false,
-      error: `Method ${req.method} not allowed for origin ${origin}`,
+      error: 'Forbidden: only GET /e/* is allowed',
     });
   }
-  next();
-}
-
-app.use(enforceOriginMethods);
+  console.log('proxy incoming:', req.method, req.originalUrl, 'from', req.headers.origin);
+  shareLimiter(req, res, next);
+});
 
 // Authentication is now handled in forward.js (single source of truth)
 
 const forward = createForward();
 
-app.get('/', (req, res) => {
-  res.status(200).json({ status: 'proxy running' });
-});
-
-// --- existing forward route registrations ---
-app.get('/', (req, res) => {
-  res.status(200).json({ status: 'proxy running' });
-});
-
-app.get('/health', forward);
-app.get('/v1/events/near', forward);
-app.get('/v1/events/:event_id', forward);
-app.post('/api/parse-and-publish', forward);
-app.use('/api', forward);
-
-// <-- ADD THESE LINES HERE (forward presence/feedback writes) -->
-// Forward explicit endpoints
-app.post('/v1/presence/check-in', forward);
-app.post('/v1/feedback/submit', forward);
-
-// Optionally forward entire prefixes (useful for future subpaths)
-app.use('/v1/presence', forward);
-app.use('/v1/feedback', forward);
-// -----------------------------------------------------------------
+// Share pages only: GET /e/* (no auth; low risk surface).
+app.get('/e/*', forward);
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 app.listen(PORT, '0.0.0.0', () => {

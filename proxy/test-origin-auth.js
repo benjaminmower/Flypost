@@ -1,66 +1,67 @@
 #!/usr/bin/env node
 
 /**
- * Integration test for origin-gated authentication policy
- * Tests the complete auth flow through cloudrun-proxy.js and forward.js
+ * Integration test for share allowlist enforcement
+ * Tests the GET /e/* allowlist through cloudrun-proxy.js and forward.js
  */
 
 const express = require('express')
 const cors = require('cors')
 const http = require('http')
+const rateLimit = require('express-rate-limit')
 
 // Create test server that mimics production setup
 function createTestServer() {
   const app = express()
 
-  // CORS setup (same as cloudrun-proxy.js)
-  const allowedOrigins = {
-    'https://ask.goflypost.com': ['GET', 'POST'],
-    'https://post.goflypost.com': ['GET', 'POST'],
-    'https://app.goflypost.com': ['GET', 'POST'],
-    'http://localhost:5173': ['GET', 'POST'],
+  app.use(cors({ origin: '*', credentials: true }))
+  app.use(express.json({ limit: '1mb' }))
+  const shareLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+  })
+
+  function getRequestPath(req) {
+    try {
+      return new URL(req.originalUrl, 'http://localhost').pathname
+    } catch {
+      return req.originalUrl.split('?')[0].split('#')[0]
+    }
   }
 
-  app.use(
-    cors({
-      origin: (origin, cb) => {
-        if (!origin) return cb(null, true)
-        const allowedMethods = allowedOrigins[origin]
-        if (allowedMethods) return cb(null, true)
-        return cb(new Error('Not allowed by CORS: ' + origin))
-      },
-      credentials: true,
-    }),
-  )
+  function isSharePath(pathname) {
+    return pathname.startsWith('/e/')
+  }
 
-  app.use(express.json({ limit: '1mb' }))
-
-  // Preflight handling
+  // Preflight handling + share allowlist
   app.use((req, res, next) => {
+    const pathname = getRequestPath(req)
+    const isShareRequest = isSharePath(pathname)
+
     if (req.method === 'OPTIONS') {
+      if (!isShareRequest) {
+        return res.sendStatus(404)
+      }
       res.set('Access-Control-Allow-Origin', req.headers.origin || '*')
-      res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+      res.set('Access-Control-Allow-Methods', 'GET,OPTIONS')
       res.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-flypost-write-token')
       res.sendStatus(204)
       return
     }
-    next()
-  })
 
-  // Origin method enforcement
-  function enforceOriginMethods(req, res, next) {
-    const origin = req.headers.origin
-    const allowedMethods = allowedOrigins[origin]
-    if (allowedMethods && !allowedMethods.includes(req.method)) {
-      return res.status(405).json({
+    if (!isShareRequest) {
+      return res.sendStatus(404)
+    }
+    if (req.method !== 'GET') {
+      return res.status(403).json({
         success: false,
-        error: `Method ${req.method} not allowed for origin ${origin}`,
+        error: 'Forbidden: only GET /e/* is allowed',
       })
     }
-    next()
-  }
-
-  app.use(enforceOriginMethods)
+    shareLimiter(req, res, next)
+  })
 
   // Mock backend server
   let backendServer = null
@@ -72,20 +73,8 @@ function createTestServer() {
       mockApp.use(express.json())
 
       // Mock backend endpoints
-      mockApp.post('/api/parse-and-publish', (req, res) => {
-        res.json({ success: true, message: 'parse-and-publish called', data: { eventId: 'evt_123' } })
-      })
-
-      mockApp.post('/api/chat', (req, res) => {
-        res.json({ success: true, message: 'chat called', response: 'Hello!' })
-      })
-
-      mockApp.post('/api/chatbot', (req, res) => {
-        res.json({ success: true, message: 'chatbot called' })
-      })
-
-      mockApp.get('/health', (req, res) => {
-        res.json({ success: true, message: 'healthy' })
+      mockApp.get('/e/share-id', (req, res) => {
+        res.json({ success: true, message: 'share page', shareId: 'share-id' })
       })
 
       backendServer = http.createServer(mockApp)
@@ -100,9 +89,7 @@ function createTestServer() {
   async function initialize() {
     // Set up environment for forward.js BEFORE requiring it
     process.env.PROXY_USE_ID_TOKEN = 'false' // Disable Google ID token for tests
-    process.env.FIREBASE_PROJECT_ID = 'test-project-id' // Enable Firebase validation
     process.env.FLYPOST_WRITE_TOKEN = 'test-global-token'
-    process.env.VISTA_WRITE_TOKEN = 'test-vista-token'
 
     const backend = await startMockBackend()
     process.env.BACKEND_URL = backend
@@ -117,9 +104,7 @@ function createTestServer() {
       res.status(200).json({ status: 'proxy running' })
     })
 
-    app.get('/health', forward)
-    app.post('/api/parse-and-publish', forward)
-    app.use('/api', forward)
+    app.get('/e/*', forward) // No auth; test-only share allowlist surface
 
     return app
   }
@@ -127,51 +112,11 @@ function createTestServer() {
   return { app, initialize, cleanup: () => backendServer && backendServer.close() }
 }
 
-// Mock Firebase Admin SDK verification for testing
-const admin = require('firebase-admin')
+// Firebase verification is not required because share allowlist tests only exercise GET /e/* routing.
 
-let originalVerifyIdToken = null
-let mockValidTokens = {}
-
-function mockFirebaseVerification(validTokens = {}) {
-  mockValidTokens = validTokens
-  
-  // Mock the Firebase Admin SDK initialization and auth
-  if (!admin.apps.length) {
-    try {
-      admin.initializeApp({
-        projectId: 'test-project-id'
-      })
-    } catch (err) {
-      // Check if it's already initialized error
-      if (err.code !== 'app/duplicate-app') {
-        console.error('Unexpected Firebase Admin initialization error:', err)
-        throw err
-      }
-    }
-  }
-  
-  // Mock the verifyIdToken method
-  originalVerifyIdToken = admin.auth().verifyIdToken
-  admin.auth().verifyIdToken = async function(token) {
-    if (mockValidTokens[token]) {
-      return mockValidTokens[token]
-    }
-    const error = new Error('Invalid token')
-    error.code = 'auth/argument-error'
-    throw error
-  }
-}
-
-function restoreFirebaseVerification() {
-  if (originalVerifyIdToken && admin.apps.length > 0) {
-    admin.auth().verifyIdToken = originalVerifyIdToken
-  }
-}
-
-// Test runner
+// Test runner (share allowlist only; no Firebase token mocks required).
 async function runTests() {
-  console.log('🧪 Starting origin-gated authentication tests\n')
+  console.log('🧪 Starting share allowlist tests\n')
 
   const { app, initialize, cleanup } = createTestServer()
   await initialize()
@@ -200,295 +145,50 @@ async function runTests() {
         }
       }
 
-      // Set up mock Firebase tokens
-      const validFirebaseToken = 'valid_firebase_token_123'
-      const invalidFirebaseToken = 'invalid_firebase_token'
-      
-      mockFirebaseVerification({
-        [validFirebaseToken]: {
-          uid: 'user123',
-          email: 'test@example.com',
-          firebase: { sign_in_provider: 'password' }
+      // =====================================================
+      // Test Group 1: Share allowlist enforcement
+      // =====================================================
+      console.log('\n=== Testing share allowlist ===\n')
+
+      await test('GET /e/share-id → allowed', async (url) => {
+        const res = await fetch(`${url}/e/share-id`)
+        if (res.status !== 200) {
+          throw new Error(`Expected 200, got ${res.status}`)
         }
       })
 
-      // =====================================================
-      // Test Group 1: Firebase-required browser origins
-      // =====================================================
-      console.log('\n=== Testing Firebase-required browser origins ===\n')
-
-      await test('app.goflypost.com + valid Firebase token → allowed', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://app.goflypost.com',
-            'Authorization': `Bearer ${validFirebaseToken}`
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(data)}`)
-        if (!data.success) throw new Error('Expected success response')
-      })
-
-      await test('app.goflypost.com + missing Firebase token → 401', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://app.goflypost.com'
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-        if (!data.error.includes('Firebase')) throw new Error('Expected Firebase error message')
-      })
-
-      await test('app.goflypost.com + invalid Firebase token → 401', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://app.goflypost.com',
-            'Authorization': `Bearer ${invalidFirebaseToken}`
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-      })
-
-      await test('app.goflypost.com + static token → 401 (not allowed for browser origin)', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://app.goflypost.com',
-            'x-flypost-write-token': 'test-global-token'
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-        if (!data.error.includes('Firebase')) throw new Error('Expected Firebase error message')
-      })
-
-      await test('post.goflypost.com + valid Firebase token → allowed', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://post.goflypost.com',
-            'Authorization': `Bearer ${validFirebaseToken}`
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`)
-        if (!data.success) throw new Error('Expected success response')
-      })
-
-      await test('post.goflypost.com + missing Firebase token → 401', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://post.goflypost.com'
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-        if (!data.error.includes('Firebase')) throw new Error('Expected Firebase error message')
-      })
-
-      // =====================================================
-      // Test Group 2: Read-only ask origin
-      // =====================================================
-      console.log('\n=== Testing read-only ask origin ===\n')
-
-      await test('ask.goflypost.com + POST /api/chat → allowed without auth', async (url) => {
-        const res = await fetch(`${url}/api/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://ask.goflypost.com'
-          },
-          body: JSON.stringify({ message: 'Hello' })
-        })
-        const data = await res.json()
-        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(data)}`)
-        if (!data.success) throw new Error('Expected success response')
-      })
-
-      await test('ask.goflypost.com + POST /api/chat/conversation → allowed without auth', async (url) => {
-        const res = await fetch(`${url}/api/chat/conversation`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://ask.goflypost.com'
-          },
-          body: JSON.stringify({ message: 'Hello' })
-        })
-        // Backend may return 404 if endpoint doesn't exist, but auth should not block it
-        if (res.status === 401 || res.status === 403) {
-          throw new Error(`Expected no auth block, got ${res.status}`)
-        }
-        // 200 or 404 are both acceptable (endpoint reached backend)
-      })
-
-      await test('ask.goflypost.com + POST /api/parse-and-publish → 401 (read-only)', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://ask.goflypost.com'
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-        if (!data.error.includes('read-only')) throw new Error('Expected read-only error message')
-      })
-
-      await test('ask.goflypost.com + POST /api/parse-and-publish with Firebase token → still 401 (read-only enforced)', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': 'https://ask.goflypost.com',
-            'Authorization': `Bearer ${validFirebaseToken}`
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-        if (!data.error.includes('read-only')) throw new Error('Expected read-only error message')
-      })
-
-      // =====================================================
-      // Test Group 3: /api/chat exemption and boundaries
-      // =====================================================
-      console.log('\n=== Testing /api/chat exemption ===\n')
-
-      await test('/api/chat is exempt from auth (no origin)', async (url) => {
-        const res = await fetch(`${url}/api/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ message: 'Hello' })
-        })
-        const data = await res.json()
-        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`)
-        if (!data.success) throw new Error('Expected success response')
-      })
-
-      await test('/api/chat/subpath is exempt from auth', async (url) => {
-        const res = await fetch(`${url}/api/chat/conversation`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ message: 'Hello' })
-        })
-        // Backend may return 404 if endpoint doesn't exist, but auth should not block it
-        if (res.status === 401 || res.status === 403) {
-          throw new Error(`Expected no auth block, got ${res.status}`)
-        }
-        // 200 or 404 are both acceptable
-      })
-
-      await test('/api/chatbot is NOT exempt (requires auth)', async (url) => {
-        const res = await fetch(`${url}/api/chatbot`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ message: 'Hello' })
-        })
-        const data = await res.json()
-        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-        if (!data.error.includes('Unauthorized')) throw new Error('Expected unauthorized error')
-      })
-
-      // =====================================================
-      // Test Group 4: Machine/server-to-server writes
-      // =====================================================
-      console.log('\n=== Testing machine/server-to-server writes ===\n')
-
-      await test('No origin + valid x-flypost-write-token → allowed', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
+      await test('POST /e/share-id → 403', async (url) => {
+        const res = await fetch(`${url}/e/share-id`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-flypost-write-token': 'test-global-token'
           },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
+          body: JSON.stringify({ message: 'Hello' })
         })
-        const data = await res.json()
-        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(data)}`)
-        if (!data.success) throw new Error('Expected success response')
+        if (res.status !== 403) throw new Error(`Expected 403, got ${res.status}`)
       })
 
-      await test('No origin + invalid x-flypost-write-token → 401', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-flypost-write-token': 'wrong-token'
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-        if (!data.error.includes('Unauthorized')) throw new Error('Expected unauthorized error')
-      })
-
-      await test('No origin + missing token → 401', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`)
-      })
-
-      await test('Brokerage token (VISTA) works', async (url) => {
-        const res = await fetch(`${url}/api/parse-and-publish`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-flypost-write-token': 'test-vista-token'
-          },
-          body: JSON.stringify({ naturalLanguageInput: 'Test event' })
-        })
-        const data = await res.json()
-        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`)
-        if (!data.success) throw new Error('Expected success response')
-      })
-
-      // =====================================================
-      // Test Group 5: Public read endpoints
-      // =====================================================
-      console.log('\n=== Testing public read endpoints ===\n')
-
-      await test('GET /health is public (no auth required)', async (url) => {
+      await test('GET /health → 404 (blocked)', async (url) => {
         const res = await fetch(`${url}/health`)
-        const data = await res.json()
-        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`)
-        if (!data.success) throw new Error('Expected success response')
+        if (res.status !== 404) throw new Error(`Expected 404, got ${res.status}`)
+      })
+
+      await test('POST /api/parse-and-publish → 404 (blocked)', async (url) => {
+        const res = await fetch(`${url}/api/parse-and-publish`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-flypost-write-token': 'test-global-token'
+          },
+          body: JSON.stringify({ message: 'Hello' })
+        })
+        if (res.status !== 404) throw new Error(`Expected 404, got ${res.status}`)
       })
 
       console.log(`\n📊 Results: ${passed} passed, ${failed} failed`)
 
       // Cleanup
-      restoreFirebaseVerification()
       cleanup()
       server.close(() => {
         if (failed > 0) {
@@ -504,10 +204,10 @@ async function runTests() {
 // Run tests
 runTests()
   .then(() => {
-    console.log('\n✅ All origin-gated authentication tests passed!')
+    console.log('\n✅ All share allowlist tests passed!')
     process.exit(0)
   })
   .catch((error) => {
-    console.error('\n❌ Origin-gated authentication tests failed:', error.message)
+    console.error('\n❌ Share allowlist tests failed:', error.message)
     process.exit(1)
   })
