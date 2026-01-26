@@ -122,6 +122,7 @@ module.exports = function createForward() {
       originalPath = req.originalUrl.split('?')[0].split('#')[0]
     }
     const isApiPost = req.method === 'POST' && originalPath.startsWith('/api/')
+    const isShareRoute = originalPath.startsWith('/e/')
     const isParseAndPublish =
       req.method === 'POST' && originalPath === '/api/parse-and-publish'
 
@@ -135,6 +136,16 @@ module.exports = function createForward() {
     }
 
     const targetUrl = BACKEND_BASE + req.originalUrl
+
+    if (req.method !== 'GET' && isShareRoute) {
+      setCors(res, origin)
+      console.log(`🔒 Share route blocked for non-GET request ${req.method} ${originalPath}`)
+      return res.status(405).json({
+        success: false,
+        error: 'Method not allowed',
+        requestId
+      })
+    }
 
     console.log(
       `[proxy → backend] ${req.method} ${req.originalUrl} ` +
@@ -464,5 +475,6 @@ module.exports = function createForward() {
         requestId
       })
     }
+
   }
 }

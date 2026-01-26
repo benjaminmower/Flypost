@@ -81,6 +81,7 @@ app.get('/', (req, res) => {
 app.get('/health', forward);
 app.get('/v1/events/near', forward);
 app.get('/v1/events/:event_id', forward);
+app.get('/e/:shareId', forward);
 app.post('/api/parse-and-publish', forward);
 app.use('/api', forward);
 
