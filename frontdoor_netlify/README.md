@@ -53,15 +53,19 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 
 **Maintenance Note**: When updating routing rules, update `_redirects` first (canonical source), then sync changes to `netlify.toml` if needed. Netlify gives precedence to `_redirects` when both files are present.
 
-## Current Scope: Routing Substrate Only
+## Current Scope: Routing Substrate + Share Handler
 
-⚠️ **Important**: This setup establishes the **routing infrastructure only**. The following features are **not yet implemented**:
+✅ **Implemented**:
 
-- ❌ Backend handler for `/e/*` endpoints
+- ✅ Backend handler for `/e/:shareId` with OG tags for social previews
+- ✅ 404 response for unknown share IDs
+- ✅ Caching headers for crawler-friendly previews
+- ✅ Proxy enforcement for GET-only `/e/*` share surface
+
+⚠️ **Still pending**:
+
 - ❌ ShareId generation and minting
-- ❌ Open Graph (OG) tag rendering for share pages
-- ❌ Share page UI/templates
-- ❌ Proxy allow-list for GET /e/* only (planned follow-up)
+- ❌ Share page UI/templates (beyond OG preview HTML)
 
 ## Testing
 
@@ -73,9 +77,10 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
    - Content is proxied from `https://flypost.webflow.io/`
 
 2. **Share page routes** (`https://goflypost.com/e/test`):
-   - Should proxy to the public proxy surface (api.goflypost.com)
+   - Proxies to the public proxy surface (api.goflypost.com)
    - URL remains `https://goflypost.com/e/test` in the browser
-   - Currently returns **Cannot GET /e/test** until handler exists (expected behavior)
+   - Returns HTML with OG tags when the shareId exists
+   - Unknown shareId returns **404**
    - Content is proxied from `https://api.goflypost.com/e/test`
    - This is a **public, unauthenticated surface** designed for crawler access
 
@@ -85,14 +90,17 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 # Test root domain (should show Webflow site)
 curl -I https://goflypost.com/
 
-# Test share page route (should return Cannot GET /e/test until handler exists)
+# Test share page route (should return HTML with OG tags when shareId exists)
 curl -I https://goflypost.com/e/test
+
+# Test share page route for invalid shareId (should return 404)
+curl -I https://goflypost.com/e/invalid-share-id
 
 # Test arbitrary path (should show Webflow site)
 curl -I https://goflypost.com/about
 ```
 
-**Note**: `/e/test` currently returns "Cannot GET /e/test" because the backend handler does not yet exist. This is expected behavior until the share page handler is implemented.
+**Note**: Share pages are served via `GET /e/:shareId` from the backend handler. Ensure a valid event ID is used for a 200 response.
 
 ## Deployment
 
@@ -113,18 +121,15 @@ This front door routing is **independent** and does not interfere with other dep
 
 When share page functionality is implemented:
 
-1. **Backend handler**: Add `/e/:shareId` endpoint to the API
-2. **ShareId minting**: Implement share ID generation for events/posts
-3. **OG tag rendering**: Add server-side Open Graph meta tags for social sharing
-4. **Share page UI**: Create templates for rendered share pages
-5. **Proxy allow-list**: Implement explicit allow-list for GET /e/* only on the proxy surface
+1. **ShareId minting**: Implement share ID generation for events/posts
+2. **Share page UI**: Create templates for richer rendered share pages
 
 ## Troubleshooting
 
 ### Issue: "Cannot GET /e/*" errors
-- **Expected**: This is normal behavior - the backend handler is not yet implemented
-- **Solution**: Implement the `/e/:shareId` endpoint in the API backend
-- **Note**: The routing itself is working correctly; the proxy surface just doesn't have a handler to respond.
+- **Expected**: This indicates the backend handler is not reachable or shareId is invalid
+- **Solution**: Ensure the backend `/e/:shareId` handler is deployed and shareId exists
+- **Note**: The routing itself is working correctly; the proxy surface forwards to the backend handler.
 
 ### Issue: Webflow content not loading
 - **Check**: Verify `https://flypost.webflow.io/` is accessible

@@ -26,6 +26,7 @@ import { toDiscoveryEventsV1, toDiscoveryEventV1 } from './utils/discoveryMapper
 import { sanitizeDiscoveryResponse } from './utils/sanitizer.js'
 import { geocodeAddress } from './geocode.js'
 import { inferTimezoneFromCoordinates, hasExplicitTimezone } from './utils/timezone.js'
+import { buildEventShareMeta, buildShareOgHtml } from './sharePage.js'
 import { 
   normalizeOpenHouseTimestamps, 
   generateOccurrenceId, 
@@ -950,6 +951,35 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
       error: 'Failed to retrieve event',
       details: error.message
     })
+  }
+})
+
+// Public share page for event preview (OG tags for crawlers)
+app.get('/e/:shareId', applyTieredRateLimit, async (req, res) => {
+  try {
+    const { shareId } = req.params
+
+    if (!shareId) {
+      return res.status(400).send('shareId parameter is required')
+    }
+
+    const useFirestore = isFirestoreEnabled()
+    const event = await getEventByIdAny(shareId, useFirestore)
+
+    if (!event) {
+      return res.status(404).send('Event not found')
+    }
+
+    const meta = buildEventShareMeta(event)
+    const html = buildShareOgHtml(meta)
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600')
+    res.setHeader('X-Robots-Tag', 'index, follow')
+    res.status(200).send(html)
+  } catch (error) {
+    console.error('❌ Error rendering share page:', error)
+    res.status(500).send('Failed to render share page')
   }
 })
 

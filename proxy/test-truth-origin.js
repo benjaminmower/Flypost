@@ -106,6 +106,11 @@ function createTestServer() {
         res.json({ success: true, message: 'healthy' })
       })
 
+      mockApp.get('/e/:shareId', (req, res) => {
+        res.set('Content-Type', 'text/html')
+        res.status(200).send('<html><head><title>Share</title></head><body>Share</body></html>')
+      })
+
       backendServer = http.createServer(mockApp)
       backendServer.listen(0, () => {
         const port = backendServer.address().port
@@ -138,6 +143,7 @@ function createTestServer() {
     app.get('/health', forward)
     app.post('/api/parse-and-publish', forward)
     app.use('/api', forward)
+    app.get('/e/:shareId', forward)
     
     // Truth endpoints
     app.post('/v1/presence/check-in', forward)
@@ -442,7 +448,30 @@ async function runTests() {
       })
 
       // =====================================================
-      // Test Group 7: GET requests not affected
+      // Test Group 7: Share page restrictions
+      // =====================================================
+      console.log('\n=== Testing share page restrictions ===\n')
+
+      await test('POST /e/test blocked (405)', async (url) => {
+        const res = await fetch(`${url}/e/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ test: true })
+        })
+
+        if (![404, 405].includes(res.status)) {
+          throw new Error(`Expected 404 or 405, got ${res.status}`)
+        }
+      })
+
+      await test('GET /e/test allowed', async (url) => {
+        const res = await fetch(`${url}/e/test`, { method: 'GET' })
+
+        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`)
+      })
+
+      // =====================================================
+      // Test Group 8: GET requests not affected
       // =====================================================
       console.log('\n=== Testing GET requests not affected ===\n')
 
