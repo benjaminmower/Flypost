@@ -35,7 +35,9 @@ The `_redirects` file is the **canonical source of truth** for routing rules:
 
 ### `netlify.toml`
 
-Contains the same redirect rules in TOML format. Currently duplicates the `_redirects` configuration for compatibility. Left in place for now.
+Contains the same redirect rules in TOML format. Currently duplicates the `_redirects` configuration for compatibility. 
+
+**Maintenance Note**: When updating routing rules, update `_redirects` first (canonical source), then sync changes to `netlify.toml` if needed. Netlify gives precedence to `_redirects` when both files are present.
 
 ## Current Scope: Routing Substrate Only
 
