@@ -85,7 +85,7 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 # Test root domain (should show Webflow site)
 curl -I https://goflypost.com/
 
-# Test share page route (should return Cannot GET /e/test until handler exists.)
+# Test share page route (should return Cannot GET /e/test until handler exists)
 curl -I https://goflypost.com/e/test
 
 # Test arbitrary path (should show Webflow site)
