@@ -2,6 +2,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const createForward = require('./src/forward');
 
 const app = express();
@@ -16,6 +17,7 @@ const allowedOrigins = {
   'http://localhost:5173': ['GET', 'POST'],
   'https://www.goflypost.com': ['GET', 'POST'],
   'https://api.goflypost.com': ['GET', 'POST'],
+  'https://goflypost.com': ['GET', 'POST'],
 };
 
 // CORS middleware
@@ -32,6 +34,13 @@ app.use(
 );
 
 app.use(express.json({ limit: '1mb' }));
+
+const proxyReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
@@ -64,6 +73,7 @@ function enforceOriginMethods(req, res, next) {
 }
 
 app.use(enforceOriginMethods);
+app.use(proxyReadLimiter);
 
 // Authentication is now handled in forward.js (single source of truth)
 
@@ -81,6 +91,7 @@ app.get('/', (req, res) => {
 app.get('/health', forward);
 app.get('/v1/events/near', forward);
 app.get('/v1/events/:event_id', forward);
+app.get('/e/:shareId', forward);
 app.post('/api/parse-and-publish', forward);
 app.use('/api', forward);
 

@@ -12,6 +12,7 @@ The Netlify front door routes traffic to two destinations:
    - `api.goflypost.com` is the **public proxy surface**, not the backend
    - `/e/*` is a **public, unauthenticated share surface** (crawler-friendly)
    - Relies on discovery-safe data minimization (no authentication required)
+   - Share page HTML handler now renders OG tags and minimal HTML
    - Future enhancement: Proxy allow-list for GET /e/* only (planned follow-up)
 
 2. **All other routes (`/*`)**: Routed to Webflow marketing site
@@ -57,10 +58,10 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 
 ⚠️ **Important**: This setup establishes the **routing infrastructure only**. The following features are **not yet implemented**:
 
-- ❌ Backend handler for `/e/*` endpoints
+- ✅ Backend handler for `/e/*` endpoints (OG tags + minimal HTML)
 - ❌ ShareId generation and minting
-- ❌ Open Graph (OG) tag rendering for share pages
-- ❌ Share page UI/templates
+- ✅ Open Graph (OG) tag rendering for share pages
+- ✅ Minimal share page HTML template
 - ❌ Proxy allow-list for GET /e/* only (planned follow-up)
 
 ## Testing
@@ -75,7 +76,7 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 2. **Share page routes** (`https://goflypost.com/e/test`):
    - Should proxy to the public proxy surface (api.goflypost.com)
    - URL remains `https://goflypost.com/e/test` in the browser
-   - Currently returns **Cannot GET /e/test** until handler exists (expected behavior)
+   - Returns a minimal HTML page with OG tags
    - Content is proxied from `https://api.goflypost.com/e/test`
    - This is a **public, unauthenticated surface** designed for crawler access
 
@@ -85,14 +86,14 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 # Test root domain (should show Webflow site)
 curl -I https://goflypost.com/
 
-# Test share page route (should return Cannot GET /e/test until handler exists)
+# Test share page route (returns minimal HTML with OG tags)
 curl -I https://goflypost.com/e/test
 
 # Test arbitrary path (should show Webflow site)
 curl -I https://goflypost.com/about
 ```
 
-**Note**: `/e/test` currently returns "Cannot GET /e/test" because the backend handler does not yet exist. This is expected behavior until the share page handler is implemented.
+**Note**: `/e/test` returns HTML even if the shareId is not found (404 HTML with OG tags).
 
 ## Deployment
 
@@ -113,18 +114,15 @@ This front door routing is **independent** and does not interfere with other dep
 
 When share page functionality is implemented:
 
-1. **Backend handler**: Add `/e/:shareId` endpoint to the API
-2. **ShareId minting**: Implement share ID generation for events/posts
-3. **OG tag rendering**: Add server-side Open Graph meta tags for social sharing
-4. **Share page UI**: Create templates for rendered share pages
-5. **Proxy allow-list**: Implement explicit allow-list for GET /e/* only on the proxy surface
+1. **ShareId minting**: Implement share ID generation for events/posts
+2. **Share page UI**: Expand the templates for richer rendered share pages
+3. **Proxy allow-list**: Implement explicit allow-list for GET /e/* only on the proxy surface
 
 ## Troubleshooting
 
-### Issue: "Cannot GET /e/*" errors
-- **Expected**: This is normal behavior - the backend handler is not yet implemented
-- **Solution**: Implement the `/e/:shareId` endpoint in the API backend
-- **Note**: The routing itself is working correctly; the proxy surface just doesn't have a handler to respond.
+### Issue: Share pages show a blank or error state
+- **Expected**: If a share ID is unknown, the handler returns a 404 HTML page with OG tags.
+- **Solution**: Verify the share ID exists in the backend storage.
 
 ### Issue: Webflow content not loading
 - **Check**: Verify `https://flypost.webflow.io/` is accessible

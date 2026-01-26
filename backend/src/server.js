@@ -43,6 +43,16 @@ const port = process.env.PORT || 8080
 const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.3') // 300 meters default (backward compat); recommended: 0.1 (100m)
 const FEEDBACK_RECENCY_THRESHOLD_HOURS = parseFloat(process.env.FEEDBACK_RECENCY_THRESHOLD_HOURS || '4') // 4 hours default
 const FEEDBACK_RECENCY_THRESHOLD_MS = FEEDBACK_RECENCY_THRESHOLD_HOURS * 60 * 60 * 1000
+const SHARE_CACHE_CONTROL = process.env.SHARE_CACHE_CONTROL || 'public, max-age=300, s-maxage=300'
+const SHARE_NOT_FOUND_CACHE_CONTROL = process.env.SHARE_NOT_FOUND_CACHE_CONTROL || 'no-store'
+const RAW_SHARE_BASE_URL = process.env.SHARE_BASE_URL || ''
+const SHARE_BASE_URL = RAW_SHARE_BASE_URL ? RAW_SHARE_BASE_URL.replace(/\/$/, '') : ''
+const SHARE_APP_URL = (process.env.SHARE_APP_URL || 'https://app.goflypost.com').replace(/\/$/, '')
+const SHARE_ALLOWED_HOSTS = (process.env.SHARE_ALLOWED_HOSTS || '')
+  .split(',')
+  .map(host => host.trim())
+  .filter(Boolean)
+const DEFAULT_SHARE_HOSTS = ['goflypost.com', 'www.goflypost.com', 'api.goflypost.com', 'localhost', '127.0.0.1']
 
 // Helper: Calculate distance between two coordinates using Haversine formula
 function distanceKm(lat1, lng1, lat2, lng2) {
@@ -140,6 +150,194 @@ function detectMultipleTimeSlots(text) {
   }
   
   return false
+}
+
+function escapeHtml(value) {
+  return value == null ? '' : String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  if (text.length <= maxLength) return text
+  return `${text.substring(0, maxLength - 1).trim()}…`
+}
+
+function formatCategoryLabel(rawCategory) {
+  if (!rawCategory) return null
+  const normalized = String(rawCategory)
+    .replace(/[.\-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!normalized) return null
+  return normalized.replace(/\b\w/g, char => char.toUpperCase())
+}
+
+function formatShareAddress(event) {
+  const address = event?.location?.address
+  if (!address) return event?.location?.name || null
+  const parts = [
+    address.streetAddress,
+    address.addressLocality,
+    address.addressRegion
+  ].filter(Boolean)
+  return parts.length ? parts.join(', ') : event?.location?.name || null
+}
+
+function formatShareDate(startDate) {
+  if (!startDate) return null
+  const date = new Date(startDate)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
+function buildShareMeta(event) {
+  const name = event?.name && typeof event.name === 'string' ? event.name.trim() : ''
+  const categoryLabel = formatCategoryLabel(event?.flypost?.category)
+  const address = formatShareAddress(event)
+  const dateLabel = formatShareDate(event?.startDate)
+  const title = name || [categoryLabel, address].filter(Boolean).join(' — ') || 'Flypost event'
+
+  const rawDescription =
+    event?.description && typeof event.description === 'string'
+      ? event.description.trim()
+      : ''
+  const detailLine = [address, dateLabel].filter(Boolean).join(' • ')
+  const description =
+    rawDescription || (detailLine ? `Flypost event • ${detailLine}` : 'Flypost event details on Flypost.')
+
+  return {
+    title: truncateText(title, 80),
+    description: truncateText(description, 200),
+    address,
+    dateLabel
+  }
+}
+
+function isValidShareHost(hostname) {
+  if (typeof hostname !== 'string') return false
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(hostname)
+}
+
+function isAllowedShareHost(hostname) {
+  const allowedHosts = SHARE_ALLOWED_HOSTS.length ? SHARE_ALLOWED_HOSTS : DEFAULT_SHARE_HOSTS
+  return isValidShareHost(hostname) && allowedHosts.includes(hostname)
+}
+
+function isSafeHttpUrl(value) {
+  if (!value || typeof value !== 'string') return false
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function buildShareUrl(req, shareId) {
+  const safeShareId = shareId || ''
+  if (SHARE_BASE_URL) {
+    const normalizedBase = SHARE_BASE_URL.replace(/\/$/, '')
+    return `${normalizedBase}/e/${encodeURIComponent(safeShareId)}`
+  }
+  const hostname = req.hostname
+  if (!isAllowedShareHost(hostname)) {
+    return `/e/${encodeURIComponent(safeShareId)}`
+  }
+  return `${req.protocol}://${hostname}/e/${encodeURIComponent(safeShareId)}`
+}
+
+function renderShareHtml({ title, description, url, address, dateLabel, appUrl }) {
+  const details = [address, dateLabel].filter(Boolean).join(' • ')
+  const detailsHtml = details ? `<p>${escapeHtml(details)}</p>` : ''
+  const safeAppUrl = isSafeHttpUrl(appUrl) ? appUrl : null
+  const appLinkHtml = safeAppUrl ? `<p><a href="${escapeHtml(safeAppUrl)}">Open Flypost</a></p>` : ''
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(title)}</title>
+    <meta name="description" content="${escapeHtml(description)}">
+    <meta property="og:title" content="${escapeHtml(title)}">
+    <meta property="og:description" content="${escapeHtml(description)}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="${escapeHtml(url)}">
+    <meta name="twitter:card" content="summary">
+    <link rel="canonical" href="${escapeHtml(url)}">
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(description)}</p>
+      ${detailsHtml}
+      ${appLinkHtml}
+    </main>
+  </body>
+</html>`
+}
+
+function renderShareNotFoundHtml({ shareId, url }) {
+  const title = 'Flypost share not found'
+  const description = 'This Flypost share link is no longer available.'
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(title)}</title>
+    <meta name="description" content="${escapeHtml(description)}">
+    <meta property="og:title" content="${escapeHtml(title)}">
+    <meta property="og:description" content="${escapeHtml(description)}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="${escapeHtml(url)}">
+    <meta name="twitter:card" content="summary">
+    <link rel="canonical" href="${escapeHtml(url)}">
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(description)}</p>
+      <p>Share ID: ${escapeHtml(shareId)}</p>
+    </main>
+  </body>
+</html>`
+}
+
+function renderShareErrorHtml({ title, description, url, shareId }) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(title)}</title>
+    <meta name="description" content="${escapeHtml(description)}">
+    <meta property="og:title" content="${escapeHtml(title)}">
+    <meta property="og:description" content="${escapeHtml(description)}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="${escapeHtml(url)}">
+    <meta name="twitter:card" content="summary">
+    <link rel="canonical" href="${escapeHtml(url)}">
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(description)}</p>
+      ${shareId ? `<p>Share ID: ${escapeHtml(shareId)}</p>` : ''}
+    </main>
+  </body>
+</html>`
 }
 
 // CORS
@@ -310,6 +508,62 @@ const healthHandler = (_req, res) => {
 }
 
 app.get(['/health', '/api/health'], healthHandler)
+
+// Share page HTML (OG tags, caching, minimal HTML + 404 handler for crawlers)
+app.get('/e/:shareId', applyTieredRateLimit, async (req, res) => {
+  try {
+    const { shareId } = req.params
+    const shareUrl = buildShareUrl(req, shareId)
+
+    const useFirestore = isFirestoreEnabled()
+    let event = null
+    try {
+      event = await getEventByIdAny(shareId, useFirestore)
+      if (!event) {
+        event = await findEventByIdentity(shareId)
+      }
+    } catch (storageError) {
+      console.error('❌ Share lookup storage error:', storageError)
+      throw storageError
+    }
+
+    if (!event) {
+      res.status(404)
+      res.setHeader('Cache-Control', SHARE_NOT_FOUND_CACHE_CONTROL)
+      res.type('html')
+      return res.send(renderShareNotFoundHtml({ shareId, url: shareUrl }))
+    }
+
+    const meta = buildShareMeta(event)
+    res.setHeader('Cache-Control', SHARE_CACHE_CONTROL)
+    res.type('html')
+    return res.send(
+      renderShareHtml({
+        title: meta.title,
+        description: meta.description,
+        url: shareUrl,
+        address: meta.address,
+        dateLabel: meta.dateLabel,
+        appUrl: SHARE_APP_URL
+      })
+    )
+  } catch (error) {
+    console.error('❌ Share page error:', error)
+    const shareId = req.params?.shareId
+    const shareUrl = buildShareUrl(req, shareId || '')
+    res.status(500)
+    res.setHeader('Cache-Control', SHARE_NOT_FOUND_CACHE_CONTROL)
+    res.type('html')
+    return res.send(
+      renderShareErrorHtml({
+        title: 'Flypost share error',
+        description: 'We could not load this share page right now.',
+        url: shareUrl,
+        shareId
+      })
+    )
+  }
+})
 
 // Parse & publish
 app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
