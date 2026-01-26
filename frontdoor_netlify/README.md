@@ -12,7 +12,7 @@ The Netlify front door routes traffic to two destinations:
    - `api.goflypost.com` is the **public proxy surface**, not the backend
    - `/e/*` is a **public, unauthenticated share surface** (crawler-friendly)
    - Relies on discovery-safe data minimization (no authentication required)
-   - Future enhancement: Proxy allow-list for GET /e/* only (planned follow-up)
+   - Proxy allow-list enforced: only `GET /e/*` is served; other paths/methods return 403/404
 
 2. **All other routes (`/*`)**: Routed to Webflow marketing site
    - Destination: `https://flypost.webflow.io/:splat`
@@ -61,7 +61,7 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 - ❌ ShareId generation and minting
 - ❌ Open Graph (OG) tag rendering for share pages
 - ❌ Share page UI/templates
-- ❌ Proxy allow-list for GET /e/* only (planned follow-up)
+- ✅ Proxy allow-list for GET /e/* only (enforced on the proxy)
 
 ## Testing
 
@@ -74,10 +74,11 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 
 2. **Share page routes** (`https://goflypost.com/e/test`):
    - Should proxy to the public proxy surface (api.goflypost.com)
-   - URL remains `https://goflypost.com/e/test` in the browser
-   - Currently returns **Cannot GET /e/test** until handler exists (expected behavior)
-   - Content is proxied from `https://api.goflypost.com/e/test`
-   - This is a **public, unauthenticated surface** designed for crawler access
+    - URL remains `https://goflypost.com/e/test` in the browser
+    - Currently returns **Cannot GET /e/test** until handler exists (expected behavior)
+    - Content is proxied from `https://api.goflypost.com/e/test`
+    - This is a **public, unauthenticated surface** designed for crawler access
+    - Non-GET methods or non-/e/* paths return 403/404 from the proxy allowlist
 
 ### Manual Testing
 
@@ -117,7 +118,7 @@ When share page functionality is implemented:
 2. **ShareId minting**: Implement share ID generation for events/posts
 3. **OG tag rendering**: Add server-side Open Graph meta tags for social sharing
 4. **Share page UI**: Create templates for rendered share pages
-5. **Proxy allow-list**: Implement explicit allow-list for GET /e/* only on the proxy surface
+5. **Proxy allow-list**: Enforced allow-list for GET /e/* only on the proxy surface
 
 ## Troubleshooting
 

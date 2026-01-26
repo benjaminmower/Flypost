@@ -1,14 +1,16 @@
 # Flypost Proxy Server
 
 A lightweight proxy server for Flypost v4 that forwards requests to the backend and provides origin-gated authentication for API endpoints.
+This public proxy deployment is restricted to **GET /e/*** share pages; all other paths or methods are blocked before authentication.
 
 ## Features
 
 - **Request Forwarding**: Forwards requests to the backend service
+- **Share Page Allowlist**: Only `GET /e/*` is served; other paths/methods return 403/404
 - **Origin-Gated Authentication**: Different auth policies for browser vs. server-to-server writes
 - **Firebase Authentication**: Browser writes from `app.goflypost.com` and `post.goflypost.com` require Firebase ID tokens
 - **Read-Only Origins**: `ask.goflypost.com` is read-only (can only use `/api/chat`)
-- **Static Token Authentication**: Machine/GPT writes use `x-flypost-write-token`
+- **Static Token Authentication**: Machine/GPT writes use `x-flypost-write-token` (full proxy only)
 - **CORS Support**: Configurable CORS for allowed origins
 - **Google Cloud Run Compatible**: Supports Google Cloud ID token authentication
 
@@ -27,10 +29,11 @@ A lightweight proxy server for Flypost v4 that forwards requests to the backend 
 ## Origin-Gated Authentication Policy
 
 The proxy implements different authentication requirements based on the request origin, creating distinct surfaces for browser publishing, read-only querying, and machine writes.
+The public share proxy blocks non-`/e/*` requests before these rules apply, so the rules below apply only in full proxy deployments.
 
 ### Authentication Rules
 
-#### 1. Truth-Writing Endpoint Restrictions (Presence & Feedback)
+#### 1. Truth-Writing Endpoint Restrictions (Presence & Feedback) (full proxy only)
 
 **Endpoints**: `/v1/presence/*` and `/v1/feedback/*` POST requests
 
@@ -49,7 +52,7 @@ Examples of restricted endpoints:
 
 This restriction ensures truth-writing can only happen through the verified browser application, preventing abuse while keeping machine ingestion writes for events intact.
 
-#### 2. Firebase-Required Browser Origins
+#### 2. Firebase-Required Browser Origins (full proxy only)
 
 **Origins**: `https://app.goflypost.com`, `https://post.goflypost.com`
 
@@ -60,7 +63,7 @@ Browser writes from these origins **require Firebase authentication**:
 
 This ensures browser clients cannot use static secrets, which would be visible in browser dev tools.
 
-#### 3. Read-Only Ask Origin
+#### 3. Read-Only Ask Origin (full proxy only)
 
 **Origin**: `https://ask.goflypost.com`
 
@@ -70,7 +73,7 @@ This origin is read-only and can only access chat endpoints:
 
 This separation ensures the concierge/query surface cannot be used to publish events.
 
-#### 4. Machine / Server-to-Server Writes
+#### 4. Machine / Server-to-Server Writes (full proxy only)
 
 **Origins**: No origin header, or origins not matching the above
 
@@ -83,7 +86,7 @@ Server-to-server requests use static token authentication:
   - `COMPASS_WRITE_TOKEN`: Compass brokerage
 - Token determines tenancy (brokerageId) for the request
 
-#### 5. Chat Endpoint Exemption
+#### 5. Chat Endpoint Exemption (full proxy only)
 
 **Paths**: `/api/chat` and `/api/chat/*` (exact match only)
 
@@ -102,6 +105,8 @@ Authentication is enforced in `src/forward.js` as the single source of truth:
 - Injects auth metadata into backend requests (uid, email, brokerageId)
 
 ### Usage Examples
+
+**Note**: The share-only proxy only serves `GET /e/*` and blocks other paths/methods. The examples below apply to full proxy deployments.
 
 #### Browser Publishing (Firebase Auth)
 
@@ -185,35 +190,29 @@ BACKEND_URL=http://localhost:3001 FLYPOST_WRITE_TOKEN=secret npm start
 
 ## Testing
 
-Run the truth endpoint origin restriction tests:
+Run the share allowlist tests:
 
 ```bash
 node test-truth-origin.js
 ```
 
 This test suite validates:
-- ✅ Presence endpoints require `https://presence.goflypost.com` origin
-- ✅ Feedback endpoints require `https://presence.goflypost.com` origin
-- ✅ Rejection of missing or wrong origins (403 errors)
-- ✅ `/api/*` endpoints remain unchanged
-- ✅ GET requests not affected by origin restrictions
+- ✅ `GET /e/*` is forwarded to the backend
+- ✅ Non-GET methods on `/e/*` are blocked with 403
+- ✅ Non-`/e/*` paths are blocked with 404
 
-Run the comprehensive origin-gated authentication tests:
+Run the share allowlist integration tests:
 
 ```bash
 node test-origin-auth.js
 ```
 
 This test suite validates:
-- ✅ Firebase auth for browser origins (`app.goflypost.com`, `post.goflypost.com`)
-- ✅ Read-only enforcement for `ask.goflypost.com`
-- ✅ `/api/chat` exemption from auth
-- ✅ `/api/chatbot` is NOT exempt (requires auth)
-- ✅ Static token auth for machine/server-to-server writes
-- ✅ Proper rejection of invalid/missing credentials
-- ✅ Public read endpoints remain accessible
+- ✅ `GET /e/*` is forwarded to the backend
+- ✅ Non-GET methods on `/e/*` are blocked with 403
+- ✅ Non-`/e/*` paths are blocked with 404
 
-Run the legacy write-token tests:
+Run the legacy write-token tests (full proxy deployments only):
 
 ```bash
 node test-middleware.js
@@ -221,8 +220,6 @@ node test-middleware.js
 
 ## Routes
 
-- `GET /` → Status check
-- `GET /health` → Forward to backend health endpoint
-- `GET /v1/events/near` → Forward to backend events endpoint
-- `POST /api/parse-and-publish` → Forward to backend parse endpoint (requires write-token if configured)
-- `*` `/api/*` → Forward all other API requests to backend (POST requires write-token if configured)
+- `GET /e/*` → Forward share page requests to the backend
+- All other paths → Blocked with 404
+- Non-GET methods on `/e/*` → Blocked with 403
