@@ -51,6 +51,17 @@ app.use((req, res, next) => {
 
 // Middleware to enforce origin-specific METHOD restrictions
 function enforceOriginMethods(req, res, next) {
+  // Exempt public share pages from origin enforcement (CRITICAL)
+  if (req.method === 'GET' && req.path.startsWith('/e/')) {
+    console.log(`✅ Public share page access: ${req.path}`);
+    return next();
+  }
+
+  // Also exempt health checks
+  if (req.method === 'GET' && req.path === '/health') {
+    return next();
+  }
+
   const origin = req.headers.origin;
   const allowedMethods = allowedOrigins[origin];
   if (allowedMethods && ! allowedMethods.includes(req.method)) {
@@ -81,6 +92,7 @@ app.get('/', (req, res) => {
 app.get('/health', forward);
 app.get('/v1/events/near', forward);
 app.get('/v1/events/:event_id', forward);
+app.get('/e/:slug/:fpid', forward);
 app.post('/api/parse-and-publish', forward);
 app.use('/api', forward);
 

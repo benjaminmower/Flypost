@@ -53,15 +53,34 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 
 **Maintenance Note**: When updating routing rules, update `_redirects` first (canonical source), then sync changes to `netlify.toml` if needed. Netlify gives precedence to `_redirects` when both files are present.
 
-## Current Scope: Routing Substrate Only
+## Current Scope: Share Page Implementation Complete ✅
 
-⚠️ **Important**: This setup establishes the **routing infrastructure only**. The following features are **not yet implemented**:
+**Share page routes (`/e/:slug/:fpid`)**: Fully implemented with the following features:
 
-- ❌ Backend handler for `/e/*` endpoints
-- ❌ ShareId generation and minting
-- ❌ Open Graph (OG) tag rendering for share pages
-- ❌ Share page UI/templates
-- ❌ Proxy allow-list for GET /e/* only (planned follow-up)
+### URL Structure (Zillow-Inspired)
+- **Pattern**: `/e/:slug/:fpid`
+- **Example**: `/e/open-house-810-franklin-st-santa-monica/evt_k7x9m2p4q_1641234567890_fpid`
+- **Slug**: SEO-friendly (ignored by backend, derived from event name + address)
+- **fpid**: Machine ID format `evt_{random}_{timestamp}_fpid` (used for event lookup)
+
+### Features
+- ✅ **Public, unauthenticated surface** (crawler-friendly, explicitly exempted from origin enforcement)
+- ✅ **Open Graph metadata** for social media previews (Facebook, Twitter, LinkedIn)
+- ✅ **Timezone-aware formatting** using `Intl.DateTimeFormat` with event timezone
+- ✅ **Smart occurrence selection**: Prefers current → next upcoming → most recent
+- ✅ **External link validation**: XSS prevention (only http/https allowed)
+- ✅ **HTML escaping**: All dynamic content sanitized
+- ✅ **Strict fpid validation**: Regex validation before storage lookup
+- ✅ **Cache headers**: Browser 5min, CDN 10min
+- ✅ **Discovery V1 integration**: `shareUrl` field in all event API responses
+- ✅ **Frontend share UI**: Copy button with safe event listeners
+
+### Security Hardening
+- Strict regex validation on fpid format (prevents storage abuse)
+- External URL validation (blocks javascript:, data:, etc.)
+- HTML escaping on all dynamic content
+- Safe event listeners (no inline JavaScript)
+- Explicit /e/* exemption in proxy (order-proof, impossible to accidentally auth-gate)
 
 ## Testing
 
@@ -72,12 +91,13 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
    - URL remains `https://goflypost.com/` in the browser
    - Content is proxied from `https://flypost.webflow.io/`
 
-2. **Share page routes** (`https://goflypost.com/e/test`):
+2. **Share page routes** (`https://goflypost.com/e/event-name/evt_abc123_fpid`):
    - Should proxy to the public proxy surface (api.goflypost.com)
-   - URL remains `https://goflypost.com/e/test` in the browser
-   - Currently returns **Cannot GET /e/test** until handler exists (expected behavior)
-   - Content is proxied from `https://api.goflypost.com/e/test`
+   - URL remains in browser
+   - Returns HTML with Open Graph metadata
+   - Content is proxied from `https://api.goflypost.com/e/:slug/:fpid`
    - This is a **public, unauthenticated surface** designed for crawler access
+   - Invalid fpid formats return 404 without hitting storage
 
 ### Manual Testing
 
@@ -85,14 +105,15 @@ Contains the same redirect rules in TOML format. Currently duplicates the `_redi
 # Test root domain (should show Webflow site)
 curl -I https://goflypost.com/
 
-# Test share page route (should return Cannot GET /e/test until handler exists)
-curl -I https://goflypost.com/e/test
+# Test share page route (should return HTML with OG tags)
+curl https://goflypost.com/e/open-house-test/evt_abc123_1641234567890_fpid
+
+# Test invalid fpid (should return 404)
+curl https://goflypost.com/e/test/invalid_format
 
 # Test arbitrary path (should show Webflow site)
 curl -I https://goflypost.com/about
 ```
-
-**Note**: `/e/test` currently returns "Cannot GET /e/test" because the backend handler does not yet exist. This is expected behavior until the share page handler is implemented.
 
 ## Deployment
 
@@ -109,22 +130,60 @@ This configuration is deployed as a standalone Netlify site configured to serve 
 
 This front door routing is **independent** and does not interfere with other deployments.
 
+## Share Page Features ✅ IMPLEMENTED
+
+The following share page features have been fully implemented:
+
+1. ✅ **Share URL Generation** (Discovery V1 field)
+   - Zillow-style URLs with SEO-friendly slugs
+   - Format: `https://goflypost.com/e/{slug}/{eventId}_fpid`
+   - Automatically generated for all events
+   - Included in Discovery V1 API responses
+
+2. ✅ **Public Share Pages with Open Graph Tags**
+   - HTML rendering with OG metadata for social previews
+   - Twitter Card support
+   - Responsive design with mobile support
+
+3. ✅ **Social Media Previews**
+   - Facebook, Twitter, LinkedIn compatible
+   - Preview cards with event name, date, location, image
+
+4. ✅ **External Link Validation**
+   - XSS prevention (only http/https schemes allowed)
+   - Blocks javascript:, data:, etc.
+
+5. ✅ **SEO-Friendly Zillow-style URLs**
+   - Human-readable slugs from event name + address
+   - Machine ID (fpid) for backend lookup
+   - Multiple slugs can point to same event
+
+6. ✅ **Timezone-Aware Formatting**
+   - Uses `Intl.DateTimeFormat` with event timezone
+   - Displays dates/times in correct timezone
+   - Prevents server timezone bleed
+
+7. ✅ **Security Hardened**
+   - Strict fpid regex validation
+   - HTML escaping on all dynamic content
+   - Safe event listeners (no inline JS)
+   - Explicit /e/* public exemption in proxy
+
+8. ✅ **Smart Occurrence Selection**
+   - Prefers current occurrence (if active)
+   - Falls back to next upcoming
+   - Falls back to most recent past
+   - Prevents "first occurrence was last month" bugs
+
 ## Future Enhancements
-
-When share page functionality is implemented:
-
-1. **Backend handler**: Add `/e/:shareId` endpoint to the API
-2. **ShareId minting**: Implement share ID generation for events/posts
-3. **OG tag rendering**: Add server-side Open Graph meta tags for social sharing
-4. **Share page UI**: Create templates for rendered share pages
-5. **Proxy allow-list**: Implement explicit allow-list for GET /e/* only on the proxy surface
 
 ## Troubleshooting
 
-### Issue: "Cannot GET /e/*" errors
-- **Expected**: This is normal behavior - the backend handler is not yet implemented
-- **Solution**: Implement the `/e/:shareId` endpoint in the API backend
-- **Note**: The routing itself is working correctly; the proxy surface just doesn't have a handler to respond.
+### Issue: Share page not loading
+- **Check**: Verify event exists with valid eventId
+- **Check**: Verify fpid format is correct: `evt_{random}_{timestamp}_fpid`
+- **Check**: Verify backend and proxy are running
+- **Note**: Invalid fpid formats return 404 without hitting storage
 
 ### Issue: Webflow content not loading
 - **Check**: Verify `https://flypost.webflow.io/` is accessible
