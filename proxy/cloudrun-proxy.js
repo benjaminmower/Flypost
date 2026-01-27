@@ -57,11 +57,6 @@ function enforceOriginMethods(req, res, next) {
     return next();
   }
 
-  // Also exempt health checks
-  if (req.method === 'GET' && req.path === '/health') {
-    return next();
-  }
-
   const origin = req.headers.origin;
   const allowedMethods = allowedOrigins[origin];
   if (allowedMethods && ! allowedMethods.includes(req.method)) {
