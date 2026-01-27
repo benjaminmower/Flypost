@@ -13,6 +13,8 @@
  * - Maintains tiered precision for geo/address (public vs brokerage)
  */
 
+import { generateShareUrl } from './shareUrl.js'
+
 /**
  * Valid Discovery API category enum values (snake_case singular)
  */
@@ -237,7 +239,10 @@ export function toDiscoveryEventV1(event, options = {}) {
     sourceUrl = u && typeof u === 'string' ? u : null
   }
 
-  const discoveryEvent = { eventId, dataHash, what, where, when, externalListingUrl }
+  // Generate share URL (public, non-sensitive field)
+  const shareUrl = generateShareUrl(event)
+
+  const discoveryEvent = { eventId, dataHash, what, where, when, externalListingUrl, shareUrl }
 
   // Add source only if kind is known (url may be null; schema allows null)
   if (sourceKind !== null) {
