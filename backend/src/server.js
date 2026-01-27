@@ -1125,7 +1125,8 @@ function renderSharePageHtml(event) {
   }
   
   // Get image URL (if available)
-  const imageUrl = event.image || event.flypost?.imageUrl || 'https://goflypost.com/og-default.png'
+  // Note: Default image should be hosted at goflypost.com or use an environment variable
+  const imageUrl = event.image || event.flypost?.imageUrl || process.env.OG_DEFAULT_IMAGE || 'https://goflypost.com/og-default.png'
   
   // Escape all dynamic content
   const safeTitle = escapeHtml(eventName)
