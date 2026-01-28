@@ -326,6 +326,30 @@ async function handleEventSubmit(e) {
           })
         }
       }
+  } catch (e) {
+    console.error('❌ Publish failed:', e)
+    
+    const errorMsg = e.message || 'Unknown error'
+    
+    // Best-effort error hints (UX layer only, not a backend contract)
+    if (errorMsg.toLowerCase().includes('geo') || errorMsg.toLowerCase().includes('address') || errorMsg.toLowerCase().includes('location')) {
+      showStatus(`❌ Couldn't find that address. Please include: street number, street name, city, state, and zip code.`, 'error')
+    } else if (errorMsg.toLowerCase().includes('date') || errorMsg.toLowerCase().includes('time')) {
+      showStatus(`❌ Please include complete date/time info: "Sunday, Feb 1st from 1:00 PM to 4:00 PM"`, 'error')
+    } else if (errorMsg.toLowerCase().includes('name') || errorMsg.toLowerCase().includes('required')) {
+      showStatus(`❌ Please make sure to include: property address, date, start time, and end time.`, 'error')
+    } else {
+      // Generic fallback for any other error
+      showStatus(`❌ ${errorMsg}`, 'error')
+    }
+    
+    // Re-enable button
+    if (publishBtn) {
+      publishBtn.disabled = false
+      publishBtn.textContent = 'Publish Event'
+    }
+  }
+}
 
 // Show status message
 function showStatus(message, type = 'info') {
