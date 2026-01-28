@@ -690,7 +690,7 @@ if (
     console.log(
       `📦 ${isUpdate ? 'Updated' : 'Stored'} event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId || 'none'})`
     )
-
+    storedEvent.shareUrl = generateShareUrl(storedEvent)
     res.json({
       success: true,
       data: {
