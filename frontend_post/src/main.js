@@ -157,23 +157,93 @@ async function handleEventSubmit(e) {
     showStatus(`✅ Success! Event "${event?.name || 'Untitled'}" published with ID: ${eventId}`, 'success')
     showResult(JSON.stringify(result, null, 2))
 
-    // Display share URL if present
-    if (shareUrl) {
-      displayShareUrl(shareUrl)
-    }
+      /**
+       * Display share URL with copy button (improved styling)
+       */
+      function displayShareUrl(url) {
+        // Remove any existing share URL display
+        const existing = document.getElementById('share-url-container')
+        if (existing) {
+          existing.remove()
+        }
 
-    // Clear input
-    if (eventInput) eventInput.value = ''
-  } catch (error) {
-    console.error('❌ Publish error:', error)
-    showStatus(`❌ Error: ${error.message}`, 'error')
-  } finally {
-    if (publishBtn) {
-      publishBtn.disabled = false
-      publishBtn.textContent = 'Publish Event'
-    }
-  }
-}
+        // Create share URL container with glassmorphic styling
+        const container = document.createElement('div')
+        container.id = 'share-url-container'
+        container.className = 'glass-card p-6 md:p-8 rounded-2xl md:rounded-3xl border-mint_leaf/20 mt-4'
+        
+        container.innerHTML = `
+          <h3 class="text-base md:text-lg font-bold mb-4 text-mint_leaf uppercase tracking-wide">
+            📋 Share this event
+          </h3>
+          <div class="flex flex-col md:flex-row gap-3">
+            <input 
+              type="text" 
+              id="share-url-input"
+              value="${escapeHtml(url)}" 
+              readonly 
+              class="flex-1 bg-ink_black/50 border border-white/10 p-3 md:p-4 rounded-xl text-sm md:text-base font-mono text-bright_snow focus:outline-none focus:border-mint_leaf/50 transition-all"
+            />
+            <button 
+              id="copy-share-url-btn"
+              class="bg-mint_leaf text-ink_black px-6 py-3 rounded-xl font-bold text-sm md:text-base hover:bg-bright_snow transition-all active:scale-95 whitespace-nowrap shadow-lg shadow-mint_leaf/20"
+            >
+              Copy Link
+            </button>
+          </div>
+          <div id="copy-feedback" class="mt-3 text-mint_leaf text-sm font-semibold min-h-[24px] opacity-0 transition-opacity"></div>
+        `
+        
+        // Insert after publish status
+        const publishStatus = document.getElementById('publish-status')
+        if (publishStatus && publishStatus.parentNode) {
+          publishStatus.parentNode.insertBefore(container, publishStatus.nextSibling)
+        }
+        
+        // Add event listener for copy button
+        const copyBtn = document.getElementById('copy-share-url-btn')
+        const copyFeedback = document.getElementById('copy-feedback')
+        
+        if (copyBtn) {
+          copyBtn.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(url)
+              
+              // Show feedback with animation
+              if (copyFeedback) {
+                copyFeedback.textContent = '✓ Copied to clipboard!'
+                copyFeedback.style.opacity = '1'
+                
+                // Fade out after 2 seconds
+                setTimeout(() => {
+                  copyFeedback.style.opacity = '0'
+                }, 2000)
+              }
+              
+              // Visual button feedback
+              copyBtn.textContent = '✓ Copied!'
+              copyBtn.classList.add('bg-bright_snow')
+              
+              setTimeout(() => {
+                copyBtn.textContent = 'Copy Link'
+                copyBtn.classList.remove('bg-bright_snow')
+              }, 2000)
+            } catch (err) {
+              console.error('Failed to copy:', err)
+              if (copyFeedback) {
+                copyFeedback.textContent = '✗ Failed to copy'
+                copyFeedback.style.color = '#d82e7e' // hot_berry
+                copyFeedback.style.opacity = '1'
+                
+                setTimeout(() => {
+                  copyFeedback.style.opacity = '0'
+                  copyFeedback.style.color = '#40c9a2' // mint_leaf
+                }, 2000)
+              }
+            }
+          })
+        }
+      }
 
 // Show status message
 function showStatus(message, type = 'info') {
