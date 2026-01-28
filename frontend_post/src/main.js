@@ -156,6 +156,11 @@ async function handleEventSubmit(e) {
     
     showStatus(`✅ Success! Event "${event?.name || 'Untitled'}" published with ID: ${eventId}`, 'success')
     showResult(JSON.stringify(result, null, 2))
+    
+    // Display share URL if available
+    if (shareUrl) {
+      displayShareUrl(shareUrl)
+    }
 
       /**
        * Display share URL with copy button (improved styling)
@@ -335,7 +340,7 @@ async function handleEventSubmit(e) {
     if (errorMsg.toLowerCase().includes('geo') || errorMsg.toLowerCase().includes('address') || errorMsg.toLowerCase().includes('location')) {
       showStatus(`❌ Couldn't find that address. Please include: street number, street name, city, state, and zip code.`, 'error')
     } else if (errorMsg.toLowerCase().includes('date') || errorMsg.toLowerCase().includes('time')) {
-      showStatus(`❌ Please include complete date/time info: "Sunday, Feb 1st from 1:00 PM to 4:00 PM"`, 'error')
+      showStatus(`❌ Please include complete date/time info: "Sunday, Feb 1st, 2026 from 1:00 PM to 4:00 PM"`, 'error')
     } else if (errorMsg.toLowerCase().includes('required')) {
       showStatus(`❌ Please make sure to include: property address, date, start time, and end time.`, 'error')
     } else {

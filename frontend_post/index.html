@@ -67,15 +67,15 @@
         .text-hero { font-size: clamp(2.4rem, 11vw, 8.5rem); letter-spacing: -0.04em; }
         
         /* Smooth expand/collapse for FAQ details element */
-        details summary {
+        details.faq-details summary {
           list-style: none;
         }
 
-        details summary::-webkit-details-marker {
+        details.faq-details summary::-webkit-details-marker {
           display: none;
         }
 
-        details summary::after {
+        details.faq-details summary::after {
           content: '▼';
           float: right;
           transition: transform 0.2s;
@@ -84,11 +84,11 @@
           margin-top: 0.25rem;
         }
 
-        details[open] summary::after {
+        details.faq-details[open] summary::after {
           transform: rotate(-180deg);
         }
 
-        details summary:hover {
+        details.faq-details summary:hover {
           background: rgba(255, 255, 255, 0.02);
         }
     </style>
@@ -149,7 +149,7 @@
             <form id="event-form" class="glass-card p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] border-mint_leaf/10 shadow-2xl">
                 
                 <!-- How to Post an Open House FAQ -->
-                <details class="mb-6 glass-card rounded-2xl border-mint_leaf/10 overflow-hidden">
+                <details class="faq-details mb-6 glass-card rounded-2xl border-mint_leaf/10 overflow-hidden">
                   <summary class="cursor-pointer p-5 md:p-6 font-bold text-base md:text-lg text-mint_leaf hover:text-bright_snow transition-colors flex justify-between items-center">
                     <span>💡 How to Post an Open House</span>
                     <span class="text-xs text-air_force_blue-700 font-normal">Click to expand</span>
@@ -159,7 +159,7 @@
                     
                     <!-- Reassurance line -->
                     <p class="text-sm text-bright_snow/80 italic border-l-2 border-mint_leaf/30 pl-4">
-                      Include <strong>What</strong> (property address), <strong>When</strong> (date & times), and a link to the listing — Flypost will handle the rest.
+                      Include <strong>What</strong> (property address) and <strong>When</strong> (date & times) — Flypost will handle the rest.
                     </p>
                     
                     <!-- Required Info Section -->
