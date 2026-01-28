@@ -955,6 +955,53 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
 })
 
 /**
+ * GET /e/:slug/:fpid/calendar.ics
+ * Download calendar file for event (.ics format)
+ * RFC 5545 compliant - works with Apple Calendar, Google Calendar, Outlook, etc.
+ * 
+ * Features:
+ * - Universal calendar support (not Google-specific)
+ * - Smart occurrence selection (same as share page)
+ * - Proper MIME type and download headers
+ * - Public access (no auth required)
+ */
+app.get('/e/:slug/:fpid/calendar.ics', async (req, res) => {
+  try {
+    const { fpid } = req.params
+    
+    // Validate fpid format BEFORE storage lookup
+    const eventId = extractEventIdFromFpid(fpid)
+    
+    if (!eventId) {
+      console.log(`⚠️  Invalid fpid format: ${fpid}`)
+      return res.status(404).send('Event not found')
+    }
+    
+    console.log(`📅 Calendar download request: eventId=${eventId}`)
+    
+    // Fetch event from storage
+    const useFirestore = isFirestoreEnabled()
+    const event = await getEventByIdAny(eventId, useFirestore)
+    
+    if (!event) {
+      console.log(`⚠️  Event not found: ${eventId}`)
+      return res.status(404).send('Event not found')
+    }
+    
+    // Generate ICS file
+    const icsContent = generateIcsFile(event)
+    
+    // Set headers for calendar download
+    res.set('Content-Type', 'text/calendar; charset=utf-8')
+    res.set('Content-Disposition', 'attachment; filename="event.ics"')
+    res.send(icsContent)
+  } catch (error) {
+    console.error('❌ Error generating calendar file:', error)
+    res.status(500).send('Failed to generate calendar file')
+  }
+})
+
+/**
  * GET /e/:slug/:fpid
  * Public share page route with Open Graph metadata
  * Returns HTML with OG tags for social media previews
@@ -1047,6 +1094,111 @@ function generateCalendarUrl(event) {
     console.error('Error generating calendar URL:', err)
     return null
   }
+}
+
+/**
+ * Escape special characters for ICS file format (RFC 5545)
+ * @param {string} text - Text to escape
+ * @returns {string} - Escaped text
+ */
+function escapeIcsText(text) {
+  if (!text) return ''
+  return String(text)
+    .replace(/\\/g, '\\\\')   // Backslashes
+    .replace(/;/g, '\\;')     // Semicolons
+    .replace(/,/g, '\\,')     // Commas
+    .replace(/\n/g, '\\n')    // Newlines
+}
+
+/**
+ * Generate RFC 5545 compliant .ics file content
+ * @param {object} event - Event object
+ * @returns {string} - ICS file content
+ */
+function generateIcsFile(event) {
+  const eventName = event.name || 'Event'
+  const description = event.description || ''
+  
+  // Smart occurrence selection (same logic as share page)
+  const timezone = event.flypost?.timezone || 'America/Los_Angeles'
+  const occurrences = event.flypost?.occurrences || []
+  
+  let selectedOccurrence = null
+  const now = Date.now()
+  
+  if (occurrences.length > 0) {
+    // 1. Prefer current occurrence
+    selectedOccurrence = occurrences.find(occ => {
+      const start = new Date(occ.startDate).getTime()
+      const end = new Date(occ.endDate).getTime()
+      return now >= start && now <= end
+    })
+    
+    // 2. Else next upcoming occurrence
+    if (!selectedOccurrence) {
+      const upcoming = occurrences
+        .filter(occ => new Date(occ.startDate).getTime() > now)
+        .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+      selectedOccurrence = upcoming[0]
+    }
+    
+    // 3. Else most recent past occurrence
+    if (!selectedOccurrence) {
+      const past = occurrences
+        .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+      selectedOccurrence = past[0]
+    }
+  }
+  
+  const startDate = selectedOccurrence ? selectedOccurrence.startDate : event.startDate
+  const endDate = selectedOccurrence ? selectedOccurrence.endDate : event.endDate || startDate
+  
+  // Extract address
+  const address = event.location?.address
+  let location = ''
+  if (address) {
+    const parts = []
+    if (address.streetAddress) parts.push(address.streetAddress)
+    if (address.addressLocality) parts.push(address.addressLocality)
+    if (address.addressRegion) parts.push(address.addressRegion)
+    if (address.postalCode) parts.push(address.postalCode)
+    location = parts.join(', ')
+  }
+  
+  // Format dates for ICS (YYYYMMDDTHHmmssZ)
+  const formatIcsDate = (dateStr) => {
+    return new Date(dateStr).toISOString().replace(/-|:|\.\d+/g, '')
+  }
+  
+  const dtstart = formatIcsDate(startDate)
+  const dtend = formatIcsDate(endDate)
+  const dtstamp = formatIcsDate(new Date().toISOString())
+  
+  // Generate unique ID
+  const uid = `${event.flypost?.eventId || event.id}@goflypost.com`
+  
+  // Build ICS content (MUST use \r\n line endings per RFC 5545)
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Flypost//Event Calendar//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${dtstamp}`,
+    `DTSTART:${dtstart}`,
+    `DTEND:${dtend}`,
+    `SUMMARY:${escapeIcsText(eventName)}`,
+    `DESCRIPTION:${escapeIcsText(description)}`,
+    `LOCATION:${escapeIcsText(location)}`,
+    'STATUS:CONFIRMED',
+    'SEQUENCE:0',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n')
+  
+  return ics
 }
 
 /**
@@ -1152,12 +1304,42 @@ function renderSharePageHtml(event) {
     formattedAddress = parts.join(', ')
   }
   
+  // Generate concise description for OG tags (optimized for social media)
+  let ogDescription = ''
+  if (formattedDate && formattedTime) {
+    // Shorten time format: "1:00 PM - 4:00 PM" -> "1:00–4:00 PM"
+    const shortTime = formattedTime.replace(' - ', '–').replace(/:\d{2}/g, (m, offset) => {
+      // Only keep minutes if not :00
+      return m === ':00' ? '' : m
+    })
+    ogDescription = `${formattedDate} • ${shortTime}`
+    if (formattedAddress) {
+      ogDescription += ` • Open house at ${formattedAddress}. Explore this beautiful property in person.`
+    }
+  } else if (formattedDate) {
+    ogDescription = formattedDate
+    if (formattedAddress) {
+      ogDescription += ` • Open house at ${formattedAddress}`
+    }
+  } else if (formattedAddress) {
+    ogDescription = `Open house at ${formattedAddress}`
+  }
+  
+  // Fallback to original description for page body (not OG tags)
+  let description = event.description || ''
+  if (!description && formattedDate) {
+    description = `${formattedDate}${formattedTime ? ' • ' + formattedTime : ''}`
+  } else if (formattedDate) {
+    description = `${formattedDate}${formattedTime ? ' • ' + formattedTime : ''} • ${description}`
+  }
+  
   // Get image URL (if available)
   // Note: Default image should be hosted at goflypost.com or use an environment variable
   const imageUrl = event.image || event.flypost?.imageUrl || process.env.OG_DEFAULT_IMAGE || 'https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/6683234a1ee80c5f2891597e_Flypost%20Logo-256px.png'
   
   // Escape all dynamic content
   const safeTitle = escapeHtml(eventName)
+  const safeOgDescription = escapeHtml(ogDescription || 'View event details')
   const safeDescription = escapeHtml(description || 'View event details')
   const safeUrl = escapeHtml(shareUrl)
   const safeImageUrl = escapeHtml(imageUrl)
@@ -1165,55 +1347,56 @@ function renderSharePageHtml(event) {
   const safeDate = escapeHtml(formattedDate)
   const safeTime = escapeHtml(formattedTime)
   
-  // Generate action button URLs
-  const calendarUrl = startDate ? generateCalendarUrl({
-    title: eventName,
-    start: startDate,
-    end: endDate,
-    description: description,
-    location: formattedAddress
-  }) : null
+  // Generate calendar download URL
+  const slug = shareUrl.split('/').slice(-2, -1)[0] || 'event'
+  const fpid = shareUrl.split('/').pop() || eventId + '_fpid'
+  const calendarDownloadUrl = `/e/${slug}/${fpid}/calendar.ics`
   
-  // Generate maps URL (prefer coordinates, fallback to address)
+  // Generate maps URL using address (not coordinates)
   let mapsUrl = null
-  const coords = event.location?.geo
-  if (coords && coords.latitude && coords.longitude) {
-    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${coords.latitude},${coords.longitude}`
-  } else if (formattedAddress) {
+  if (formattedAddress) {
     mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formattedAddress)}`
   }
   
-  // Build action buttons HTML
-  let actionButtonsHtml = ''
-  if (calendarUrl || mapsUrl || externalUrl) {
-    actionButtonsHtml = '<div class="action-buttons">'
-    
-    // Add to Calendar button (Primary)
-    if (calendarUrl) {
-      actionButtonsHtml += `
-        <a href="${escapeHtml(calendarUrl)}" class="action-button primary" rel="noopener noreferrer" target="_blank">
-          📅 Add to Calendar
-        </a>`
-    }
-    
-    // Get Directions button (Secondary)
-    if (mapsUrl) {
-      actionButtonsHtml += `
-        <a href="${escapeHtml(mapsUrl)}" class="action-button secondary" rel="noopener noreferrer" target="_blank">
-          🗺️ Get Directions
-        </a>`
-    }
-    
-    // View Full Details button (Secondary)
-    if (externalUrl) {
-      actionButtonsHtml += `
-        <a href="${escapeHtml(externalUrl)}" class="action-button secondary" rel="noopener noreferrer" target="_blank">
-          🏠 View Full Details
-        </a>`
-    }
-    
-    actionButtonsHtml += '</div>'
+  // Build action buttons HTML with Check In as primary CTA
+  let actionButtonsHtml = '<div class="actions">'
+  
+  // Check In button (PRIMARY - Lemon Lime matching Presence)
+  actionButtonsHtml += `
+    <a href="https://presence.goflypost.com" class="btn btn-checkin" rel="noopener noreferrer" target="_blank">
+      🎯 Check In to This Event
+    </a>`
+  
+  // Secondary actions row
+  actionButtonsHtml += '<div class="secondary-actions">'
+  
+  // Add to Calendar button (Secondary)
+  if (startDate) {
+    actionButtonsHtml += `
+      <a href="${escapeHtml(calendarDownloadUrl)}" class="btn btn-secondary" download>
+        📅 Add to Calendar
+      </a>`
   }
+  
+  // Get Directions button (Secondary)
+  if (mapsUrl) {
+    actionButtonsHtml += `
+      <a href="${escapeHtml(mapsUrl)}" class="btn btn-secondary" rel="noopener noreferrer" target="_blank">
+        🗺️ Get Directions
+      </a>`
+  }
+  
+  actionButtonsHtml += '</div>' // Close secondary-actions
+  
+  // View Full Details button (Tertiary)
+  if (externalUrl) {
+    actionButtonsHtml += `
+      <a href="${escapeHtml(externalUrl)}" class="btn btn-tertiary" rel="noopener noreferrer" target="_blank">
+        🏠 View Full Details
+      </a>`
+  }
+  
+  actionButtonsHtml += '</div>' // Close actions
   
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1222,18 +1405,23 @@ function renderSharePageHtml(event) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${safeTitle} | Flypost</title>
   
+  <!-- Canonical URL -->
+  <link rel="canonical" href="${safeUrl}">
+  
   <!-- Open Graph tags -->
-  <meta property="og:type" content="event">
+  <meta property="og:type" content="website">
   <meta property="og:url" content="${safeUrl}">
   <meta property="og:title" content="${safeTitle}">
-  <meta property="og:description" content="${safeDescription}">
+  <meta property="og:description" content="${safeOgDescription}">
   <meta property="og:image" content="${safeImageUrl}">
+  <meta property="og:image:width" content="256">
+  <meta property="og:image:height" content="256">
   
   <!-- Twitter Card tags -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:url" content="${safeUrl}">
   <meta name="twitter:title" content="${safeTitle}">
-  <meta name="twitter:description" content="${safeDescription}">
+  <meta name="twitter:description" content="${safeOgDescription}">
   <meta name="twitter:image" content="${safeImageUrl}">
   
   <style>
@@ -1261,7 +1449,7 @@ function renderSharePageHtml(event) {
       transform: translateX(-50%);
       width: 100vw;
       height: 100vh;
-      background: radial-gradient(circle at 50% 15%, #2f195f 0%, #060810 80%);
+      background: radial-gradient(circle at 50% 15%, #1e1b4b 0%, #060810 80%);
       z-index: -1;
     }
     
@@ -1280,7 +1468,7 @@ function renderSharePageHtml(event) {
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.1);
       backdrop-filter: blur(12px);
-      border-radius: 24px;
+      border-radius: 32px;
       padding: 32px 24px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
@@ -1310,59 +1498,91 @@ function renderSharePageHtml(event) {
       margin-bottom: 0;
     }
     
-    /* Action buttons */
-    .action-buttons {
+    /* Button styles */
+    .btn {
       display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-top: 32px;
-    }
-    
-    .action-button {
-      display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 14px 24px;
-      border-radius: 12px;
+      gap: 12px;
       text-decoration: none;
-      font-weight: 700;
-      font-size: 15px;
-      transition: all 0.2s ease;
+      transition: all 0.2s;
       border: none;
       cursor: pointer;
+      width: 100%;
       text-align: center;
     }
     
-    .action-button.primary {
-      background: #40c9a2;
+    .btn-checkin {
+      /* PRIMARY - Lemon Lime matching Presence */
+      background: #e0e03e;
       color: #060810;
-      box-shadow: 0 4px 12px rgba(64, 201, 162, 0.3);
+      padding: 20px 32px;
+      border-radius: 24px;
+      font-size: 20px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      box-shadow: 0 8px 20px rgba(224, 224, 62, 0.25);
     }
     
-    .action-button.primary:hover {
+    .btn-checkin:hover {
       background: #f7f7f7;
       transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(64, 201, 162, 0.4);
+      box-shadow: 0 12px 24px rgba(224, 224, 62, 0.35);
     }
     
-    .action-button.primary:active {
-      transform: translateY(0);
+    .btn-checkin:active {
+      transform: scale(0.95);
     }
     
-    .action-button.secondary {
-      background: rgba(255, 255, 255, 0.05);
+    .btn-secondary {
+      /* SECONDARY - Glass effect */
+      background: rgba(255, 255, 255, 0.03);
       color: #f7f7f7;
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 16px 24px;
+      border-radius: 16px;
+      font-size: 16px;
+      font-weight: 700;
+      backdrop-filter: blur(12px);
     }
     
-    .action-button.secondary:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: rgba(64, 201, 162, 0.3);
-      transform: translateY(-2px);
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(224, 224, 62, 0.3);
+      transform: translateY(-1px);
     }
     
-    .action-button.secondary:active {
-      transform: translateY(0);
+    .btn-tertiary {
+      /* TERTIARY - Subtle */
+      background: transparent;
+      color: #628395;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+    }
+    
+    .btn-tertiary:hover {
+      color: #e0e03e;
+      border-color: rgba(224, 224, 62, 0.2);
+    }
+    
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 500px;
+      margin: 32px auto 0;
+    }
+    
+    .secondary-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
     }
     
     /* Footer */
@@ -1381,7 +1601,35 @@ function renderSharePageHtml(event) {
     }
     
     .footer a:hover {
-      color: #40c9a2;
+      color: #e0e03e;
+    }
+    
+    /* Mobile responsive */
+    @media (max-width: 640px) {
+      .container { 
+        padding: 24px; 
+        border-radius: 24px; 
+      }
+      
+      .btn-checkin { 
+        padding: 18px 24px; 
+        font-size: 18px; 
+        border-radius: 20px; 
+      }
+      
+      .btn-secondary { 
+        padding: 14px 20px; 
+        font-size: 15px; 
+      }
+      
+      .btn-tertiary { 
+        padding: 10px 16px; 
+        font-size: 12px; 
+      }
+      
+      .secondary-actions {
+        grid-template-columns: 1fr;
+      }
     }
     
     /* Desktop styles */
@@ -1401,11 +1649,6 @@ function renderSharePageHtml(event) {
       }
       
       .meta-item {
-        font-size: 16px;
-      }
-      
-      .action-button {
-        padding: 16px 28px;
         font-size: 16px;
       }
     }

@@ -58,8 +58,15 @@ function generateSeoSlug(event) {
       const addressParts = address.split(',').slice(0, 2) // Take first 2 parts (street + city)
       parts.push(...addressParts)
     } else {
-      // If address is an object (stored format), extract components
-      if (address.streetAddress) parts.push(address.streetAddress)
+      // If address is an object (stored format), check for duplication
+      const normalizedName = (name || '').toLowerCase()
+      const normalizedStreet = (address.streetAddress || '').toLowerCase()
+      
+      // Only add street if it's not already in the name
+      if (!normalizedName.includes(normalizedStreet)) {
+        if (address.streetAddress) parts.push(address.streetAddress)
+      }
+      
       if (address.addressLocality) parts.push(address.addressLocality)
     }
   }
