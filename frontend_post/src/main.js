@@ -336,7 +336,7 @@ async function handleEventSubmit(e) {
       showStatus(`❌ Couldn't find that address. Please include: street number, street name, city, state, and zip code.`, 'error')
     } else if (errorMsg.toLowerCase().includes('date') || errorMsg.toLowerCase().includes('time')) {
       showStatus(`❌ Please include complete date/time info: "Sunday, Feb 1st from 1:00 PM to 4:00 PM"`, 'error')
-    } else if (errorMsg.toLowerCase().includes('name') || errorMsg.toLowerCase().includes('required')) {
+    } else if (errorMsg.toLowerCase().includes('required')) {
       showStatus(`❌ Please make sure to include: property address, date, start time, and end time.`, 'error')
     } else {
       // Generic fallback for any other error
