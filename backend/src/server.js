@@ -1022,6 +1022,34 @@ function escapeHtml(text) {
 }
 
 /**
+ * Generate Google Calendar URL with event details
+ * @param {object} event - { title, start, end, description, location }
+ * @returns {string} - Google Calendar URL
+ */
+function generateCalendarUrl(event) {
+  if (!event.start) return null
+  
+  try {
+    // Convert dates to ISO 8601 format without separators (YYYYMMDDTHHmmssZ)
+    const start = new Date(event.start).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
+    const end = event.end ? new Date(event.end).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z') : start
+    
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: event.title || '',
+      dates: `${start}/${end}`,
+      details: event.description || '',
+      location: event.location || ''
+    })
+    
+    return `https://calendar.google.com/calendar/render?${params.toString()}`
+  } catch (err) {
+    console.error('Error generating calendar URL:', err)
+    return null
+  }
+}
+
+/**
  * Render share page HTML with Open Graph tags
  */
 function renderSharePageHtml(event) {
@@ -1137,6 +1165,56 @@ function renderSharePageHtml(event) {
   const safeDate = escapeHtml(formattedDate)
   const safeTime = escapeHtml(formattedTime)
   
+  // Generate action button URLs
+  const calendarUrl = startDate ? generateCalendarUrl({
+    title: eventName,
+    start: startDate,
+    end: endDate,
+    description: description,
+    location: formattedAddress
+  }) : null
+  
+  // Generate maps URL (prefer coordinates, fallback to address)
+  let mapsUrl = null
+  const coords = event.location?.geo
+  if (coords && coords.latitude && coords.longitude) {
+    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${coords.latitude},${coords.longitude}`
+  } else if (formattedAddress) {
+    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formattedAddress)}`
+  }
+  
+  // Build action buttons HTML
+  let actionButtonsHtml = ''
+  if (calendarUrl || mapsUrl || externalUrl) {
+    actionButtonsHtml = '<div class="action-buttons">'
+    
+    // Add to Calendar button (Primary)
+    if (calendarUrl) {
+      actionButtonsHtml += `
+        <a href="${escapeHtml(calendarUrl)}" class="action-button primary" rel="noopener noreferrer" target="_blank">
+          📅 Add to Calendar
+        </a>`
+    }
+    
+    // Get Directions button (Secondary)
+    if (mapsUrl) {
+      actionButtonsHtml += `
+        <a href="${escapeHtml(mapsUrl)}" class="action-button secondary" rel="noopener noreferrer" target="_blank">
+          🗺️ Get Directions
+        </a>`
+    }
+    
+    // View Full Details button (Secondary)
+    if (externalUrl) {
+      actionButtonsHtml += `
+        <a href="${escapeHtml(externalUrl)}" class="action-button secondary" rel="noopener noreferrer" target="_blank">
+          🏠 View Full Details
+        </a>`
+    }
+    
+    actionButtonsHtml += '</div>'
+  }
+  
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1159,64 +1237,194 @@ function renderSharePageHtml(event) {
   <meta name="twitter:image" content="${safeImageUrl}">
   
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       line-height: 1.6;
-      max-width: 800px;
-      margin: 0 auto;
+      min-height: 100vh;
+      background: #060810;
+      color: #f7f7f7;
+      -webkit-font-smoothing: antialiased;
+      position: relative;
+    }
+    
+    /* Background gradient */
+    .bg-glow {
+      position: fixed;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at 50% 15%, #2f195f 0%, #060810 80%);
+      z-index: -1;
+    }
+    
+    /* Main container */
+    .page-wrapper {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
       padding: 20px;
-      background: #f5f5f5;
     }
+    
     .container {
-      background: white;
-      border-radius: 8px;
-      padding: 32px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      max-width: 680px;
+      width: 100%;
+      margin: auto;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(12px);
+      border-radius: 24px;
+      padding: 32px 24px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
+    
+    /* Typography */
     h1 {
-      margin: 0 0 16px 0;
-      color: #1a1a1a;
       font-size: 28px;
-    }
-    .meta {
-      color: #666;
+      font-weight: 700;
       margin-bottom: 24px;
+      color: #f7f7f7;
+      line-height: 1.2;
     }
+    
+    .meta {
+      margin-bottom: 32px;
+    }
+    
     .meta-item {
-      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      color: #628395;
+      font-size: 15px;
     }
-    .link-button {
-      display: inline-block;
-      background: #007bff;
-      color: white;
-      padding: 12px 24px;
-      border-radius: 6px;
+    
+    .meta-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    /* Action buttons */
+    .action-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 32px;
+    }
+    
+    .action-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 24px;
+      border-radius: 12px;
       text-decoration: none;
-      margin-top: 16px;
+      font-weight: 700;
+      font-size: 15px;
+      transition: all 0.2s ease;
+      border: none;
+      cursor: pointer;
+      text-align: center;
     }
-    .link-button:hover {
-      background: #0056b3;
+    
+    .action-button.primary {
+      background: #40c9a2;
+      color: #060810;
+      box-shadow: 0 4px 12px rgba(64, 201, 162, 0.3);
     }
+    
+    .action-button.primary:hover {
+      background: #f7f7f7;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(64, 201, 162, 0.4);
+    }
+    
+    .action-button.primary:active {
+      transform: translateY(0);
+    }
+    
+    .action-button.secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: #f7f7f7;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    
+    .action-button.secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(64, 201, 162, 0.3);
+      transform: translateY(-2px);
+    }
+    
+    .action-button.secondary:active {
+      transform: translateY(0);
+    }
+    
+    /* Footer */
     .footer {
       margin-top: 32px;
-      padding-top: 16px;
-      border-top: 1px solid #e0e0e0;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
       text-align: center;
-      color: #666;
+    }
+    
+    .footer a {
+      color: #628395;
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s ease;
+    }
+    
+    .footer a:hover {
+      color: #40c9a2;
+    }
+    
+    /* Desktop styles */
+    @media (min-width: 640px) {
+      .page-wrapper {
+        padding: 40px;
+      }
+      
+      .container {
+        border-radius: 32px;
+        padding: 48px 40px;
+      }
+      
+      h1 {
+        font-size: 36px;
+        margin-bottom: 28px;
+      }
+      
+      .meta-item {
+        font-size: 16px;
+      }
+      
+      .action-button {
+        padding: 16px 28px;
+        font-size: 16px;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>${safeTitle}</h1>
-    <div class="meta">
-      ${safeDate ? `<div class="meta-item">📅 ${safeDate}</div>` : ''}
-      ${safeTime ? `<div class="meta-item">🕐 ${safeTime}</div>` : ''}
-      ${safeAddress ? `<div class="meta-item">📍 ${safeAddress}</div>` : ''}
-    </div>
-    ${externalUrl ? `<a href="${escapeHtml(externalUrl)}" class="link-button" rel="noopener noreferrer" target="_blank">View Full Details</a>` : ''}
-    <div class="footer">
-      <a href="https://goflypost.com">← Back to Flypost</a>
+  <div class="bg-glow"></div>
+  <div class="page-wrapper">
+    <div class="container">
+      <h1>${safeTitle}</h1>
+      <div class="meta">
+        ${safeDate ? `<div class="meta-item">📅 ${safeDate}</div>` : ''}
+        ${safeTime ? `<div class="meta-item">🕐 ${safeTime}</div>` : ''}
+        ${safeAddress ? `<div class="meta-item">📍 ${safeAddress}</div>` : ''}
+      </div>
+      ${actionButtonsHtml}
+      <div class="footer">
+        <a href="https://goflypost.com">← Back to Flypost</a>
+      </div>
     </div>
   </div>
 </body>
