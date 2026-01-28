@@ -246,30 +246,33 @@ async function handleEventSubmit(e) {
           ></div>
         `
         
-        // Apply responsive styles using media query
-        const style = document.createElement('style')
-        style.textContent = `
-          @media (min-width: 768px) {
-            #share-url-container {
-              padding: 32px !important;
-              border-radius: 32px !important;
+        // Apply responsive styles using media query (only if not already added)
+        if (!document.getElementById('share-url-responsive-styles')) {
+          const style = document.createElement('style')
+          style.id = 'share-url-responsive-styles'
+          style.textContent = `
+            @media (min-width: 768px) {
+              #share-url-container {
+                padding: 32px !important;
+                border-radius: 32px !important;
+              }
+              #share-url-container h3 {
+                font-size: 18px !important;
+              }
+              #share-url-container .share-input-wrapper {
+                flex-direction: row !important;
+              }
+              #share-url-container input {
+                font-size: 16px !important;
+              }
+              #share-url-container button {
+                font-size: 16px !important;
+                white-space: nowrap;
+              }
             }
-            #share-url-container h3 {
-              font-size: 18px !important;
-            }
-            #share-url-container .share-input-wrapper {
-              flex-direction: row !important;
-            }
-            #share-url-container input {
-              font-size: 16px !important;
-            }
-            #share-url-container button {
-              font-size: 16px !important;
-              white-space: nowrap;
-            }
-          }
-        `
-        document.head.appendChild(style)
+          `
+          document.head.appendChild(style)
+        }
         
         // Insert after publish status
         const publishStatus = document.getElementById('publish-status')

@@ -1031,8 +1031,8 @@ function generateCalendarUrl(event) {
   
   try {
     // Convert dates to ISO 8601 format without separators (YYYYMMDDTHHmmssZ)
-    const start = new Date(event.start).toISOString().replace(/-|:|\.\d+/g, '')
-    const end = event.end ? new Date(event.end).toISOString().replace(/-|:|\.\d+/g, '') : start
+    const start = new Date(event.start).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
+    const end = event.end ? new Date(event.end).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z') : start
     
     const params = new URLSearchParams({
       action: 'TEMPLATE',
