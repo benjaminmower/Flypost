@@ -1069,34 +1069,6 @@ function escapeHtml(text) {
 }
 
 /**
- * Generate Google Calendar URL with event details
- * @param {object} event - { title, start, end, description, location }
- * @returns {string} - Google Calendar URL
- */
-function generateCalendarUrl(event) {
-  if (!event.start) return null
-  
-  try {
-    // Convert dates to ISO 8601 format without separators (YYYYMMDDTHHmmssZ)
-    const start = new Date(event.start).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
-    const end = event.end ? new Date(event.end).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z') : start
-    
-    const params = new URLSearchParams({
-      action: 'TEMPLATE',
-      text: event.title || '',
-      dates: `${start}/${end}`,
-      details: event.description || '',
-      location: event.location || ''
-    })
-    
-    return `https://calendar.google.com/calendar/render?${params.toString()}`
-  } catch (err) {
-    console.error('Error generating calendar URL:', err)
-    return null
-  }
-}
-
-/**
  * Escape special characters for ICS file format (RFC 5545)
  * @param {string} text - Text to escape
  * @returns {string} - Escaped text
@@ -1307,11 +1279,12 @@ function renderSharePageHtml(event) {
   // Generate concise description for OG tags (optimized for social media)
   let ogDescription = ''
   if (formattedDate && formattedTime) {
-    // Shorten time format: "1:00 PM - 4:00 PM" -> "1:00–4:00 PM"
-    const shortTime = formattedTime.replace(' - ', '–').replace(/:\d{2}/g, (m, offset) => {
-      // Only keep minutes if not :00
-      return m === ':00' ? '' : m
-    })
+    // Shorten time format: "1:00 PM - 4:00 PM" -> "1 PM–4 PM"
+    // Remove :00 from times and use en dash
+    const shortTime = formattedTime
+      .replace(' - ', '–')
+      .replace(/(\d+):00\s/g, '$1 ') // Remove :00 before AM/PM
+    
     ogDescription = `${formattedDate} • ${shortTime}`
     if (formattedAddress) {
       ogDescription += ` • Open house at ${formattedAddress}. Explore this beautiful property in person.`
@@ -1325,14 +1298,6 @@ function renderSharePageHtml(event) {
     ogDescription = `Open house at ${formattedAddress}`
   }
   
-  // Fallback to original description for page body (not OG tags)
-  let description = event.description || ''
-  if (!description && formattedDate) {
-    description = `${formattedDate}${formattedTime ? ' • ' + formattedTime : ''}`
-  } else if (formattedDate) {
-    description = `${formattedDate}${formattedTime ? ' • ' + formattedTime : ''} • ${description}`
-  }
-  
   // Get image URL (if available)
   // Note: Default image should be hosted at goflypost.com or use an environment variable
   const imageUrl = event.image || event.flypost?.imageUrl || process.env.OG_DEFAULT_IMAGE || 'https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/6683234a1ee80c5f2891597e_Flypost%20Logo-256px.png'
@@ -1340,7 +1305,6 @@ function renderSharePageHtml(event) {
   // Escape all dynamic content
   const safeTitle = escapeHtml(eventName)
   const safeOgDescription = escapeHtml(ogDescription || 'View event details')
-  const safeDescription = escapeHtml(description || 'View event details')
   const safeUrl = escapeHtml(shareUrl)
   const safeImageUrl = escapeHtml(imageUrl)
   const safeAddress = escapeHtml(formattedAddress)
