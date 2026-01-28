@@ -170,29 +170,106 @@ async function handleEventSubmit(e) {
         // Create share URL container with glassmorphic styling
         const container = document.createElement('div')
         container.id = 'share-url-container'
-        container.className = 'glass-card p-6 md:p-8 rounded-2xl md:rounded-3xl border-mint_leaf/20 mt-4'
+        container.className = 'glass-card mt-4'
+        container.style.padding = '24px'
+        container.style.borderRadius = '24px'
+        container.style.border = '1px solid rgba(64, 201, 162, 0.2)'
         
         container.innerHTML = `
-          <h3 class="text-base md:text-lg font-bold mb-4 text-mint_leaf uppercase tracking-wide">
+          <h3 style="
+            color: #40c9a2;
+            font-size: 16px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+          ">
             📋 Share this event
           </h3>
-          <div class="flex flex-col md:flex-row gap-3">
+          <div style="
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+          " class="share-input-wrapper">
             <input 
               type="text" 
               id="share-url-input"
               value="${escapeHtml(url)}" 
               readonly 
-              class="flex-1 bg-ink_black/50 border border-white/10 p-3 md:p-4 rounded-xl text-sm md:text-base font-mono text-bright_snow focus:outline-none focus:border-mint_leaf/50 transition-all"
+              style="
+                background: rgba(6, 8, 16, 0.5);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                color: #f7f7f7;
+                font-family: monospace;
+                font-size: 14px;
+                padding: 12px 16px;
+                border-radius: 12px;
+                outline: none;
+                transition: border-color 0.2s;
+              "
+              onfocus="this.style.borderColor='rgba(64, 201, 162, 0.5)'"
+              onblur="this.style.borderColor='rgba(255, 255, 255, 0.1)'"
             />
             <button 
               id="copy-share-url-btn"
-              class="bg-mint_leaf text-ink_black px-6 py-3 rounded-xl font-bold text-sm md:text-base hover:bg-bright_snow transition-all active:scale-95 whitespace-nowrap shadow-lg shadow-mint_leaf/20"
+              style="
+                background: #40c9a2;
+                color: #060810;
+                font-weight: 700;
+                font-size: 14px;
+                padding: 12px 24px;
+                border-radius: 12px;
+                border: none;
+                cursor: pointer;
+                box-shadow: 0 4px 12px rgba(64, 201, 162, 0.3);
+                transition: all 0.2s;
+              "
+              onmouseover="this.style.background='#f7f7f7'"
+              onmouseout="if(!this.dataset.copied){this.style.background='#40c9a2'}"
+              onmousedown="this.style.transform='scale(0.98)'"
+              onmouseup="this.style.transform='scale(1)'"
             >
               Copy Link
             </button>
           </div>
-          <div id="copy-feedback" class="mt-3 text-mint_leaf text-sm font-semibold min-h-[24px] opacity-0 transition-opacity"></div>
+          <div 
+            id="copy-feedback" 
+            style="
+              color: #40c9a2;
+              font-size: 14px;
+              font-weight: 600;
+              margin-top: 12px;
+              min-height: 24px;
+              opacity: 0;
+              transition: opacity 0.3s;
+            "
+          ></div>
         `
+        
+        // Apply responsive styles using media query
+        const style = document.createElement('style')
+        style.textContent = `
+          @media (min-width: 768px) {
+            #share-url-container {
+              padding: 32px !important;
+              border-radius: 32px !important;
+            }
+            #share-url-container h3 {
+              font-size: 18px !important;
+            }
+            #share-url-container .share-input-wrapper {
+              flex-direction: row !important;
+            }
+            #share-url-container input {
+              font-size: 16px !important;
+            }
+            #share-url-container button {
+              font-size: 16px !important;
+              white-space: nowrap;
+            }
+          }
+        `
+        document.head.appendChild(style)
         
         // Insert after publish status
         const publishStatus = document.getElementById('publish-status')
@@ -222,11 +299,13 @@ async function handleEventSubmit(e) {
               
               // Visual button feedback
               copyBtn.textContent = '✓ Copied!'
-              copyBtn.classList.add('bg-bright_snow')
+              copyBtn.style.background = '#f7f7f7'
+              copyBtn.dataset.copied = 'true'
               
               setTimeout(() => {
                 copyBtn.textContent = 'Copy Link'
-                copyBtn.classList.remove('bg-bright_snow')
+                copyBtn.style.background = '#40c9a2'
+                delete copyBtn.dataset.copied
               }, 2000)
             } catch (err) {
               console.error('Failed to copy:', err)
