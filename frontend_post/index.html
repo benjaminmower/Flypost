@@ -65,6 +65,32 @@
         .hidden { display: none; }
         /* Clamped scale for the hero text */
         .text-hero { font-size: clamp(2.4rem, 11vw, 8.5rem); letter-spacing: -0.04em; }
+        
+        /* Smooth expand/collapse for FAQ details element */
+        details.faq-details summary {
+          list-style: none;
+        }
+
+        details.faq-details summary::-webkit-details-marker {
+          display: none;
+        }
+
+        details.faq-details summary::after {
+          content: '▼';
+          float: right;
+          transition: transform 0.2s;
+          color: rgba(255, 255, 255, 0.3);
+          font-size: 0.75rem;
+          margin-top: 0.25rem;
+        }
+
+        details.faq-details[open] summary::after {
+          transform: rotate(-180deg);
+        }
+
+        details.faq-details summary:hover {
+          background: rgba(255, 255, 255, 0.02);
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center p-4 md:p-10 text-center justify-start">
@@ -121,7 +147,104 @@
             </div>
             
             <form id="event-form" class="glass-card p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] border-mint_leaf/10 shadow-2xl">
-                <textarea id="event-input" rows="4" placeholder="Describe your event..." class="bg-ink_black/50 border border-white/10 w-full p-5 rounded-2xl focus:outline-none focus:border-mint_leaf/50 transition-all text-white"></textarea>
+                
+                <!-- How to Post an Open House FAQ -->
+                <details class="faq-details mb-6 glass-card rounded-2xl border-mint_leaf/10 overflow-hidden">
+                  <summary class="cursor-pointer p-5 md:p-6 font-bold text-base md:text-lg text-mint_leaf hover:text-bright_snow transition-colors flex justify-between items-center">
+                    <span>💡 How to Post an Open House</span>
+                    <span class="text-xs text-air_force_blue-700 font-normal">Click to expand</span>
+                  </summary>
+                  
+                  <div class="px-5 md:px-6 pb-5 md:pb-6 pt-2 space-y-6">
+                    
+                    <!-- Reassurance line -->
+                    <p class="text-sm text-bright_snow/80 italic border-l-2 border-mint_leaf/30 pl-4">
+                      Include <strong>What</strong> (property address) and <strong>When</strong> (date & times) — Flypost will handle the rest.
+                    </p>
+                    
+                    <!-- Required Info Section -->
+                    <div>
+                      <h4 class="text-sm font-bold uppercase tracking-widest text-mint_leaf mb-3">
+                        Required Information
+                      </h4>
+                      <div class="space-y-3 text-sm text-bright_snow/90">
+                        <div class="flex items-start gap-3">
+                          <span class="text-xl flex-shrink-0">🏠</span>
+                          <div>
+                            <span class="font-bold">Property Address</span>
+                            <span class="text-bright_snow/60 ml-2">Full street address, city, and zip code</span>
+                          </div>
+                        </div>
+                        
+                        <div class="flex items-start gap-3">
+                          <span class="text-xl flex-shrink-0">📅</span>
+                          <div>
+                            <span class="font-bold">Date & Time</span>
+                            <span class="text-bright_snow/60 ml-2">Day, date, start time, and end time</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Optional Info Section -->
+                    <div class="pt-4 border-t border-white/10">
+                      <h4 class="text-xs font-bold uppercase tracking-widest text-air_force_blue-700 mb-2">
+                        Optional but highly recommended!
+                      </h4>
+                      <div class="text-xs text-bright_snow/60 space-y-1">
+                        <div>• Listing price</div>
+                        <div>• Beds & baths</div>
+                        <div>• Link to Zillow, Realtor.com, or your listing page</div>
+                        <div>• Agent name and contact info</div>
+                        <div>• Special features or highlights</div>
+                      </div>
+                    </div>
+                    
+                    <!-- Examples Section -->
+                    <div class="pt-4 border-t border-white/10">
+                      <h4 class="text-sm font-bold uppercase tracking-widest text-lemon_lime mb-3">
+                        Examples
+                      </h4>
+                      
+                      <div class="space-y-3">
+                        <!-- Minimal Example (matches placeholder exactly) -->
+                        <div class="bg-ink_black/50 rounded-xl p-3">
+                          <div class="text-[10px] uppercase tracking-wider text-air_force_blue-700 font-bold mb-2">
+                            ✅ Minimum Required
+                          </div>
+                          <div class="font-mono text-xs text-bright_snow/80 leading-relaxed">
+                            Open house Sunday, Feb 1st from 1:00 PM to 4:00 PM at 2682 34th St, Santa Monica, CA 90403.
+                          </div>
+                        </div>
+                        
+                        <!-- Full Example -->
+                        <div class="bg-ink_black/50 rounded-xl p-3 border border-mint_leaf/20">
+                          <div class="text-[10px] uppercase tracking-wider text-mint_leaf font-bold mb-2">
+                            ⭐ Better (with details)
+                          </div>
+                          <div class="font-mono text-xs text-bright_snow/80 leading-relaxed">
+                            Open house Sunday, Feb 1st from 1:00 PM to 4:00 PM at 2682 34th St, Santa Monica, CA 90403. Beautiful 3 bed, 2 bath home listed at $1.5M. Hosted by Jane Smith, Coldwell Banker. https://www.zillow.com/homedetails/2682-34th-St/...
+                          </div>
+                        </div>
+                        
+                        <!-- What NOT to do -->
+                        <div class="bg-ink_black/50 rounded-xl p-3 border border-hot_berry/20">
+                          <div class="text-[10px] uppercase tracking-wider text-hot_berry font-bold mb-2">
+                            ❌ Won't Work
+                          </div>
+                          <div class="font-mono text-xs text-bright_snow/60 leading-relaxed space-y-1">
+                            <div>"Open house this Sunday" ← missing address, date & times</div>
+                            <div>"Open house at 34th St" ← missing full address, date & times</div>
+                            <div>"Open house 1pm" ← missing address, date & end time</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                  </div>
+                </details>
+                
+                <textarea id="event-input" rows="4" placeholder="Open house Sunday, Feb 1st from 1:00 PM to 4:00 PM at 2682 34th St, Santa Monica, CA 90403." class="bg-ink_black/50 border border-white/10 w-full p-5 rounded-2xl focus:outline-none focus:border-mint_leaf/50 transition-all text-white"></textarea>
                 
                 <button id="publish-btn" type="submit" class="bg-bright_snow text-ink_black w-full py-4 md:py-6 rounded-2xl font-black text-lg md:text-2xl hover:bg-hot_berry hover:text-white transition-all">
                     Publish Event
