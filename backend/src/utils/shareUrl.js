@@ -60,11 +60,11 @@ function generateSeoSlug(event) {
     } else {
       // If address is an object (stored format), check for duplication
       const normalizedName = (name || '').toLowerCase()
-      const normalizedStreet = (address.streetAddress || '').toLowerCase()
+      const normalizedStreet = (address.streetAddress || '').toLowerCase().trim()
       
-      // Only add street if it's not already in the name
-      if (!normalizedName.includes(normalizedStreet)) {
-        if (address.streetAddress) parts.push(address.streetAddress)
+      // Only add street if it's not empty and not already in the name
+      if (normalizedStreet && !normalizedName.includes(normalizedStreet)) {
+        parts.push(address.streetAddress)
       }
       
       if (address.addressLocality) parts.push(address.addressLocality)
