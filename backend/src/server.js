@@ -33,6 +33,7 @@ import {
   validateOpenHouseEndDate,
   convertOpenHouseLocalIntent
 } from './utils/timeNormalization.js'
+import { generateShareUrl, extractEventIdFromFpid, validateExternalUrl } from './utils/shareUrl.js'
 
 dotenv.config()
 
@@ -952,6 +953,383 @@ app.get('/v1/events/:event_id', applyTieredRateLimit, async (req, res) => {
     })
   }
 })
+
+/**
+ * GET /e/:slug/:fpid
+ * Public share page route with Open Graph metadata
+ * Returns HTML with OG tags for social media previews
+ * 
+ * URL Structure (Zillow-style):
+ *   /e/open-house-810-franklin-st-santa-monica/evt_k7x9m2p4q_1641234567890_fpid
+ *   - slug: SEO-friendly (ignored by backend)
+ *   - fpid: Machine ID (used for event lookup)
+ * 
+ * Features:
+ * - Strict fpid validation (before storage lookup)
+ * - Timezone-aware formatting
+ * - Smart occurrence selection (next upcoming)
+ * - External link validation (XSS prevention)
+ * - HTML escaping on all dynamic content
+ * - Cache headers: 5min browser, 10min CDN
+ */
+app.get('/e/:slug/:fpid', async (req, res) => {
+  try {
+    const { fpid } = req.params
+    
+    // Validate fpid format BEFORE storage lookup (security + performance)
+    const eventId = extractEventIdFromFpid(fpid)
+    
+    if (!eventId) {
+      console.log(`⚠️  Invalid fpid format: ${fpid}`)
+      return res.status(404).send(render404Page())
+    }
+    
+    console.log(`📄 Share page request: eventId=${eventId}`)
+    
+    // Fetch event from storage
+    const useFirestore = isFirestoreEnabled()
+    const event = await getEventByIdAny(eventId, useFirestore)
+    
+    if (!event) {
+      console.log(`⚠️  Event not found: ${eventId}`)
+      return res.status(404).send(render404Page())
+    }
+    
+    // Set cache headers (5min browser, 10min CDN)
+    res.set('Cache-Control', 'public, max-age=300, s-maxage=600')
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    
+    // Render HTML with Open Graph tags
+    const html = renderSharePageHtml(event)
+    res.send(html)
+  } catch (error) {
+    console.error('❌ Error rendering share page:', error)
+    res.status(500).send(render500Page())
+  }
+})
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+  if (!text) return ''
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+/**
+ * Render share page HTML with Open Graph tags
+ */
+function renderSharePageHtml(event) {
+  // Extract event data
+  const eventName = event.name || 'Event'
+  const eventId = event.flypost?.eventId || event.id || 'unknown'
+  const shareUrl = generateShareUrl(event) || `https://goflypost.com`
+  
+  // Extract and validate external listing URL
+  let externalUrl = event.url || event.flypost?.externalUrl || event.flypost?.url
+  externalUrl = validateExternalUrl(externalUrl)
+  
+  // Build description from event data
+  let description = event.description || ''
+  
+  // Smart occurrence selection for date/time display
+  const timezone = event.flypost?.timezone || 'America/Los_Angeles'
+  const occurrences = event.flypost?.occurrences || []
+  
+  let selectedOccurrence = null
+  const now = Date.now()
+  
+  if (occurrences.length > 0) {
+    // 1. Prefer current occurrence (now is within start/end window)
+    selectedOccurrence = occurrences.find(occ => {
+      const start = new Date(occ.startDate).getTime()
+      const end = new Date(occ.endDate).getTime()
+      return now >= start && now <= end
+    })
+    
+    // 2. Else next upcoming occurrence (soonest startDate > now)
+    if (!selectedOccurrence) {
+      const upcoming = occurrences
+        .filter(occ => new Date(occ.startDate).getTime() > now)
+        .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+      selectedOccurrence = upcoming[0]
+    }
+    
+    // 3. Else most recent past occurrence
+    if (!selectedOccurrence) {
+      const past = occurrences
+        .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+      selectedOccurrence = past[0]
+    }
+  }
+  
+  // Use selected occurrence or fallback to event startDate
+  const startDate = selectedOccurrence ? selectedOccurrence.startDate : event.startDate
+  const endDate = selectedOccurrence ? selectedOccurrence.endDate : event.endDate
+  
+  // Format date/time with timezone awareness
+  let formattedDate = ''
+  let formattedTime = ''
+  
+  if (startDate) {
+    try {
+      const dateObj = new Date(startDate)
+      
+      // Format date: "Monday, Jan 15"
+      const dateFormatter = new Intl.DateTimeFormat('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        timeZone: timezone
+      })
+      formattedDate = dateFormatter.format(dateObj)
+      
+      // Format time: "2:00 PM - 4:00 PM"
+      const timeFormatter = new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: timezone
+      })
+      formattedTime = timeFormatter.format(dateObj)
+      
+      if (endDate) {
+        const endObj = new Date(endDate)
+        formattedTime += ' - ' + timeFormatter.format(endObj)
+      }
+    } catch (err) {
+      console.error('Error formatting date:', err)
+    }
+  }
+  
+  // Build full description
+  if (!description && formattedDate) {
+    description = `${formattedDate}${formattedTime ? ' • ' + formattedTime : ''}`
+  } else if (formattedDate) {
+    description = `${formattedDate}${formattedTime ? ' • ' + formattedTime : ''} • ${description}`
+  }
+  
+  // Extract address
+  const address = event.location?.address
+  let formattedAddress = ''
+  if (address) {
+    const parts = []
+    if (address.streetAddress) parts.push(address.streetAddress)
+    if (address.addressLocality) parts.push(address.addressLocality)
+    if (address.addressRegion) parts.push(address.addressRegion)
+    formattedAddress = parts.join(', ')
+  }
+  
+  // Get image URL (if available)
+  // Note: Default image should be hosted at goflypost.com or use an environment variable
+  const imageUrl = event.image || event.flypost?.imageUrl || process.env.OG_DEFAULT_IMAGE || 'https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/6683234a1ee80c5f2891597e_Flypost%20Logo-256px.png'
+  
+  // Escape all dynamic content
+  const safeTitle = escapeHtml(eventName)
+  const safeDescription = escapeHtml(description || 'View event details')
+  const safeUrl = escapeHtml(shareUrl)
+  const safeImageUrl = escapeHtml(imageUrl)
+  const safeAddress = escapeHtml(formattedAddress)
+  const safeDate = escapeHtml(formattedDate)
+  const safeTime = escapeHtml(formattedTime)
+  
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${safeTitle} | Flypost</title>
+  
+  <!-- Open Graph tags -->
+  <meta property="og:type" content="event">
+  <meta property="og:url" content="${safeUrl}">
+  <meta property="og:title" content="${safeTitle}">
+  <meta property="og:description" content="${safeDescription}">
+  <meta property="og:image" content="${safeImageUrl}">
+  
+  <!-- Twitter Card tags -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="${safeUrl}">
+  <meta name="twitter:title" content="${safeTitle}">
+  <meta name="twitter:description" content="${safeDescription}">
+  <meta name="twitter:image" content="${safeImageUrl}">
+  
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 8px;
+      padding: 32px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin: 0 0 16px 0;
+      color: #1a1a1a;
+      font-size: 28px;
+    }
+    .meta {
+      color: #666;
+      margin-bottom: 24px;
+    }
+    .meta-item {
+      margin-bottom: 8px;
+    }
+    .link-button {
+      display: inline-block;
+      background: #007bff;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      margin-top: 16px;
+    }
+    .link-button:hover {
+      background: #0056b3;
+    }
+    .footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid #e0e0e0;
+      text-align: center;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>${safeTitle}</h1>
+    <div class="meta">
+      ${safeDate ? `<div class="meta-item">📅 ${safeDate}</div>` : ''}
+      ${safeTime ? `<div class="meta-item">🕐 ${safeTime}</div>` : ''}
+      ${safeAddress ? `<div class="meta-item">📍 ${safeAddress}</div>` : ''}
+    </div>
+    ${externalUrl ? `<a href="${escapeHtml(externalUrl)}" class="link-button" rel="noopener noreferrer" target="_blank">View Full Details</a>` : ''}
+    <div class="footer">
+      <a href="https://goflypost.com">← Back to Flypost</a>
+    </div>
+  </div>
+</body>
+</html>`
+}
+
+/**
+ * Render 404 error page
+ */
+function render404Page() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Not Found | Flypost</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      text-align: center;
+      padding: 50px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      padding: 40px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      font-size: 48px;
+      margin: 0;
+      color: #1a1a1a;
+    }
+    p {
+      font-size: 18px;
+      color: #666;
+      margin: 20px 0;
+    }
+    a {
+      color: #007bff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>404</h1>
+    <p>Event not found</p>
+    <p><a href="https://goflypost.com">← Back to Flypost</a></p>
+  </div>
+</body>
+</html>`
+}
+
+/**
+ * Render 500 error page
+ */
+function render500Page() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Server Error | Flypost</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      text-align: center;
+      padding: 50px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      padding: 40px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      font-size: 48px;
+      margin: 0;
+      color: #1a1a1a;
+    }
+    p {
+      font-size: 18px;
+      color: #666;
+      margin: 20px 0;
+    }
+    a {
+      color: #007bff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>500</h1>
+    <p>Something went wrong</p>
+    <p><a href="https://goflypost.com">← Back to Flypost</a></p>
+  </div>
+</body>
+</html>`
+}
 
 /**
  * POST /v1/events/upsert
