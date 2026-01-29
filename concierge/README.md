@@ -1,430 +1,96 @@
-# Web Concierge Feature
+# Flypost Concierge
 
-The Web Concierge is an anonymous web chat client that integrates the Flypost backend with OpenAI APIs to help users discover nearby events through natural conversation.
+Discovery interface at `ask.goflypost.com` - helps users find nearby events through natural conversation.
 
-## Overview
+## Purpose
 
-The Web Concierge feature provides:
+- **Read-only discovery** of Flypost event registry
+- **Flypost share URLs first** - links to pages with Check In, Calendar, Maps
+- **SOT v10 aligned** - follows Tier 1/Tier 2 disclosure rules
+- **Privacy-compliant** - no PII fabrication, follows SOT principles
 
-- **Anonymous chat interface** for event discovery
-- **OpenAI-powered responses** using GPT-4o-mini
-- **Geolocation-based search** for nearby events
-- **Enhanced structured listing output** with comprehensive property details
-- **Interactive follow-up suggestions** for conversational continuity
-- **Conversation history support** for contextual multi-turn interactions
-- **Dynamic date filtering** (today, tomorrow, this weekend, etc.)
-- **Brokerage-specific branding and filtering** (see [BROKERAGE_INTEGRATION.md](./BROKERAGE_INTEGRATION.md))
-- **Complete isolation** from v4 production ingestion loop
-- **GDPR compliance** with no PII storage
-- **Rate limiting and security** hardening
+## How It Works
 
-## Quick Links
+1. User: "What's happening in Santa Monica this weekend?"
+2. Concierge calls `/v1/events/near` (Discovery Protocol V1)
+3. Returns Markdown-formatted listings with Flypost share URLs as primary CTAs
+4. Users click to view details, check in, get calendar/directions
 
-- **[Brokerage Integration Guide](./BROKERAGE_INTEGRATION.md)** - How to embed the widget with custom branding
-- **[Usage Examples](./USAGE.md)** - API usage and testing examples
-- **[Implementation Summary](./IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
+## Example Response
+
+```markdown
+### 🏠 Open House at 2517 24th St, Santa Monica
+
+**[🏠 View on Flypost](https://goflypost.com/e/open-house-2517-24th-st/evt_abc_fpid)**
+
+- **When**: Saturday, Feb 1 · 1:00-4:00 PM
+- **Price**: $1.5M
+- **Details**: 3 bed · 2 bath · 2,100 sqft
+
+*Beautiful coastal home with modern updates.*
+
+Also listed on [Zillow](https://zillow.com/...)
+```
 
 ## Architecture
 
 ```
-┌─────────────────┐
-│  Widget (HTML)  │
-│  - User input   │
-│  - Geolocation  │
-└────────┬────────┘
-         │
-         │ POST /api/chat
-         │ { message, lat, lng }
-         ▼
-┌─────────────────┐
-│ Backend Routes  │
-│ (backend/src/   │
-│  concierge/)    │
-│  - Validation   │
-│  - Rate limit   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐      ┌──────────────┐
-│  Chat Handler   │─────▶│  OpenAI API  │
-│  - Tool calls   │◀─────│  GPT-4o-mini │
-└────────┬────────┘      └──────────────┘
-         │
-         │ getEventsNear()
-         ▼
-┌─────────────────┐
-│ /v1/events/near │
-│  (existing API) │
-└─────────────────┘
+ask.goflypost.com → POST /api/chat → processChatMessage → getEventsNear tool → /v1/events/near
 ```
 
-## File Structure
-
-```
-v4/
-├── backend/
-│   └── src/
-│       ├── server.js                    # Main server with feature flag
-│       └── concierge/
-│           ├── chatHandler.js           # OpenAI integration
-│           └── routes.js                # Express routes
-└── concierge/
-    ├── README.md                        # This file
-    ├── BROKERAGE_INTEGRATION.md         # Brokerage widget guide
-    ├── USAGE.md                         # Usage examples
-    ├── themes/                          # Brokerage-specific CSS themes
-    │   ├── vista-sir.css
-    │   ├── compass.css
-    │   └── bhhs-utah.css
-    └── widget/
-        ├── concierge-widget.js          # Embeddable widget script
-        ├── concierge-widget.css         # Base widget styles
-        ├── index.html                   # Standalone demo
-        ├── build.js                     # Build script
-        ├── package.json                 # Widget metadata
-        └── examples/                    # Integration examples
-            ├── vista-sir-example.html
-            ├── compass-example.html
-            └── bhhs-utah-example.html
-```
-
-## Setup
-
-### 1. Environment Variables
-
-Add to your `.env` file:
-
-```bash
-# Enable the Web Concierge feature
-ENABLE_CONCIERGE=true
-
-# OpenAI API key (required)
-OPENAI_API_KEY=sk-...
-
-# Allowed origins for CORS (comma-separated)
-CONCIERGE_ALLOWED_ORIGINS=https://your-webflow-site.webflow.io,https://yourdomain.com
-```
-
-### 2. Start the Backend
-
-The concierge routes are automatically loaded when `ENABLE_CONCIERGE=true`:
-
-```bash
-cd backend
-npm install
-npm start
-```
-
-You should see:
-```
-🎯 Web Concierge feature enabled
-✅ Web Concierge routes mounted at /api/chat
-```
-
-### 3. Deploy the Widget
-
-#### Option A: Standalone HTML (Development)
-
-1. Open `concierge/widget/index.html` in a browser
-2. Update the `API_BASE_URL` constant to point to your backend
-
-#### Option B: Webflow Integration
-
-1. Add a custom HTML embed to your Webflow page:
-
-```html
-<div id="flypost-concierge"></div>
-<script>
-  window.FLYPOST_API_BASE = 'https://your-backend-url.com';
-</script>
-<script src="https://your-cdn.com/flypost-concierge.min.js"></script>
-```
-
-2. Or inline the widget code directly in Webflow's custom code section
-
-#### Option C: Netlify Deployment
-
-Add to `netlify.toml`:
-
-```toml
-[[redirects]]
-  from = "/concierge"
-  to = "/concierge/widget/index.html"
-  status = 200
-```
-
-## API Reference
+## API Endpoints
 
 ### POST /api/chat
-
-Chat with the concierge to discover nearby events.
 
 **Request:**
 ```json
 {
-  "message": "What events are happening near me?",
+  "message": "What's happening in Santa Monica?",
   "lat": 34.0195,
   "lng": -118.4912,
-  "brokerageId": "optional-brokerage-id",
   "conversationHistory": []
 }
 ```
+
+**Note:** This is a global public discovery interface. Any `brokerageId` in the request is silently ignored.
 
 **Response:**
 ```json
 {
   "success": true,
-  "message": "Here are the open houses in your area this weekend:",
+  "message": "## Open Houses in Santa Monica...",
   "listings": [
     {
-      "address": "123 Main St",
-      "city": "Santa Monica",
-      "state": "CA",
-      "zipCode": "90401",
-      "openHouse": "Saturday Dec 14 · 1:00 PM - 4:00 PM",
-      "beds": 3,
-      "baths": 2.5,
-      "price": "$1,495,000",
-      "sqft": "2,100",
-      "distance": "0.5 miles",
-      "features": "Ocean views, updated kitchen, hardwood floors",
-      "summary": "Stunning coastal home with panoramic ocean views.",
-      "agent": {
-        "name": "Jane Smith",
-        "phone": "310-555-0123",
-        "email": "jane@example.com",
-        "brokerage": "Vista Sotheby's International Realty"
-      }
+      "eventId": "evt_abc123",
+      "shareUrl": "https://goflypost.com/e/...",
+      "what": { "type": "open_house", "label": "Open House at 2517 24th St" },
+      "where": { "address": "2517 24th St, Santa Monica, CA 90403" },
+      "when": { "start": "2026-02-01T21:00:00Z", "displayLocal": "1:00 PM – 4:00 PM PT" }
     }
-  ],
-  "scheduleNote": null,
-  "areaContext": null,
-  "suggestedFollowUps": [
-    "Can you tell me more about the property at 123 Main St?",
-    "Are there any open houses tomorrow?",
-    "What about events in neighboring cities?"
-  ],
-  "timestamp": "2024-01-01T12:00:00.000Z"
+  ]
 }
 ```
-
-**Rate Limits:**
-- 20 requests per 15 minutes per IP
-
-**Enhanced Features:**
-
-1. **Structured Listing Output**
-   - Complete property details (beds, baths, price, sqft)
-   - Location data (address, city, state, ZIP code)
-   - Distance from user location
-   - Agent contact information with brokerage
-   - Property features and compelling summary
-
-2. **Interactive Follow-Ups**
-   - AI-generated suggested questions based on results
-   - Contextual follow-ups that adapt to the conversation
-   - 2-4 relevant suggestions per response
-
-3. **Conversation History**
-   - Multi-turn conversations with context
-   - Pass previous messages in `conversationHistory` array
-   - AI references prior questions and results
-   - History limited to last 10 messages for efficiency
-
-4. **Dynamic Date Filtering**
-   - Natural language date understanding
-   - "this weekend", "today", "tomorrow", "next week"
-   - Automatic date calculation based on current time
-   - Schedule notes when no events match exact dates
-
-5. **Tier 1/Tier 2 Data Model**
-   - **Tier 1**: Verified listing data from Flypost events
-   - **Tier 2**: General area context with disclosure warnings
-   - Clear separation between factual and contextual information
 
 ### GET /api/chat/health
 
-Health check for the concierge service.
+Health check for concierge service.
 
-**Response:**
-```json
-{
-  "status": "healthy",
-  "service": "web-concierge",
-  "timestamp": "2024-01-01T12:00:00.000Z",
-  "configured": true
-}
-```
+## SOT Alignment
 
-## Security Features
+Follows `FLYPOST-MVP-2.0-SOURCE-OF-TRUTH_Version10.md`:
+- Tier 1 authoritative data from Discovery Protocol
+- Tier 2 disclosure for general knowledge (exact wording)
+- Never hallucinate events or attendance
+- Always use Flypost share URLs as primary CTAs
+- Never claim attendance without API confirmation
 
-### Rate Limiting
-- 20 chat requests per IP per 15 minutes
-- Prevents abuse and controls OpenAI API costs
-
-### CORS Protection
-- Configurable allowed origins via `CONCIERGE_ALLOWED_ORIGINS`
-- Prevents unauthorized cross-origin requests
-
-### Request Validation
-- Validates message format and content
-- Validates coordinate ranges
-- Sanitizes all user inputs
-
-### GDPR Compliance
-- No PII stored in logs
-- Only logs: coordinates (rounded to 4 decimals), message length, timestamp
-- No cookies or tracking
-
-### Timeout Protection
-- 10-second timeout on backend API calls
-- Prevents hanging requests
-
-## Feature Flag
-
-The Web Concierge is controlled by the `ENABLE_CONCIERGE` environment variable:
-
-- `ENABLE_CONCIERGE=true` - Feature enabled
-- `ENABLE_CONCIERGE=false` or unset - Feature disabled (default)
-
-When disabled, the `/api/chat` endpoint is not mounted, ensuring **zero impact** on the production v4 ingestion loop.
-
-## Customization
-
-### Widget Styling
-
-Edit `concierge/widget/index.html` to customize:
-
-- **Colors**: Update the gradient in `.flypost-concierge-header`
-- **Size**: Adjust `max-width` in `.flypost-concierge-widget`
-- **Messages**: Change height in `.flypost-concierge-messages`
-
-### System Prompt
-
-Edit `backend/src/concierge/chatHandler.js` to customize the AI assistant's behavior:
-
-```javascript
-const systemPrompt = `You are a helpful Web Concierge assistant...`
-```
-
-### Rate Limits
-
-Edit `backend/src/concierge/routes.js` to adjust rate limits:
-
-```javascript
-const chatLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,  // window
-  max: 20,                    // max requests
-})
-```
-
-## Monitoring
-
-### Logs
-
-The concierge logs all requests (GDPR-compliant):
+## File Structure
 
 ```
-🤖 Concierge chat request: lat=34.0195, lng=-118.4912, msg_length=42
-✅ Concierge response generated (1234ms)
+concierge/
+├── README.md                    # This file
+├── USAGE.md                     # API usage examples
+├── widget/
+│   └── index.html               # Standalone UI harness
+└── (backend integration in backend/src/concierge/)
 ```
-
-### Errors
-
-Errors are logged with details:
-
-```
-❌ Concierge error: OpenAI API timeout
-```
-
-## Testing
-
-### Manual Testing
-
-1. Start the backend with `ENABLE_CONCIERGE=true`
-2. Open the widget in a browser
-3. Allow location access (or use default location)
-4. Send a message: "What events are near me?"
-5. Verify the response includes nearby events
-
-### Health Check
-
-```bash
-curl http://localhost:3001/api/chat/health
-```
-
-### Chat API Test
-
-```bash
-curl -X POST http://localhost:3001/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "What events are happening near Santa Monica?",
-    "lat": 34.0195,
-    "lng": -118.4912
-  }'
-```
-
-## Troubleshooting
-
-### Widget doesn't load
-
-- Check browser console for errors
-- Verify `API_BASE_URL` is correct
-- Check CORS settings in backend
-
-### "Location access denied"
-
-- Widget uses default location (Santa Monica, CA)
-- User can still chat normally
-
-### "Too many chat requests"
-
-- Rate limit exceeded
-- Wait 15 minutes or adjust rate limits
-
-### OpenAI errors
-
-- Verify `OPENAI_API_KEY` is set
-- Check API key has sufficient credits
-- Check OpenAI service status
-
-## Cost Considerations
-
-### OpenAI API Costs
-
-- Model: GPT-4o-mini (cost-effective)
-- Average cost: ~$0.001-0.002 per chat message
-- Rate limit: 20 requests/15min/IP = max ~$0.04/hour/IP
-
-### Recommendations
-
-- Monitor OpenAI usage dashboard
-- Adjust rate limits based on budget
-- Consider switching to GPT-3.5-turbo for lower costs
-- Implement user authentication for better control
-
-## Deployment Checklist
-
-- [ ] Set `ENABLE_CONCIERGE=true`
-- [ ] Set `OPENAI_API_KEY`
-- [ ] Configure `CONCIERGE_ALLOWED_ORIGINS`
-- [ ] Test chat endpoint locally
-- [ ] Test widget with real location
-- [ ] Deploy backend
-- [ ] Deploy widget to CDN or embed in Webflow
-- [ ] Monitor logs and costs
-- [ ] Set up alerts for high usage
-
-## Support
-
-For issues or questions:
-
-1. Check the logs for error messages
-2. Verify all environment variables are set
-3. Test the health endpoint
-4. Check the main v4 README for backend setup
-
-## License
-
-Apache-2.0 (same as parent project)
