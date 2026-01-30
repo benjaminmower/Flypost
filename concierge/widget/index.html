@@ -288,7 +288,10 @@
       max-width: 100%;
     }
 
-    /* Primary Flypost share links */
+    /* Primary Flypost share links 
+       Note: This selector matches the standard Flypost share URL pattern: goflypost.com/e/
+       If the URL format changes, update this selector accordingly.
+    */
     .concierge-message a[href*="goflypost.com/e/"] {
       display: inline-flex;
       align-items: center;
@@ -850,12 +853,14 @@
           }
         } catch (streamError) {
           console.error('Streaming error:', streamError);
-          hideTyping();
-          // Show error in the message element
+          // Show error in the message element if we have partial content
           if (messageElement && accumulatedMessage) {
             updateMessageDisplay(messageElement, accumulatedMessage, true);
+          } else if (messageElement) {
+            // No content received, show error
+            messageElement.textContent = 'Error: Failed to receive response. Please try again.';
           }
-          throw streamError;
+          // Don't re-throw - error is handled here
         }
         
       } catch (error) {
