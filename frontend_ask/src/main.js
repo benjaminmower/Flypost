@@ -20,6 +20,149 @@ marked.use({
   }
 })
 
+/**
+ * Enhance property markdown with visual cards, badges, and animations
+ * Detects property sections (### 🏠 headers) and transforms them
+ */
+function enhancePropertyCards(html) {
+  // Track property card count for stagger animation
+  let propertyCardIndex = 0
+  
+  // Split content by property headers (### 🏠)
+  const propertyPattern = /(<h3[^>]*>🏠[^<]*<\/h3>)/g
+  const parts = html.split(propertyPattern)
+  
+  let result = ''
+  let inPropertyCard = false
+  let currentCard = ''
+  
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    
+    // Check if this is a property header
+    if (part.match(/^<h3[^>]*>🏠/)) {
+      // If we were building a card, close it
+      if (inPropertyCard && currentCard) {
+        result += wrapPropertyCard(currentCard, propertyCardIndex)
+        propertyCardIndex++
+        currentCard = ''
+      }
+      // Start new card
+      inPropertyCard = true
+      currentCard = part
+    } else if (inPropertyCard) {
+      // Check if we hit a separator (hr tag) or another heading
+      if (part.includes('<hr>') || part.match(/<h[1-6][^>]*>/)) {
+        // End of this property card
+        const beforeSeparator = part.split(/<hr>|<h[1-6][^>]*>/)[0]
+        currentCard += beforeSeparator
+        result += wrapPropertyCard(currentCard, propertyCardIndex)
+        propertyCardIndex++
+        
+        // Add the separator/heading and remaining content
+        result += part.substring(beforeSeparator.length)
+        inPropertyCard = false
+        currentCard = ''
+      } else {
+        // Continue building current card
+        currentCard += part
+      }
+    } else {
+      // Not in a property card, add as-is
+      result += part
+    }
+  }
+  
+  // Close any remaining open card
+  if (inPropertyCard && currentCard) {
+    result += wrapPropertyCard(currentCard, propertyCardIndex)
+  }
+  
+  return result
+}
+
+/**
+ * Wrap property content in a card div with enhancements
+ */
+function wrapPropertyCard(content, index) {
+  // Add icons and badges to the content
+  let enhanced = content
+  
+  // Transform distance with color-coded badge
+  enhanced = enhanced.replace(
+    /(<strong>Distance<\/strong>:\s*)([0-9.]+)\s*miles?/gi,
+    (match, prefix, distance) => {
+      const dist = parseFloat(distance)
+      let badgeClass = 'distance-far'
+      if (dist < 0.5) badgeClass = 'distance-close'
+      else if (dist <= 1.5) badgeClass = 'distance-medium'
+      return `${prefix}<span class="property-detail"><span class="property-detail-icon">📍</span>${distance} mi</span><span class="distance-badge ${badgeClass}">${dist < 0.5 ? 'Very Close' : dist <= 1.5 ? 'Nearby' : 'Far'}</span>`
+    }
+  )
+  
+  // Transform price with color-coded badge (if present)
+  enhanced = enhanced.replace(
+    /\$([0-9,]+(?:\.[0-9]{2})?)\s*(?:M|Million|K|Thousand)?/gi,
+    (match) => {
+      // Extract numeric value
+      const numMatch = match.match(/\$([0-9,]+(?:\.[0-9]{2})?)/)
+      if (!numMatch) return match
+      
+      const value = parseFloat(numMatch[1].replace(/,/g, ''))
+      let priceValue = value
+      
+      // Check if it's in millions or thousands
+      if (match.match(/M|Million/i)) {
+        priceValue = value * 1000000
+      } else if (match.match(/K|Thousand/i)) {
+        priceValue = value * 1000
+      }
+      
+      // Determine badge class
+      let badgeClass = 'price-high'
+      if (priceValue < 1000000) badgeClass = 'price-low'
+      else if (priceValue <= 2000000) badgeClass = 'price-mid'
+      
+      return `<span class="property-detail"><span class="property-detail-icon">💰</span>${match}</span><span class="price-badge ${badgeClass}">${priceValue < 1000000 ? 'Affordable' : priceValue <= 2000000 ? 'Mid-Range' : 'Premium'}</span>`
+    }
+  )
+  
+  // Add bed icon
+  enhanced = enhanced.replace(
+    /([0-9]+)\s*bed(?:s|room)?(?:s)?/gi,
+    '<span class="property-detail"><span class="property-detail-icon">🛏️</span>$1 bed</span>'
+  )
+  
+  // Add bath icon
+  enhanced = enhanced.replace(
+    /([0-9.]+)\s*bath(?:s|room)?(?:s)?/gi,
+    '<span class="property-detail"><span class="property-detail-icon">🚿</span>$1 bath</span>'
+  )
+  
+  // Add sqft icon
+  enhanced = enhanced.replace(
+    /([0-9,]+)\s*sq\.?\s*ft\.?/gi,
+    '<span class="property-detail"><span class="property-detail-icon">📐</span>$1 sqft</span>'
+  )
+  
+  // Add time/when icon
+  enhanced = enhanced.replace(
+    /(<strong>When<\/strong>:)/gi,
+    '<strong><span class="property-detail-icon">⏰</span>When</strong>:'
+  )
+  
+  // Add address icon
+  enhanced = enhanced.replace(
+    /(<strong>Address<\/strong>:)/gi,
+    '<strong><span class="property-detail-icon">📍</span>Address</strong>:'
+  )
+  
+  // Stagger animation delay (100-150ms between cards)
+  const animationDelay = index * 120 // 120ms stagger
+  
+  return `<div class="property-card" style="animation-delay: ${animationDelay}ms;">${enhanced}</div>`
+}
+
 // DOM elements
 const chatForm = document.getElementById('chat-form')
 const chatInput = document.getElementById('chat-input')
@@ -119,7 +262,9 @@ async function handleChatSubmit(e) {
       // onToken
       (token) => {
         assistantContent += token
-        assistantBubble.innerHTML = marked.parse(assistantContent)
+        const renderedHtml = marked.parse(assistantContent)
+        const enhancedHtml = enhancePropertyCards(renderedHtml)
+        assistantBubble.innerHTML = enhancedHtml
         scrollToBottom()
       },
       // onError
