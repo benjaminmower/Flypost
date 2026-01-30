@@ -62,6 +62,195 @@
         #chat-transcript::-webkit-scrollbar-thumb { background: rgba(64, 201, 162, 0.2); border-radius: 10px; }
         /* Clamped scale: Mobile is punchy but fits; Desktop is massive. */
         .text-hero { font-size: clamp(2.4rem, 11vw, 8.5rem); letter-spacing: -0.04em; }
+        
+        /* Message bubbles */
+        .message {
+            padding: 16px;
+            margin: 8px 0;
+            border-radius: 12px;
+            line-height: 1.6;
+        }
+        .message.user {
+            background: rgba(64, 201, 162, 0.1);
+            border: 1px solid rgba(64, 201, 162, 0.3);
+            text-align: right;
+            margin-left: auto;
+            max-width: 80%;
+        }
+        .message.assistant {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            text-align: left;
+        }
+        .message.system {
+            background: rgba(98, 131, 149, 0.1);
+            border: 1px solid rgba(98, 131, 149, 0.2);
+            text-align: center;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .message.error {
+            background: rgba(216, 46, 126, 0.1);
+            border: 1px solid rgba(216, 46, 126, 0.3);
+            color: #ff6b9d;
+        }
+        
+        /* Property card animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Property card styling */
+        .property-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(64, 201, 162, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 16px 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 40px rgba(64, 201, 162, 0.05);
+            transition: all 0.3s ease;
+            animation: fadeInUp 0.5s ease-out forwards;
+            opacity: 0;
+        }
+        
+        .property-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 60px rgba(64, 201, 162, 0.15);
+            border-color: rgba(64, 201, 162, 0.4);
+        }
+        
+        /* Property card typography */
+        .property-card h3 {
+            color: #40c9a2;
+            font-size: 1.25em;
+            font-weight: 700;
+            margin-bottom: 12px;
+            line-height: 1.3;
+        }
+        
+        .property-card strong {
+            color: #f7f7f7;
+        }
+        
+        .property-card em {
+            color: rgba(247, 247, 247, 0.7);
+            font-style: italic;
+        }
+        
+        .property-card a {
+            color: #40c9a2;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        
+        .property-card a:hover {
+            color: #e0e03e;
+            text-decoration: underline;
+        }
+        
+        .property-card ul {
+            list-style: none;
+            padding: 0;
+            margin: 12px 0;
+        }
+        
+        .property-card li {
+            margin: 8px 0;
+            line-height: 1.5;
+        }
+        
+        /* Badge styling */
+        .distance-badge, .price-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 700;
+            margin-left: 8px;
+            white-space: nowrap;
+        }
+        
+        /* Distance badge colors */
+        .distance-badge.distance-close {
+            background: rgba(64, 201, 162, 0.2);
+            color: #40c9a2;
+            border: 1px solid rgba(64, 201, 162, 0.4);
+        }
+        
+        .distance-badge.distance-medium {
+            background: rgba(224, 224, 62, 0.2);
+            color: #e0e03e;
+            border: 1px solid rgba(224, 224, 62, 0.4);
+        }
+        
+        .distance-badge.distance-far {
+            background: rgba(98, 131, 149, 0.2);
+            color: #628395;
+            border: 1px solid rgba(98, 131, 149, 0.4);
+        }
+        
+        /* Price badge colors */
+        .price-badge.price-low {
+            background: rgba(64, 201, 162, 0.2);
+            color: #40c9a2;
+            border: 1px solid rgba(64, 201, 162, 0.4);
+        }
+        
+        .price-badge.price-mid {
+            background: rgba(98, 131, 149, 0.2);
+            color: #90b8d0;
+            border: 1px solid rgba(98, 131, 149, 0.4);
+        }
+        
+        .price-badge.price-high {
+            background: rgba(146, 82, 161, 0.2);
+            color: #b084cc;
+            border: 1px solid rgba(146, 82, 161, 0.4);
+        }
+        
+        /* Property detail with icons */
+        .property-detail {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .property-detail-icon {
+            font-size: 1em;
+        }
+        
+        /* Mobile responsive adjustments */
+        @media (max-width: 640px) {
+            .property-card {
+                padding: 16px;
+                margin: 12px 0;
+            }
+            
+            .property-card h3 {
+                font-size: 1.1em;
+            }
+            
+            .distance-badge, .price-badge {
+                font-size: 0.75em;
+                padding: 3px 8px;
+            }
+        }
+        
+        /* Accessibility: Disable animations for users who prefer reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .property-card {
+                animation: none;
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center p-4 md:p-10 text-center justify-start">
