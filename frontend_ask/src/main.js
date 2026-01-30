@@ -24,12 +24,24 @@ marked.use({
  * Enhance property markdown with visual cards, badges, and animations
  * Detects property sections (### 🏠 headers) and transforms them
  */
+
+// Distance thresholds (in miles)
+const DISTANCE_CLOSE_THRESHOLD = 0.5
+const DISTANCE_MEDIUM_THRESHOLD = 1.5
+
+// Price thresholds (in dollars)
+const PRICE_LOW_THRESHOLD = 1000000
+const PRICE_MID_THRESHOLD = 2000000
+
+// Animation stagger delay (in milliseconds)
+const STAGGER_DELAY_MS = 120
+
 function enhancePropertyCards(html) {
   // Track property card count for stagger animation
   let propertyCardIndex = 0
   
   // Split content by property headers (### 🏠)
-  const propertyPattern = /(<h3[^>]*>🏠[^<]*<\/h3>)/g
+  const propertyPattern = /(<h3[^>]*>\s*🏠[^<]*<\/h3>)/g
   const parts = html.split(propertyPattern)
   
   let result = ''
@@ -40,7 +52,7 @@ function enhancePropertyCards(html) {
     const part = parts[i]
     
     // Check if this is a property header
-    if (part.match(/^<h3[^>]*>🏠/)) {
+    if (part.match(/^<h3[^>]*>\s*🏠/)) {
       // If we were building a card, close it
       if (inPropertyCard && currentCard) {
         result += wrapPropertyCard(currentCard, propertyCardIndex)
@@ -94,15 +106,23 @@ function wrapPropertyCard(content, index) {
     (match, prefix, distance) => {
       const dist = parseFloat(distance)
       let badgeClass = 'distance-far'
-      if (dist < 0.5) badgeClass = 'distance-close'
-      else if (dist <= 1.5) badgeClass = 'distance-medium'
-      return `${prefix}<span class="property-detail"><span class="property-detail-icon">📍</span>${distance} mi</span><span class="distance-badge ${badgeClass}">${dist < 0.5 ? 'Very Close' : dist <= 1.5 ? 'Nearby' : 'Far'}</span>`
+      let badgeLabel = 'Far'
+      
+      if (dist < DISTANCE_CLOSE_THRESHOLD) {
+        badgeClass = 'distance-close'
+        badgeLabel = 'Very Close'
+      } else if (dist <= DISTANCE_MEDIUM_THRESHOLD) {
+        badgeClass = 'distance-medium'
+        badgeLabel = 'Nearby'
+      }
+      
+      return `${prefix}<span class="property-detail"><span class="property-detail-icon">📍</span>${distance} mi</span><span class="distance-badge ${badgeClass}">${badgeLabel}</span>`
     }
   )
   
-  // Transform price with color-coded badge (if present)
+  // Transform price with color-coded badge (only when M/Million/K/Thousand is present)
   enhanced = enhanced.replace(
-    /\$([0-9,]+(?:\.[0-9]{2})?)\s*(?:M|Million|K|Thousand)?/gi,
+    /\$([0-9,]+(?:\.[0-9]{2})?)\s*(M|Million|K|Thousand)/gi,
     (match) => {
       // Extract numeric value
       const numMatch = match.match(/\$([0-9,]+(?:\.[0-9]{2})?)/)
@@ -118,24 +138,31 @@ function wrapPropertyCard(content, index) {
         priceValue = value * 1000
       }
       
-      // Determine badge class
+      // Determine badge class and label
       let badgeClass = 'price-high'
-      if (priceValue < 1000000) badgeClass = 'price-low'
-      else if (priceValue <= 2000000) badgeClass = 'price-mid'
+      let badgeLabel = 'Premium'
       
-      return `<span class="property-detail"><span class="property-detail-icon">💰</span>${match}</span><span class="price-badge ${badgeClass}">${priceValue < 1000000 ? 'Affordable' : priceValue <= 2000000 ? 'Mid-Range' : 'Premium'}</span>`
+      if (priceValue < PRICE_LOW_THRESHOLD) {
+        badgeClass = 'price-low'
+        badgeLabel = 'Affordable'
+      } else if (priceValue <= PRICE_MID_THRESHOLD) {
+        badgeClass = 'price-mid'
+        badgeLabel = 'Mid-Range'
+      }
+      
+      return `<span class="property-detail"><span class="property-detail-icon">💰</span>${match}</span><span class="price-badge ${badgeClass}">${badgeLabel}</span>`
     }
   )
   
   // Add bed icon
   enhanced = enhanced.replace(
-    /([0-9]+)\s*bed(?:s|room)?(?:s)?/gi,
+    /([0-9]+)\s*bed(?:room)?s?/gi,
     '<span class="property-detail"><span class="property-detail-icon">🛏️</span>$1 bed</span>'
   )
   
   // Add bath icon
   enhanced = enhanced.replace(
-    /([0-9.]+)\s*bath(?:s|room)?(?:s)?/gi,
+    /([0-9.]+)\s*bath(?:room)?s?/gi,
     '<span class="property-detail"><span class="property-detail-icon">🚿</span>$1 bath</span>'
   )
   
@@ -157,8 +184,8 @@ function wrapPropertyCard(content, index) {
     '<strong><span class="property-detail-icon">📍</span>Address</strong>:'
   )
   
-  // Stagger animation delay (100-150ms between cards)
-  const animationDelay = index * 120 // 120ms stagger
+  // Stagger animation delay between cards
+  const animationDelay = index * STAGGER_DELAY_MS
   
   return `<div class="property-card" style="animation-delay: ${animationDelay}ms;">${enhanced}</div>`
 }
