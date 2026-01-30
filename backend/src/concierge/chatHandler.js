@@ -963,7 +963,9 @@ The user's current location is approximately: ${locString}`
       }
     }
     
-    // **FIX: Stream the final response if onToken callback exists**
+    // After tool calls complete via non-streaming API (when hasToolCalls is detected mid-stream),
+    // the final response content needs to be sent via onToken for streaming endpoints.
+    // This ensures streaming clients receive the complete response.
     if (onToken) {
       onToken(responseMessage.content)
     }
