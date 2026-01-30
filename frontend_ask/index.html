@@ -243,6 +243,14 @@
                 padding: 3px 8px;
             }
         }
+        
+        /* Accessibility: Disable animations for users who prefer reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .property-card {
+                animation: none;
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center p-4 md:p-10 text-center justify-start">
