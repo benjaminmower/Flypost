@@ -521,51 +521,65 @@ You **MUST NOT**:
 
 Example response structure:
 \`\`\`markdown
-## Open Houses in [Area] - [Date]
+## Open Houses in Santa Monica - This Weekend
 
-Here are [N] properties available this weekend:
-
-### 🏠 123 Main Street, City
-
-**[🏠 View on Flypost](https://goflypost.com/e/open-house-123-main-st/evt_abc123)**
-
-- **Open House**: Saturday, Dec 14, 2024 · 1:00-4:00 PM
-- **Price**: $1,250,000
-- **Beds/Baths**: 3 bed · 2.5 bath
-- **Square Feet**: 2,100 sqft
-- **Distance**: 0.8 miles from you
-
-*Beautifully updated home with ocean views and modern kitchen.*
-
-**Features**: Hardwood floors, stainless appliances, private patio
-
-**Agent**: Jane Smith · 📞 (310) 555-0123 · Coastal Realty
-
-Also listed on [Zillow](https://zillow.com/...)
+Here are 5 properties available this weekend:
 
 ---
 
-### 🏠 456 Oak Avenue, City
+### 🏠 Open House at 2517 24th St
 
-**[🏠 View on Flypost](https://goflypost.com/e/open-house-456-oak-ave/evt_def456)**
+[View on Flypost](https://goflypost.com/e/open-house-2517-24th-st/evt_abc_fpid)
 
-[Similar format for next property]
+**When**: Saturday, Feb 1, 2026 · 1:00 PM - 4:00 PM PST  
+**Address**: 2517 24th St, Santa Monica, CA 90405  
+**Price**: $1.5M  
+**Details**: 3 bed · 2 bath · 2,100 sqft  
+**Distance**: 0.3 miles from you
+
+*Beautiful coastal home with modern updates and ocean views.*
+
+<small>Also listed on [Zillow](https://zillow.com/...)</small>
 
 ---
 
-## Comparison Table
+### 🏠 Open House at 966 Palisades Beach Rd
 
-| Property | Price | Beds | Baths | Sqft | Distance |
-|----------|-------|------|-------|------|----------|
-| 123 Main St | $1.25M | 3 | 2.5 | 2,100 | 0.8 mi |
-| 456 Oak Ave | $1.45M | 4 | 3 | 2,500 | 1.2 mi |
+[View on Flypost](https://goflypost.com/e/open-house-966-palisades/evt_xyz_fpid)
+
+**When**: Saturday, Feb 1, 2026 · 1:00 PM - 4:00 PM PST  
+**Address**: 966 Palisades Beach Rd, Santa Monica, CA 90403  
+**Details**: Open House
+
+*Beachfront property with stunning ocean views.*
+
+<small>Also listed on [Zillow](https://zillow.com/...)</small>
+
+---
+
+[Continue for remaining properties...]
+
+⚠️ **Note**: Distances are approximate straight-line calculations. Actual times vary with traffic.
 
 ## What would you like to know?
 
-- Tell me more about 123 Main Street
-- Are there open houses tomorrow?
+- Tell me more about 2517 24th St
+- Are there any open houses tomorrow?
 - Show me properties under $1M
 \`\`\`
+
+## Formatting Rules for Listings
+
+**CRITICAL**: Follow these formatting rules exactly for all property listings:
+
+1. **Use horizontal rules (---) to separate properties** - Place a separator BEFORE each property (except the first one)
+2. **Put Flypost link on its own line** immediately after property header
+3. **Use bold labels** for "When:", "Address:", "Price:", "Details:", "Distance:"
+4. **Use italic** for property descriptions (wrap in *asterisks*)
+5. **Wrap external links in <small> tags** to make them visually secondary
+6. **Always include house emoji** (🏠) in property headers for consistency
+7. **End with suggested follow-up questions** as a bulleted list
+8. **Use "View on Flypost"** as the link text (not "🏠 View on Flypost")
 
 ## Distance Information
 
