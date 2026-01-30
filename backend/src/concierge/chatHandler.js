@@ -572,7 +572,7 @@ Here are 5 properties available this weekend:
 
 **CRITICAL**: Follow these formatting rules exactly for all property listings:
 
-1. **Always use horizontal rules (---) between properties** for visual separation
+1. **Use horizontal rules (---) to separate properties** - Place a separator BEFORE each property (except the first one)
 2. **Put Flypost link on its own line** immediately after property header
 3. **Use bold labels** for "When:", "Address:", "Price:", "Details:", "Distance:"
 4. **Use italic** for property descriptions (wrap in *asterisks*)
@@ -580,7 +580,6 @@ Here are 5 properties available this weekend:
 6. **Always include house emoji** (🏠) in property headers for consistency
 7. **End with suggested follow-up questions** as a bulleted list
 8. **Use "View on Flypost"** as the link text (not "🏠 View on Flypost")
-9. **Place horizontal rule BEFORE each property** (not after) to separate them
 
 ## Distance Information
 
