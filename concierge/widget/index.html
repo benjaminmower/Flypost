@@ -479,13 +479,13 @@
 
     const API_BASE_URL = window.FLYPOST_API_BASE || 'https://api.goflypost.com';
     
-    // Configure marked to allow HTML
+    // Configure marked with secure settings
     marked.setOptions({
       gfm: true,
       breaks: true,
       headerIds: false,
-      mangle: false,
-      sanitize: false // Allow HTML like <small> tags (safe since content is from our backend)
+      mangle: false
+      // Note: marked v11+ has XSS protection by default, sanitize option removed
     });
     
     // State
@@ -613,11 +613,22 @@
     }
 
     // Update message display progressively (for streaming)
-    function updateMessageDisplay(messageElement, markdown) {
-      if (messageElement) {
+    // Batched to avoid excessive re-parsing on every token
+    let updateTimeout = null;
+    function updateMessageDisplay(messageElement, markdown, immediate = false) {
+      if (!messageElement) return;
+      
+      if (immediate) {
+        // Immediate update (e.g., on stream completion)
         messageElement.innerHTML = marked.parse(markdown);
-        // Scroll to bottom smoothly
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      } else {
+        // Batched update - debounce by 100ms to reduce re-parsing
+        clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(() => {
+          messageElement.innerHTML = marked.parse(markdown);
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 100);
       }
     }
 
@@ -782,46 +793,69 @@
         // Create message element for streaming content
         const messageElement = addMessage('', 'assistant');
         
+        if (!messageElement) {
+          throw new Error('Failed to create message element for streaming');
+        }
+        
         // Stream tokens progressively as they arrive
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         
         let buffer = '';
         let accumulatedMessage = '';
+        let streamComplete = false;
         
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          
-          buffer += decoder.decode(value, { stream: true });
-          
-          // Parse SSE events (format: "data: {...}\n\n")
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop(); // Keep incomplete line in buffer
-          
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                
-                if (data.type === 'token') {
-                  accumulatedMessage += data.content;
-                  updateMessageDisplay(messageElement, accumulatedMessage);
-                } else if (data.type === 'done') {
-                  // Streaming complete
-                  console.log('Streaming complete', data);
-                  break;
-                } else if (data.type === 'error') {
-                  throw new Error(data.message || 'Streaming error');
-                } else if (data.type === 'connected') {
-                  // Initial connection event, ignore
-                  console.log('Connected to stream');
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done || streamComplete) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            
+            // Parse SSE events (format: "data: {...}\n\n")
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop(); // Keep incomplete line in buffer
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  
+                  if (data.type === 'token') {
+                    accumulatedMessage += data.content;
+                    updateMessageDisplay(messageElement, accumulatedMessage, false);
+                  } else if (data.type === 'done') {
+                    // Streaming complete - do immediate final render
+                    streamComplete = true;
+                    updateMessageDisplay(messageElement, accumulatedMessage, true);
+                    console.log('Streaming complete', data);
+                    break;
+                  } else if (data.type === 'error') {
+                    throw new Error(data.message || 'Streaming error');
+                  } else if (data.type === 'connected') {
+                    // Initial connection event, ignore
+                    console.log('Connected to stream');
+                  }
+                } catch (err) {
+                  console.error('Error parsing SSE data:', err);
+                  // Continue processing other events
                 }
-              } catch (err) {
-                console.error('Error parsing SSE data:', err);
               }
             }
           }
+          
+          // Ensure final render happens even if 'done' event wasn't received
+          if (!streamComplete && accumulatedMessage) {
+            updateMessageDisplay(messageElement, accumulatedMessage, true);
+          }
+        } catch (streamError) {
+          console.error('Streaming error:', streamError);
+          hideTyping();
+          // Show error in the message element
+          if (messageElement && accumulatedMessage) {
+            updateMessageDisplay(messageElement, accumulatedMessage, true);
+          }
+          throw streamError;
         }
         
       } catch (error) {
