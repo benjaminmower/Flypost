@@ -948,6 +948,9 @@ The user's current location is approximately: ${locString}`
     // Explicitly handle empty/null response content
     if (!responseMessage.content || responseMessage.content.trim() === '') {
       const errorMsg = "I apologize, but I couldn't generate a response. Please try rephrasing your question."
+      if (onToken) {
+        onToken(errorMsg)
+      }
       return {
         success: true,
         message: errorMsg,
@@ -960,9 +963,14 @@ The user's current location is approximately: ${locString}`
       }
     }
     
+    // After tool calls complete via non-streaming API (when hasToolCalls is detected mid-stream),
+    // the final response content needs to be sent via onToken for streaming endpoints.
+    // This ensures streaming clients receive the complete response.
+    if (onToken) {
+      onToken(responseMessage.content)
+    }
+    
     // Return Markdown-formatted response with structured events
-    // Note: onToken callback is only used during streaming in the tool call loop above
-    // For final non-streaming responses, we return the full content
     return {
       success: true,
       message: responseMessage.content,
