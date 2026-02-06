@@ -1,4 +1,7 @@
-https://www.goflypost.com/*  https://goflypost.com/:splat  301!
 /robots.txt  /robots.txt  200
+/sitemap.xml /sitemap.xml 200
+
 /e/*  https://api.goflypost.com/e/:splat  200!
-/*    https://flypost.webflow.io/:splat  200!
+/*    https://flypost.webflow.io/:splat   200!
+
+https://www.goflypost.com/*  https://goflypost.com/:splat  301!
