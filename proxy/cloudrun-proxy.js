@@ -19,33 +19,86 @@ const allowedOrigins = {
 };
 
 // CORS middleware
+// NOTE: CORS is a browser policy. For disallowed origins, we do NOT throw an error;
+// we just don't grant CORS headers (cb(null, false)) to avoid 5xx noise for probes.
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // Allow non-origin requests (e. g., server-to-server)
+      if (!origin) return cb(null, true); // Allow non-origin requests (e.g., server-to-server)
       const allowedMethods = allowedOrigins[origin];
       if (allowedMethods) return cb(null, true);
-      return cb(new Error('Not allowed by CORS: ' + origin));
+      return cb(null, false);
     },
-    credentials:  true,
+    credentials: true,
   }),
 );
 
 app.use(express.json({ limit: '1mb' }));
 
+/**
+ * Cheap probe shield: terminate known-noise paths immediately so they never hit forward()/backend.
+ * This does NOT stop Cloud Run invocation cost, but it *does* prevent backend calls and reduces work.
+ * For stopping Cloud Run invocations, put Cloud Armor / HTTPS LB / CDN in front.
+ */
+app.use((req, res, next) => {
+  const path = (req.path || '').toLowerCase();
+
+  // robots.txt: serve static + cacheable
+  if (req.method === 'GET' && path === '/robots.txt') {
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=86400'); // 24h (tune as desired)
+    return res.status(200).send(['User-agent: *', 'Disallow: /', ''].join('\n'));
+  }
+
+  // Optional: fast-fail very common bot probe targets
+  const isCommonProbe =
+    path === '/.env' ||
+    path === '/.git' ||
+    path.startsWith('/.git/') ||
+    path === '/wp-login.php' ||
+    path.startsWith('/wp-admin') ||
+    path === '/phpmyadmin' ||
+    path.startsWith('/phpmyadmin/') ||
+    path === '/admin' ||
+    path === '/administrator';
+
+  if (isCommonProbe) {
+    // Return 404 to avoid “interesting” responses
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.status(404).send('Not found');
+  }
+
+  next();
+});
+
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     // Handle preflight requests
     res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.set(
-      'Access-Control-Allow-Methods',
-      'GET,POST,OPTIONS',
-    );
+    res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-flypost-write-token');
     res.sendStatus(204); // Preflight response
     return;
   }
-  console.log('proxy incoming:', req.method, req.originalUrl, 'from', req.headers.origin);
+
+  // Reduce log noise/cost for probe endpoints
+  const path = (req.path || '').toLowerCase();
+  const skipLog =
+    path === '/robots.txt' ||
+    path === '/.env' ||
+    path === '/.git' ||
+    path.startsWith('/.git/') ||
+    path === '/wp-login.php' ||
+    path.startsWith('/wp-admin') ||
+    path === '/phpmyadmin' ||
+    path.startsWith('/phpmyadmin/') ||
+    path === '/admin' ||
+    path === '/administrator';
+
+  if (!skipLog) {
+    console.log('proxy incoming:', req.method, req.originalUrl, 'from', req.headers.origin);
+  }
+
   next();
 });
 
@@ -59,7 +112,7 @@ function enforceOriginMethods(req, res, next) {
 
   const origin = req.headers.origin;
   const allowedMethods = allowedOrigins[origin];
-  if (allowedMethods && ! allowedMethods.includes(req.method)) {
+  if (allowedMethods && !allowedMethods.includes(req.method)) {
     console.log(`⛔ Method ${req.method} not allowed for origin ${origin}`);
     return res.status(405).json({
       success: false,
@@ -71,19 +124,14 @@ function enforceOriginMethods(req, res, next) {
 
 app.use(enforceOriginMethods);
 
-// Authentication is now handled in forward.js (single source of truth)
-
+// Authentication is handled in forward.js (single source of truth)
 const forward = createForward();
 
 app.get('/', (req, res) => {
   res.status(200).json({ status: 'proxy running' });
 });
 
-// --- existing forward route registrations ---
-app.get('/', (req, res) => {
-  res.status(200).json({ status: 'proxy running' });
-});
-
+// --- forward route registrations ---
 app.get('/health', forward);
 app.get('/v1/events/near', forward);
 app.get('/v1/events/:event_id', forward);
@@ -92,7 +140,6 @@ app.get('/e/:slug/:fpid', forward);
 app.post('/api/parse-and-publish', forward);
 app.use('/api', forward);
 
-// <-- ADD THESE LINES HERE (forward presence/feedback writes) -->
 // Forward explicit endpoints
 app.post('/v1/presence/check-in', forward);
 app.post('/v1/feedback/submit', forward);
@@ -100,7 +147,6 @@ app.post('/v1/feedback/submit', forward);
 // Optionally forward entire prefixes (useful for future subpaths)
 app.use('/v1/presence', forward);
 app.use('/v1/feedback', forward);
-// -----------------------------------------------------------------
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 app.listen(PORT, '0.0.0.0', () => {
