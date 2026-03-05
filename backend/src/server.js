@@ -336,6 +336,10 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       })
     }
 
+    // Accept an explicit existingEventId to target a specific event for update
+    // This is separate from flypost.eventId (which is always stripped)
+    const explicitExistingEventId = body.existingEventId || null
+
     // Accept aliases for ergonomics
     let naturalLanguageInput =
       body.naturalLanguageInput ?? body.text ?? body.input
@@ -596,6 +600,20 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
         }
       } catch (err) {
         console.error('⚠️ Error checking event identity:', err)
+      }
+    } else {
+      console.log(`⚠️  Could not compute event identity (missing address or startDate) — will insert as new`)
+    }
+
+    // 4b. If caller supplied existingEventId, use direct lookup (overrides identity match)
+    if (!existingEvent && explicitExistingEventId) {
+      const useFirestore = isFirestoreEnabled()
+      const byId = await getEventByIdAny(explicitExistingEventId, useFirestore)
+      if (byId) {
+        existingEvent = byId
+        isUpdate = true
+        updateCount = (byId.flypost?.updateCount || 0) + 1
+        console.log(`🎯 Explicit existingEventId matched: ${explicitExistingEventId}`)
       }
     }
 
@@ -1759,17 +1777,21 @@ app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
       console.log(`🛡️  Stripped client-supplied eventId (server will generate)`)
     }
     
+    // Accept an explicit existingEventId to target a specific event for update
+    // This is separate from flypost.eventId (which is always stripped)
+    const explicitExistingEventId = body.existingEventId || null
+
     // 4. Normalize dates
     normalizeEventDates(event)
-    
+
     // 5. Check for existing event by identity
     let existingEvent = null
     let isUpdate = false
     let updateCount = 0
-    
+
     // First compute identity to check for existing
     const tempIdentity = computeEventIdentity(event)
-    
+
     if (tempIdentity) {
       try {
         existingEvent = await findEventByIdentity(tempIdentity)
@@ -1782,8 +1804,22 @@ app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
         console.error('⚠️ Error checking event identity:', err)
         // Continue as new event if check fails
       }
+    } else {
+      console.log(`⚠️  Could not compute event identity (missing address or startDate) — will insert as new`)
     }
-    
+
+    // 5b. Fallback: direct lookup by caller-supplied existingEventId
+    if (!existingEvent && explicitExistingEventId) {
+      const useFirestore = isFirestoreEnabled()
+      const byId = await getEventByIdAny(explicitExistingEventId, useFirestore)
+      if (byId) {
+        existingEvent = byId
+        isUpdate = true
+        updateCount = (byId.flypost?.updateCount || 0) + 1
+        console.log(`🎯 Explicit existingEventId matched: ${explicitExistingEventId}`)
+      }
+    }
+
     // 6. Enrich event with server-side metadata
     event = enrichEventMetadata(event, {
       isUpdate,
