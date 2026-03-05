@@ -8,6 +8,8 @@ frontend_presence/node_modules/
 frontend_presence/dist/
 proxy/node_modules/
 backend/node_modules/
+**/backend/node_modules.nosync/
+backend/node_modules.nosync/
 functions/node_modules/
 functions/lib/
 node_modules
@@ -15,3 +17,5 @@ dist/
 .env
 .env.local
 concierge/widget/embeddable.html
+**/node_modules.nosync/
+node_modules.nosync/

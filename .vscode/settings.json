@@ -1,0 +1,8 @@
+{
+  "files.exclude": {
+    "**/*.test.js": true,
+    "**/*.spec.js": true,
+    "**/README.md": true,
+    "**/__tests__/": true
+  }
+}
