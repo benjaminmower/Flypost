@@ -43,11 +43,60 @@ app.use(express.json({ limit: '1mb' }));
 app.use((req, res, next) => {
   const path = (req.path || '').toLowerCase();
 
-  // robots.txt: serve static + cacheable
+  // robots.txt: block crawlers from API routes but allow discovery files
   if (req.method === 'GET' && path === '/robots.txt') {
     res.set('Content-Type', 'text/plain; charset=utf-8');
-    res.set('Cache-Control', 'public, max-age=86400'); // 24h (tune as desired)
-    return res.status(200).send(['User-agent: *', 'Disallow: /', ''].join('\n'));
+    res.set('Cache-Control', 'public, max-age=86400');
+    return res.status(200).send(
+      ['User-agent: *', 'Disallow: /', 'Allow: /llms.txt', 'Allow: /openapi.json', ''].join('\n'),
+    );
+  }
+
+  // llms.txt: machine-readable API description for LLM agents
+  if (req.method === 'GET' && path === '/llms.txt') {
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=86400');
+    return res.status(200).send(
+      [
+        '# Flypost API',
+        '',
+        '> Flypost is an open-house and local-event registry. Use this API to discover nearby open houses by location, publish events from natural language, verify buyer attendance, and collect post-visit feedback.',
+        '',
+        'Base URL: https://api.goflypost.com',
+        'OpenAPI spec: https://api.goflypost.com/openapi.json',
+        '',
+        '## Public endpoints (no auth required)',
+        '',
+        '- GET /v1/events/near?lat=&lng=&radius_mi=: Discover open houses and events near a coordinate. Returns name, dates, address, organizer, and listing URL.',
+        '- GET /v1/events/:event_id: Fetch a single event by its Flypost ID.',
+        '- POST /api/chat: Web Concierge — ask a natural-language question about nearby events. Pass { message, lat, lng }.',
+        '- GET /e/:slug/:fpid: Public HTML share page for an event.',
+        '- GET /e/:slug/:fpid/calendar.ics: Download event as iCal file.',
+        '',
+        '## Authenticated endpoints',
+        '',
+        'Pass your write token in the x-flypost-write-token header, or a Firebase ID token as Bearer.',
+        '',
+        '- POST /api/parse-and-publish: Publish an event from free-text (Instagram caption, MLS note, etc.). Pass { naturalLanguageInput }.',
+        '- POST /v1/events/upsert: Publish or update a structured event object.',
+        '',
+        '## Rate limits',
+        '',
+        '- Discovery (public): 100 req / 15 min per IP',
+        '- Discovery (brokerage api_key): 500 req / 15 min per IP',
+        '- Write endpoints: 50 req / 15 min per IP',
+        '- /api/chat: 20 req / 15 min per IP',
+        '',
+      ].join('\n'),
+    );
+  }
+
+  // openapi.json: machine-readable OpenAPI 3.1 spec
+  if (req.method === 'GET' && path === '/openapi.json') {
+    res.set('Content-Type', 'application/json; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=86400');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return res.status(200).json(require('./openapi.json'));
   }
 
   // Optional: fast-fail very common bot probe targets
@@ -85,6 +134,8 @@ app.use((req, res, next) => {
   const path = (req.path || '').toLowerCase();
   const skipLog =
     path === '/robots.txt' ||
+    path === '/llms.txt' ||
+    path === '/openapi.json' ||
     path === '/.env' ||
     path === '/.git' ||
     path.startsWith('/.git/') ||

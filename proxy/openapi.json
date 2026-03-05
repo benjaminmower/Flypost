@@ -1,0 +1,345 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Flypost API",
+    "version": "1.0.0",
+    "description": "Flypost is an open-house and local-event registry. Publish events from natural language, discover nearby open houses by location, verify buyer attendance, and collect post-visit feedback."
+  },
+  "servers": [
+    { "url": "https://api.goflypost.com", "description": "Production" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "writeToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-flypost-write-token",
+        "description": "Static write token issued per brokerage tenant."
+      },
+      "firebaseBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Firebase ID token for browser-authenticated users."
+      }
+    },
+    "schemas": {
+      "GeoPoint": {
+        "type": "object",
+        "properties": {
+          "latitude": { "type": "number" },
+          "longitude": { "type": "number" }
+        },
+        "required": ["latitude", "longitude"]
+      },
+      "Location": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "address": { "type": "string" },
+          "geo": { "$ref": "#/components/schemas/GeoPoint" }
+        }
+      },
+      "Organizer": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "telephone": { "type": "string" }
+        }
+      },
+      "Occurrence": {
+        "type": "object",
+        "properties": {
+          "occurrenceId": { "type": "string" },
+          "startDate": { "type": "string", "format": "date-time" },
+          "endDate": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "eventId": { "type": "string" },
+          "name": { "type": "string" },
+          "startDate": { "type": "string", "format": "date-time" },
+          "endDate": { "type": "string", "format": "date-time" },
+          "location": { "$ref": "#/components/schemas/Location" },
+          "organizer": { "$ref": "#/components/schemas/Organizer" },
+          "url": { "type": "string", "format": "uri" },
+          "occurrences": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Occurrence" }
+          },
+          "flypost": {
+            "type": "object",
+            "properties": {
+              "eventId": { "type": "string" },
+              "brokerageId": { "type": "string" },
+              "listPrice": { "type": "number" },
+              "listPriceDisplay": { "type": "string" },
+              "updateCount": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "DiscoveryResponse": {
+        "type": "object",
+        "properties": {
+          "protocol": { "type": "string", "example": "flypost-discovery" },
+          "version": { "type": "string", "example": "v1" },
+          "success": { "type": "boolean" },
+          "events": { "type": "array", "items": { "$ref": "#/components/schemas/Event" } },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "count": { "type": "integer" },
+              "precision": { "type": "string", "enum": ["full", "reduced"] }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": { "type": "string" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v1/events/near": {
+      "get": {
+        "summary": "Discover events near a location",
+        "description": "Returns open houses and local events within a radius of the given coordinates. Public access returns reduced-precision geo data; brokerage API key returns full data.",
+        "operationId": "getEventsNear",
+        "parameters": [
+          { "name": "lat", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Latitude (decimal degrees)." },
+          { "name": "lng", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Longitude (decimal degrees)." },
+          { "name": "radius_mi", "in": "query", "schema": { "type": "number", "minimum": 0.1, "maximum": 50, "default": 6.2 }, "description": "Search radius in miles." },
+          { "name": "start", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "Filter: events starting after this ISO timestamp." },
+          { "name": "end", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "Filter: events starting before this ISO timestamp." },
+          { "name": "brokerageId", "in": "query", "schema": { "type": "string" }, "description": "Filter by brokerage tenant." },
+          { "name": "api_key", "in": "query", "schema": { "type": "string" }, "description": "Brokerage API key for full-precision results and higher rate limits." }
+        ],
+        "responses": {
+          "200": { "description": "List of matching events.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiscoveryResponse" } } } },
+          "400": { "description": "Invalid parameters.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Rate limit exceeded." }
+        }
+      }
+    },
+    "/v1/events/{event_id}": {
+      "get": {
+        "summary": "Get a single event by ID",
+        "operationId": "getEventById",
+        "parameters": [
+          { "name": "event_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "brokerageId", "in": "query", "schema": { "type": "string" }, "description": "If provided, returns 404 when event belongs to a different brokerage." }
+        ],
+        "responses": {
+          "200": { "description": "Event found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiscoveryResponse" } } } },
+          "404": { "description": "Event not found." }
+        }
+      }
+    },
+    "/api/parse-and-publish": {
+      "post": {
+        "summary": "Publish an event from natural language",
+        "description": "Accepts a free-text event description (e.g. an Instagram caption or MLS note), parses it with an LLM, and stores the resulting structured event.",
+        "operationId": "parseAndPublish",
+        "security": [{ "writeToken": [] }, { "firebaseBearer": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "naturalLanguageInput": { "type": "string", "description": "Free-text event description to parse." },
+                  "userContext": {
+                    "type": "object",
+                    "properties": {
+                      "channel": { "type": "string", "description": "Source channel hint (e.g. 'instagram-dm')." }
+                    }
+                  }
+                },
+                "required": ["naturalLanguageInput"]
+              },
+              "example": {
+                "naturalLanguageInput": "Open house Saturday 2-4pm at 123 Main St, Santa Monica. 3BR/2BA listed at $1.2M",
+                "userContext": { "channel": "instagram-dm" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Event published.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "event": { "$ref": "#/components/schemas/Event" } } } } } },
+          "400": { "description": "Invalid input." },
+          "401": { "description": "Missing or invalid auth token." },
+          "429": { "description": "Rate limit exceeded (50 req / 15 min per IP)." }
+        }
+      }
+    },
+    "/v1/events/upsert": {
+      "post": {
+        "summary": "Publish or update a structured event",
+        "description": "Accepts a fully structured event object. Creates a new event or updates an existing one (matched by canonical identity).",
+        "operationId": "upsertEvent",
+        "security": [{ "writeToken": [] }, { "firebaseBearer": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["event"],
+                "properties": {
+                  "event": { "$ref": "#/components/schemas/Event" },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "sourceId": { "type": "string" },
+                      "sourceName": { "type": "string" },
+                      "importedAt": { "type": "string", "format": "date-time" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Event created or updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "event": { "$ref": "#/components/schemas/Event" }, "isUpdate": { "type": "boolean" }, "eventId": { "type": "string" } } } } } },
+          "401": { "description": "Missing or invalid auth." },
+          "429": { "description": "Rate limit exceeded." }
+        }
+      }
+    },
+    "/api/chat": {
+      "post": {
+        "summary": "Web Concierge — natural language event discovery",
+        "description": "Ask a question about nearby open houses or events in plain language. Optionally pass coordinates to ground the response geographically.",
+        "operationId": "chat",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["message"],
+                "properties": {
+                  "message": { "type": "string", "description": "User query in natural language." },
+                  "lat": { "type": "number", "description": "User latitude." },
+                  "lng": { "type": "number", "description": "User longitude." },
+                  "conversationHistory": { "type": "array", "description": "Prior conversation turns for multi-turn support.", "items": { "type": "object" } }
+                }
+              },
+              "example": { "message": "Any open houses in Santa Monica this weekend?", "lat": 34.0195, "lng": -118.4912 }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Markdown-formatted answer.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string", "description": "Markdown-formatted response." }, "timestamp": { "type": "string", "format": "date-time" } } } } } },
+          "429": { "description": "Rate limit exceeded (20 req / 15 min per IP)." }
+        }
+      }
+    },
+    "/v1/presence/check-in": {
+      "post": {
+        "summary": "Verify buyer attendance at an event",
+        "description": "Records a buyer check-in when they are physically within the proximity radius of an active event. Origin must be https://presence.goflypost.com.",
+        "operationId": "checkIn",
+        "security": [{ "writeToken": [] }, { "firebaseBearer": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["lat", "lng", "buyerToken"],
+                "properties": {
+                  "eventId": { "type": "string", "description": "Optional explicit event ID." },
+                  "lat": { "type": "number" },
+                  "lng": { "type": "number" },
+                  "buyerToken": { "type": "string", "description": "Opaque buyer identifier (hashed before storage)." },
+                  "method": { "type": "string", "enum": ["gps", "manual", "auto-detect"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Check-in recorded.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "attendance": { "type": "object", "properties": { "attendanceId": { "type": "string" }, "eventId": { "type": "string" }, "checkInTime": { "type": "string", "format": "date-time" }, "distance": { "type": "number", "description": "Distance from event in km." } } } } } } } },
+          "400": { "description": "Not within proximity or time window." },
+          "403": { "description": "Request did not originate from presence.goflypost.com." }
+        }
+      }
+    },
+    "/v1/feedback/submit": {
+      "post": {
+        "summary": "Submit post-visit feedback",
+        "description": "Records buyer feedback linked to a verified attendance record. Must be submitted within the recency window (default 4 hours after check-in). Origin must be https://presence.goflypost.com.",
+        "operationId": "submitFeedback",
+        "security": [{ "writeToken": [] }, { "firebaseBearer": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["answers"],
+                "properties": {
+                  "attendanceId": { "type": "string" },
+                  "eventId": { "type": "string" },
+                  "buyerToken": { "type": "string" },
+                  "answers": {
+                    "type": "object",
+                    "properties": {
+                      "liked": { "type": "string", "maxLength": 500 },
+                      "disliked": { "type": "string", "maxLength": 500 },
+                      "wouldBuy": { "type": "string", "enum": ["yes", "maybe", "no"] }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Feedback recorded.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "feedback": { "type": "object", "properties": { "feedbackId": { "type": "string" }, "eventId": { "type": "string" }, "createdAt": { "type": "string", "format": "date-time" } } } } } } } },
+          "400": { "description": "No valid attendance record or outside recency window." },
+          "403": { "description": "Request did not originate from presence.goflypost.com." }
+        }
+      }
+    },
+    "/e/{slug}/{fpid}": {
+      "get": {
+        "summary": "Public event share page",
+        "description": "Returns an HTML page with Open Graph metadata for sharing an event. No authentication required.",
+        "operationId": "sharePageHtml",
+        "parameters": [
+          { "name": "slug", "in": "path", "required": true, "schema": { "type": "string" }, "description": "SEO-friendly slug (e.g. 'open-house-123-main-st')." },
+          { "name": "fpid", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Flypost event ID." }
+        ],
+        "responses": {
+          "200": { "description": "HTML share page." },
+          "404": { "description": "Event not found." }
+        }
+      }
+    },
+    "/e/{slug}/{fpid}/calendar.ics": {
+      "get": {
+        "summary": "Download event as iCal (.ics)",
+        "description": "Returns an RFC 5545 iCal file for the event. No authentication required.",
+        "operationId": "calendarDownload",
+        "parameters": [
+          { "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "fpid", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "iCal file.", "content": { "text/calendar": {} } },
+          "404": { "description": "Event not found." }
+        }
+      }
+    }
+  }
+}
