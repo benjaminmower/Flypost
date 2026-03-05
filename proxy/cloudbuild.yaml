@@ -54,7 +54,7 @@ steps:
           --region "$region" \
           --platform managed \
           --allow-unauthenticated \
-          --set-env-vars "BACKEND_URL=$backend_url,FRONTEND_ORIGIN=${_FRONTEND_ORIGIN},PROXY_USE_ID_TOKEN=${_PROXY_USE_ID_TOKEN},FIREBASE_PROJECT_ID=$PROJECT_ID"
+          --set-env-vars "^|^BACKEND_URL=$backend_url|FRONTEND_ORIGIN=${_FRONTEND_ORIGIN}|PROXY_USE_ID_TOKEN=${_PROXY_USE_ID_TOKEN}|FIREBASE_PROJECT_ID=$PROJECT_ID"
 
 substitutions:
   _FRONTEND_ORIGIN: "https://flypost.netlify.app,https://app.goflypost.com"
