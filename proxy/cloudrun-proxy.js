@@ -1,5 +1,6 @@
 // v14 – Cloud Run proxy with separated access control for "ask" and "post"
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const createForward = require('./src/forward');
@@ -34,6 +35,13 @@ app.use(
 );
 
 app.use(express.json({ limit: '1mb' }));
+
+// Serve AI/LLM discovery files at /.well-known/*
+app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known'), {
+  setHeaders(res) {
+    res.set('Cache-Control', 'public, max-age=86400')
+  }
+}))
 
 /**
  * Cheap probe shield: terminate known-noise paths immediately so they never hit forward()/backend.
@@ -138,6 +146,7 @@ app.use((req, res, next) => {
     path === '/robots.txt' ||
     path === '/llms.txt' ||
     path === '/openapi.json' ||
+    path.startsWith('/.well-known') ||
     path === '/.env' ||
     path === '/.git' ||
     path.startsWith('/.git/') ||

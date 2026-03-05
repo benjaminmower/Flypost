@@ -2,7 +2,7 @@
   "schema_version": "v1",
   "name_for_model": "flypost",
   "name_for_human": "Flypost - AI Native Event Platform",
-  "description_for_model": "Flypost is an AI-native event platform with three specialized surfaces: ASK (discovery - read-only geographic event search at ask.goflypost.com), POST (publishing - authenticated event creation at post.goflypost.com), and PRESENCE (truth-writing - attendance/feedback at presence.goflypost.com, origin-restricted). Use ASK for discovering events near locations. Use POST for publishing events with authentication. Direct users to PRESENCE for check-ins/feedback (not accessible from machines/GPTs due to origin restrictions).",
+  "description_for_model": "Flypost is an AI-native event platform with three specialized surfaces: ASK (discovery - read-only geographic event search, fully public), POST (publishing - authenticated event creation at post.goflypost.com), and PRESENCE (truth-writing - attendance/feedback at presence.goflypost.com, origin-restricted). Use ASK for discovering events near locations — full event details are publicly accessible, no auth needed. Use POST for publishing events with authentication. Direct users to PRESENCE for check-ins/feedback (not accessible from machines/GPTs due to origin restrictions).",
   "description_for_human": "Discover and publish real estate events (open houses, garage sales) with AI-powered parsing and location search.",
   "auth": {
     "type": "none",

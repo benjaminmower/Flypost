@@ -1,0 +1,296 @@
+{
+  "name": "Flypost Ask - Event Discovery",
+  "version": "1.0.0",
+  "description": "Read-only discovery tools for Flypost events using Discovery Protocol V1. Retrieve events by location or ID. Full event details are publicly accessible — no authentication required. No write operations.",
+  "capabilities": [
+    "event_discovery",
+    "location_search",
+    "event_retrieval"
+  ],
+  "tools": [
+    {
+      "name": "get_events_near",
+      "description": "Retrieve events near a geographic location within a specified radius. Supports optional date filtering.",
+      "input_schema": {
+        "type": "object",
+        "description": "Parameters for location-based event search",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "description": "Latitude in decimal degrees (-90 to 90). Optional; defaults to Santa Monica, CA if omitted.",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude in decimal degrees (-180 to 180). Optional; defaults to Santa Monica, CA if omitted.",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius in miles (0.1-50, preferred). If provided, 'radius' parameter is ignored.",
+            "minimum": 0.1,
+            "maximum": 50
+          },
+          "radius": {
+            "type": "number",
+            "description": "Search radius in kilometers (0-100, default: 10). Fallback if 'radius_mi' not provided.",
+            "minimum": 0,
+            "maximum": 100,
+            "default": 10
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Optional: Filter events starting on or after this date (ISO 8601)"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Optional: Filter events ending on or before this date (ISO 8601)"
+          }
+        },
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "Search results with events and metadata",
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "enum": ["flypost-discovery"],
+            "description": "Protocol identifier"
+          },
+          "version": {
+            "type": "string",
+            "enum": ["v1"],
+            "description": "Protocol version"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether the request succeeded"
+          },
+          "events": {
+            "type": "array",
+            "description": "Array of discovery events",
+            "items": {
+              "$ref": "#/components/schemas/DiscoveryEvent"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "description": "Number of events returned"
+              }
+            }
+          }
+        },
+        "required": ["protocol", "version", "success", "events", "meta"]
+      },
+      "configuration": {
+        "endpoint": "https://api.goflypost.com/v1/events/near",
+        "method": "GET",
+        "auth": {
+          "type": "none",
+          "description": "No authentication required"
+        }
+      }
+    },
+    {
+      "name": "get_event_by_id",
+      "description": "Retrieve a single event by its unique event identifier.",
+      "input_schema": {
+        "type": "object",
+        "description": "Parameters for retrieving a specific event",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "description": "Unique event identifier (e.g., 'evt_20250115_abc123')"
+          }
+        },
+        "required": ["event_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "Single event with metadata",
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "enum": ["flypost-discovery"],
+            "description": "Protocol identifier"
+          },
+          "version": {
+            "type": "string",
+            "enum": ["v1"],
+            "description": "Protocol version"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether the request succeeded"
+          },
+          "events": {
+            "type": "array",
+            "description": "Array containing exactly one event",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/DiscoveryEvent"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "enum": [1],
+                "description": "Number of events returned (always 1)"
+              }
+            }
+          }
+        },
+        "required": ["protocol", "version", "success", "events", "meta"]
+      },
+      "configuration": {
+        "endpoint": "https://api.goflypost.com/v1/events/{event_id}",
+        "method": "GET",
+        "auth": {
+          "type": "none",
+          "description": "No authentication required"
+        }
+      }
+    }
+  ],
+  "components": {
+    "schemas": {
+      "DiscoveryEvent": {
+        "type": "object",
+        "description": "Event in Discovery V1 format with strict what/where/when structure",
+        "required": ["eventId", "dataHash", "what", "where", "when", "externalListingUrl"],
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "description": "Unique event identifier"
+          },
+          "dataHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 hash for integrity verification"
+          },
+          "what": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["open_house", "garage_sale", "estate_sale", "moving_sale", "yard_sale", "other"],
+                "description": "Event category"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 80,
+                "description": "Optional human-readable event name"
+              }
+            }
+          },
+          "where": {
+            "type": "object",
+            "required": ["latitude", "longitude"],
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Latitude coordinate"
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Longitude coordinate"
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "Optional complete address"
+              }
+            }
+          },
+          "when": {
+            "type": "object",
+            "required": ["start", "end"],
+            "properties": {
+              "start": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Event start date and time (ISO 8601 UTC)"
+              },
+              "end": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Event end date and time (ISO 8601 UTC)"
+              },
+              "timezone": {
+                "type": "string",
+                "description": "Optional IANA timezone identifier (e.g., 'America/Los_Angeles')"
+              }
+            }
+          },
+          "externalListingUrl": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "URL to external listing (required field, can be null)"
+          },
+          "source": {
+            "type": "object",
+            "required": ["kind", "url"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["mls", "brokerage_roster", "manual", "third_party"],
+                "description": "Source type"
+              },
+              "url": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Source URL (can be null)"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "configuration": {
+    "base_url": "https://api.goflypost.com",
+    "rate_limits": {
+      "requests_per_window": "100 requests per 15 minutes per IP"
+    },
+    "timeout_ms": 10000,
+    "retry_policy": {
+      "max_retries": 3,
+      "backoff_strategy": "exponential"
+    }
+  },
+  "metrics": {
+    "performance_tracking": true,
+    "latency_ms": 5000,
+    "enable_error_logging": true
+  }
+}
