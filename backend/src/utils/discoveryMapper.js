@@ -250,7 +250,7 @@ export function toDiscoveryEventV1(event, options = {}) {
   }
 
   // Optional: occurrences (multi-slot events)
-  const rawOccurrences = event.flypost?.occurrences
+  const rawOccurrences = event.occurrences
   if (Array.isArray(rawOccurrences) && rawOccurrences.length > 0) {
     discoveryEvent.occurrences = rawOccurrences.map(occ => {
       const mapped = {
