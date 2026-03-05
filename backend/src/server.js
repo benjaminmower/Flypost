@@ -15,7 +15,7 @@ import { parseEventWithLLM } from './llmParser.js'
 import { validateEventData, getSchema } from './validation.js'
 import { storeEvent, getEventsNear, getStorageStats, clearEvents, findEventByIdentity, getEventById, getEventByIdAny } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
-import { isFirestoreEnabled } from './firestoreClient.js'
+import { isFirestoreEnabled, getEventsCollection } from './firestoreClient.js'
 import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.js'
 import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.js'
 import { sanitizeEvent } from './utils/northStarEnforcer.js'
@@ -731,6 +731,7 @@ if (
     console.log(
       `📦 ${isUpdate ? 'Updated' : 'Stored'} event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId || 'none'})`
     )
+    triggerHeroImageScrape(storedEvent)
     storedEvent.shareUrl = generateShareUrl(storedEvent)
     res.json({
       success: true,
@@ -1124,6 +1125,53 @@ function escapeIcsText(text) {
 }
 
 /**
+ * Scrape og:image from a URL (5s timeout)
+ */
+async function scrapeHeroImageUrl(url) {
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000)
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+      }
+    })
+    clearTimeout(timeout)
+    const html = await res.text()
+    const match = html.match(/<meta property="og:image" content="([^"]+)"/i)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Write flypost.heroImageUrl to Firestore (fire-and-forget safe)
+ */
+async function setHeroImageUrl(eventId, heroImageUrl) {
+  if (!isFirestoreEnabled()) return
+  try {
+    const collection = getEventsCollection()
+    await collection.doc(eventId).update({ 'flypost.heroImageUrl': heroImageUrl ?? null })
+  } catch (err) {
+    console.warn(`⚠️ Hero image Firestore update failed for ${eventId}:`, err.message)
+  }
+}
+
+/**
+ * Fire-and-forget: scrape hero image after publish
+ */
+function triggerHeroImageScrape(storedEvent) {
+  const eventId = storedEvent.flypost?.eventId
+  const url = storedEvent.url
+  if (!eventId || !url) return
+  scrapeHeroImageUrl(url)
+    .then(heroImageUrl => setHeroImageUrl(eventId, heroImageUrl))
+    .catch(() => setHeroImageUrl(eventId, null))
+}
+
+/**
  * Generate RFC 5545 compliant .ics file content
  * @param {object} event - Event object
  * @returns {string} - ICS file content
@@ -1304,7 +1352,7 @@ function renderSharePageHtml(event) {
   
   // Get image URL (if available)
   // Note: Default image should be hosted at goflypost.com or use an environment variable
-  const imageUrl = event.image || event.flypost?.imageUrl || process.env.OG_DEFAULT_IMAGE || 'https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/6683234a1ee80c5f2891597e_Flypost%20Logo-256px.png'
+  const imageUrl = event.flypost?.heroImageUrl || event.image || event.flypost?.imageUrl || process.env.OG_DEFAULT_IMAGE || 'https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/6683234a1ee80c5f2891597e_Flypost%20Logo-256px.png'
   
   // Escape all dynamic content
   const safeTitle = escapeHtml(eventName)
@@ -1599,22 +1647,37 @@ function renderSharePageHtml(event) {
       }
     }
     
+    /* Hero image */
+    .hero-image-container {
+      width: 100%;
+      overflow: hidden;
+      border-radius: 12px 12px 0 0;
+      margin-bottom: 24px;
+    }
+    .hero-image {
+      width: 100%;
+      max-height: 300px;
+      object-fit: cover;
+      display: block;
+      border-radius: 12px 12px 0 0;
+    }
+
     /* Desktop styles */
     @media (min-width: 640px) {
       .page-wrapper {
         padding: 40px;
       }
-      
+
       .container {
         border-radius: 32px;
         padding: 48px 40px;
       }
-      
+
       h1 {
         font-size: 36px;
         margin-bottom: 28px;
       }
-      
+
       .meta-item {
         font-size: 16px;
       }
@@ -1625,6 +1688,10 @@ function renderSharePageHtml(event) {
   <div class="bg-glow"></div>
   <div class="page-wrapper">
     <div class="container">
+      ${event.flypost?.heroImageUrl ? `
+      <div class="hero-image-container">
+        <img src="${escapeHtml(event.flypost.heroImageUrl)}" alt="Property photo" class="hero-image">
+      </div>` : ''}
       <h1>${safeTitle}</h1>
       <div class="meta">
         ${safeSlots.map(s => `<div class="meta-item">📅 ${s}</div>`).join('\n        ')}
@@ -1906,7 +1973,8 @@ app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
     // 12. Store
     const storedEvent = await storeEvent(eventToStore)
     console.log(`📦 ${isUpdate ? 'Updated' : 'Inserted'} event: ${storedEvent.flypost.eventId}`)
-    
+    triggerHeroImageScrape(storedEvent)
+
     // 13. Return response
     res.json({
       success: true,
