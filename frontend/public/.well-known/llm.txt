@@ -21,10 +21,12 @@ Protocol: Flypost Discovery Protocol V1
 Capabilities:
   - GET /v1/events/near - Search events by location with optional date filtering
   - GET /v1/events/{event_id} - Retrieve specific event by ID
+  - POST /api/chat - Web Concierge: natural-language query interface, returns markdown response (conditional on ENABLE_CONCIERGE=true)
+  - POST /api/chat/stream - SSE streaming version of Web Concierge (conditional on ENABLE_CONCIERGE=true)
 
 Access: Public (no authentication required)
   - Tiered data access: registry-safe allowlist fields for public, full details for brokerage-scoped queries
-  - Rate limits: 100 req/15min (public), 500 req/15min (brokerage-scoped)
+  - Rate limits: 100 req/15min (public), 500 req/15min (brokerage-scoped), 20 req/15min (/api/chat)
 
 ### POST Surface (Publishing) - post.goflypost.com
 Purpose: Authenticated event publishing (parse natural language → structured events)
@@ -67,7 +69,7 @@ requirements based on request origin:
    - Static tokens NOT accepted (security: prevent token exposure in browser)
 
 2. **Read-Only Ask Origin** (ask.goflypost.com)
-   - Can only access GET /api/chat (no authentication required)
+   - Can access discovery endpoints (GET /v1/events/*) and Web Concierge (POST /api/chat, POST /api/chat/stream) — no authentication required
    - All other POST /api/* endpoints rejected with 401
 
 3. **Presence Origin** (presence.goflypost.com)
@@ -101,7 +103,7 @@ Security Issues: support@goflypost.com
 
 ## LLM Usage Guidelines
 
-1. **For Discovery Queries**: Use ASK surface (GET /v1/events/near)
+1. **For Discovery Queries**: Use ASK surface (GET /v1/events/near or POST /api/chat for natural-language queries)
 2. **For Publishing Events**: Use POST surface (POST /api/parse-and-publish)
 3. **For Presence/Feedback**: Direct users to https://presence.goflypost.com
    - Do NOT attempt to call presence/feedback endpoints from machines/GPTs
