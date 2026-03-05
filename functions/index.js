@@ -705,6 +705,11 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
         })
       }
       await persistDigest(docId, emptyDigest)
+      try {
+        await sendDigestEmail({ summaryMarkdown: emptyDigest.summaryMarkdown, docId })
+      } catch (emailError) {
+        console.error('Could not send empty digest email (digest already persisted):', emailError)
+      }
       console.log(`=== Digest generation complete (empty) - Total time: ${Date.now() - startTime}ms ===`)
       
       return {
