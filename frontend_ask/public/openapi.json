@@ -28,6 +28,10 @@
     {
       "name": "discovery",
       "description": "Event discovery endpoints (read-only)"
+    },
+    {
+      "name": "concierge",
+      "description": "Web Concierge natural-language query interface (conditional on ENABLE_CONCIERGE=true)"
     }
   ],
   "paths": {
@@ -324,6 +328,275 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat": {
+      "post": {
+        "summary": "Natural-language event discovery (Web Concierge)",
+        "description": "Ask a natural-language question to discover real estate events. Returns a\nmarkdown-formatted response. Auth not required.\n\nRate limit: 20 requests per 15 minutes per IP.\nConditional: only active when ENABLE_CONCIERGE=true on the backend.\n",
+        "operationId": "chatConcierge",
+        "tags": [
+          "concierge"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "message"
+                ],
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "description": "Natural-language query (e.g. \"Are there any open houses in Santa Monica this weekend?\")",
+                    "minLength": 1,
+                    "example": "Are there any open houses near Santa Monica this weekend?"
+                  },
+                  "lat": {
+                    "type": "number",
+                    "format": "double",
+                    "description": "Latitude for location context (optional; defaults to 34.0195 - Santa Monica, CA)",
+                    "minimum": -90,
+                    "maximum": 90,
+                    "default": 34.0195,
+                    "example": 34.0195
+                  },
+                  "lng": {
+                    "type": "number",
+                    "format": "double",
+                    "description": "Longitude for location context (optional; defaults to -118.4912 - Santa Monica, CA)",
+                    "minimum": -180,
+                    "maximum": 180,
+                    "default": -118.4912,
+                    "example": -118.4912
+                  },
+                  "conversationHistory": {
+                    "type": "array",
+                    "description": "Optional prior messages for multi-turn follow-up queries",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant"
+                          ]
+                        },
+                        "content": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful natural-language response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "message",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Markdown-formatted response from the concierge",
+                      "example": "I found 3 open houses near Santa Monica this weekend..."
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp of the response",
+                      "example": "2025-06-15T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (20 requests per 15 minutes per IP)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Concierge service unavailable (ENABLE_CONCIERGE not set)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/stream": {
+      "post": {
+        "summary": "Streaming natural-language event discovery (Web Concierge, SSE)",
+        "description": "Server-Sent Events (SSE) streaming version of the Web Concierge. Tokens are\nstreamed as they are generated. Note: SSE is not natively expressible in\nOpenAPI 3.0; this endpoint returns text/event-stream rather than application/json.\n\nEvent types:\n- {\"type\":\"connected\"} — stream opened\n- {\"type\":\"token\",\"content\":\"...\"} — partial response token\n- {\"type\":\"done\",\"duration\":ms} — stream complete, duration in milliseconds\n- {\"type\":\"error\",\"message\":\"...\"} — error occurred\n\nRate limit: 20 requests per 15 minutes per IP (shared with /api/chat).\nAuth: none required. Conditional: only active when ENABLE_CONCIERGE=true.\n",
+        "operationId": "chatConciergeStream",
+        "tags": [
+          "concierge"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "message"
+                ],
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "description": "Natural-language query",
+                    "minLength": 1,
+                    "example": "What garage sales are happening near me this weekend?"
+                  },
+                  "lat": {
+                    "type": "number",
+                    "format": "double",
+                    "minimum": -90,
+                    "maximum": 90,
+                    "default": 34.0195,
+                    "example": 34.0195
+                  },
+                  "lng": {
+                    "type": "number",
+                    "format": "double",
+                    "minimum": -180,
+                    "maximum": 180,
+                    "default": -118.4912,
+                    "example": -118.4912
+                  },
+                  "conversationHistory": {
+                    "type": "array",
+                    "description": "Optional prior messages for multi-turn follow-up queries",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant"
+                          ]
+                        },
+                        "content": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SSE stream of response tokens (text/event-stream)",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events stream. Each line is a JSON object prefixed with \"data: \".\nEvent types: connected, token, done, error.\n"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Concierge service unavailable (ENABLE_CONCIERGE not set)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/health": {
+      "get": {
+        "summary": "Web Concierge health check",
+        "description": "Returns health status of the Web Concierge service.",
+        "operationId": "chatConciergeHealth",
+        "tags": [
+          "concierge"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service health status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
                 }
               }
             }

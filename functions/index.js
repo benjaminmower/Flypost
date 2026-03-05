@@ -705,6 +705,7 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
         })
       }
       await persistDigest(docId, emptyDigest)
+      console.log('Step 7: Sending empty digest email...')
       try {
         await sendDigestEmail({ summaryMarkdown: emptyDigest.summaryMarkdown, docId })
       } catch (emailError) {

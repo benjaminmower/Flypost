@@ -16,7 +16,7 @@ primary_audience: machine-agents (LLMs, AI assistants)
 human_audience: developers building event discovery applications
 
 base_url: https://api.goflypost.com
-canonical_openapi: https://ask.goflypost.com/.well-known/openapi.yaml
+canonical_openapi: https://api.goflypost.com/.well-known/openapi.yaml
 
 ## Core Discovery Endpoints (Protocol Contract)
 
@@ -81,8 +81,47 @@ Fields:
   - source?: { kind: enum, url: string | null }
     - kind: "mls" | "brokerage_roster" | "manual" | "third_party"
 
+## Web Concierge Endpoint
+
+### POST /api/chat
+Description: >
+  Natural-language query interface for discovering real estate events.
+  Send a question in plain English; receive a markdown-formatted response.
+  Conditional: only active when ENABLE_CONCIERGE=true on the backend.
+
+Request Body (application/json):
+  - message: string (required, non-empty) - Natural-language question
+  - lat: number (optional) - Latitude for location context (-90 to 90, default: 34.0195 Santa Monica)
+  - lng: number (optional) - Longitude for location context (-180 to 180, default: -118.4912 Santa Monica)
+  - conversationHistory: array (optional) - Prior messages for multi-turn follow-up queries
+    Each item: { role: "user" | "assistant", content: string }
+
+Response Shape (200):
+  success: boolean
+  message: string (markdown-formatted response)
+  timestamp: string (ISO 8601)
+
+### POST /api/chat/stream
+Description: >
+  SSE streaming version of the Web Concierge. Same request body as /api/chat.
+  Returns text/event-stream; tokens stream as they are generated.
+
+SSE Event Types:
+  - {"type":"connected"} — stream opened
+  - {"type":"token","content":"..."} — partial response token
+  - {"type":"done","duration":ms} — stream complete
+  - {"type":"error","message":"..."} — error occurred
+
+### GET /api/chat/health
+Description: Health check for the Web Concierge service.
+Response: { status: "ok" }
+
+Concierge Rate Limit: 20 requests per 15 minutes per IP (applies to both /api/chat and /api/chat/stream).
+Auth: None required (public endpoint).
+Conditional: Only active when ENABLE_CONCIERGE=true environment variable is set.
+
 ## Authentication
-Authentication: Not required for GET discovery endpoints.
+Authentication: Not required for GET discovery endpoints or POST /api/chat.
 
 Rate Limits:
   - Public anonymous reads (no brokerageId / no api_key): 100 requests per 15 minutes per IP

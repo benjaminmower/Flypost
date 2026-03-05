@@ -34,6 +34,7 @@ import {
   convertOpenHouseLocalIntent
 } from './utils/timeNormalization.js'
 import { generateShareUrl, extractEventIdFromFpid, validateExternalUrl } from './utils/shareUrl.js'
+import wellKnownRouter from './wellKnownRoutes.js'
 
 dotenv.config()
 
@@ -311,6 +312,7 @@ const healthHandler = (_req, res) => {
 }
 
 app.get(['/health', '/api/health'], healthHandler)
+app.use(wellKnownRouter)
 
 // Parse & publish
 app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {

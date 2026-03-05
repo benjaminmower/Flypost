@@ -14,8 +14,8 @@ human_audience: developers, real estate professionals, event organizers
 
 ### ASK Surface (Discovery) - ask.goflypost.com
 Purpose: Read-only event discovery via geographic search
-Canonical Manifest: https://ask.goflypost.com/.well-known/llm.txt
-OpenAPI Spec: https://ask.goflypost.com/.well-known/openapi.yaml
+Canonical Manifest: https://api.goflypost.com/.well-known/llm.txt
+OpenAPI Spec: https://api.goflypost.com/.well-known/openapi.yaml
 Protocol: Flypost Discovery Protocol V1
 
 Capabilities:
