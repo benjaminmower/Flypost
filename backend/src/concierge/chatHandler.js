@@ -104,8 +104,41 @@ function extractPriceInfo(event) {
 }
 
 /**
+ * Calculate distance in miles between two lat/lng points using the Haversine formula
+ */
+function haversineDistanceMi(lat1, lng1, lat2, lng2) {
+  const R = 3958.8 // Earth radius in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.asin(Math.sqrt(a))
+}
+
+/**
+ * Enrich events with pre-calculated distance_mi from a reference coordinate
+ *
+ * @param {Array} events - Array of event objects
+ * @param {number} userLat - User's latitude
+ * @param {number} userLng - User's longitude
+ * @returns {Array} Events with distance_mi added
+ */
+function enrichEventsWithDistance(events, userLat, userLng) {
+  if (!events || !Array.isArray(events)) return events
+  return events.map(event => {
+    const lat = event.where?.latitude
+    const lng = event.where?.longitude
+    if (lat !== undefined && lng !== undefined) {
+      event.distance_mi = parseFloat(haversineDistanceMi(userLat, userLng, lat, lng).toFixed(2))
+    }
+    return event
+  })
+}
+
+/**
  * Enrich events with normalized price information
- * 
+ *
  * @param {Array} events - Array of event objects
  * @returns {Array} Events with price information added
  */
@@ -422,7 +455,7 @@ export async function processChatMessage(message, lat, lng, backendUrl, conversa
   
   // Determine if coordinates are available
   const hasCoords = lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)
-  const locString = hasCoords ? `lat ${Number(lat).toFixed(2)}, lng ${Number(lng).toFixed(2)}` : 'unknown'
+  const locString = hasCoords ? `lat ${Number(lat).toFixed(6)}, lng ${Number(lng).toFixed(6)}` : 'unknown'
   
   // System prompt for the concierge
   let systemPrompt = `You are a knowledgeable Web Concierge for Flypost, a real-time local events platform. 
@@ -857,6 +890,10 @@ The user's current location is approximately: ${locString}`
             result.events = enrichEventsWithPrice(result.events)
             // Enrich events with local time display strings
             result.events = enrichEventsWithLocalTime(result.events)
+            // Enrich events with pre-calculated distance from user's actual coordinates
+            if (hasCoords) {
+              result.events = enrichEventsWithDistance(result.events, lat, lng)
+            }
             collectedEvents = result.events
           }
         } else {
