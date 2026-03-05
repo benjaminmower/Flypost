@@ -1,77 +1,168 @@
-# FlyPost MCP Provider
+# Flypost MCP Server
 
-The FlyPost MCP Provider offers a modular integration for:
-- Retrieving ingested events (`mcp.flypost.get.json`)
-- Parsing and normalizing events (`mcp.flypost.parse.json`)
-
-These descriptors allow agents and developers to connect to FlyPost's API for seamless event handling in MCP-compliant systems.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that gives Claude access to the live Flypost API — search events, publish new ones, check in attendees, and collect feedback.
 
 ---
 
-## Features
-### 1. Event Ingestion
-- Fetch historical or live event data using filters like `dateRange` or `eventType`.
-- See `mcp.flypost.get.json` for capabilities and input/output schemas.
-- Example: [examples/ingest_events.js](./examples/ingest_events.js).
+## Setup
 
-### 2. Event Parsing and Normalization
-- Parse natural language inputs (e.g., open house descriptions) and transform them into structured FlyPost events.
-- See `mcp.flypost.parse.json` for capabilities and input/output schemas.
-- Example: [examples/query_context.js](./examples/query_context.js).
-
----
-
-## Quick Start
-
-### 1. Installation
-Clone this repository and ensure you have Node.js and npm installed:
 ```bash
-git clone https://github.com/your-username/flypost-mcp-provider.git
-cd flypost-mcp-provider
+cd mcp
 npm install
 ```
 
-### 2. Setup
-- Add an `.env` file with your **FlyPost API Key**:
-  ```
-  FLYPOST_API_KEY=your_api_key_here
-  ```
-
-### 3. Run Examples
-Fetch events:
-```bash
-node examples/ingest_events.js
-```
-
-Parse natural language inputs:
-```bash
-node examples/query_context.js
-```
-
 ---
-## Architecture Overview
-FlyPost is designed to handle machine-to-machine event workflows by supporting:
-- **Event Ingestion** (mcp.flypost.get.json): Efficiently retrieve and filter events using brokerage, event type, and date-based queries.
-- **Event Parsing** (mcp.flypost.parse.json): Parse free-text inputs and normalize structured outputs using FlyPost's schema.
-These modules can be used independently or together for a complete event-driven system.
 
-## Descriptors
+## Environment Variables
 
-### Event Getter (`mcp.flypost.get.json`)
-- Defines how to retrieve events from FlyPost.
-- Input/Output schemas:
-    - Input: Specify brokerage, event type, date range, and filters.
-    - Output: Receive a list of events and pagination metadata.
-- Endpoint: `https://api.flypost.com/v1/get-events`.
-
-### Event Parser (`mcp.flypost.parse.json`)
-- Defines how to parse natural language inputs into normalized FlyPost events.
-- Input/Output schemas:
-    - Input: Provide natural language descriptions and optional overrides (e.g., time zones).
-    - Output: Receive schema-normalized events.
-- Endpoint: `https://api.flypost.com/v1/parse-events`.
+| Variable | Required | Description |
+|---|---|---|
+| `FLYPOST_API_BASE` | Yes | Base URL of the Flypost proxy, e.g. `https://proxyv4-a7jlfl42zq-uw.a.run.app` |
+| `FLYPOST_WRITE_TOKEN` | For writes | Static write token for authenticated endpoints |
+| `FLYPOST_BROKERAGE_ID` | Optional | Scopes all write operations to a specific brokerage |
 
 ---
 
-## License
-Licensed under Apache License 2.0.
+## Claude Desktop Config
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "flypost": {
+      "command": "node",
+      "args": ["/absolute/path/to/v4/mcp/flypost-mcp-server.js"],
+      "env": {
+        "FLYPOST_API_BASE": "https://proxyv4-a7jlfl42zq-uw.a.run.app",
+        "FLYPOST_WRITE_TOKEN": "your-token-here",
+        "FLYPOST_BROKERAGE_ID": "compass"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving. The **flypost** server will appear in the tools list.
+
+---
+
+## Claude Code Config
+
+Add to `.claude/settings.json` in the project root:
+
+```json
+{
+  "mcpServers": {
+    "flypost": {
+      "command": "node",
+      "args": ["mcp/flypost-mcp-server.js"],
+      "env": {
+        "FLYPOST_API_BASE": "https://proxyv4-a7jlfl42zq-uw.a.run.app",
+        "FLYPOST_WRITE_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Tools
+
+### `search_events_near`
+Search for events near a location.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `lat` | number | Yes | Latitude |
+| `lng` | number | Yes | Longitude |
+| `radius_mi` | number | No | Search radius in miles |
+| `start` | string | No | ISO 8601 start date filter |
+| `end` | string | No | ISO 8601 end date filter |
+| `brokerageId` | string | No | Filter by brokerage |
+
+**Example prompts:**
+- *"Find open houses near 37.7749, -122.4194"*
+- *"What Compass events are happening in San Francisco this weekend?"*
+
+---
+
+### `get_event`
+Get full details for a single event.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | string | Yes | Flypost event ID |
+
+**Example prompt:** *"Show me the full details for event abc123"*
+
+---
+
+### `parse_and_publish`
+Publish an event from a natural language description. Requires `FLYPOST_WRITE_TOKEN`.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `text` | string | Yes | Natural language event description |
+| `brokerageId` | string | No | Brokerage to associate with |
+
+**Example prompts:**
+- *"Publish this open house: 123 Main St, San Francisco, Sunday 1–4pm, asking $1.2M"*
+- *"Post a new event: Broker tour at 456 Oak Ave, Tuesday 10am–12pm, hosted by Jane Smith"*
+
+---
+
+### `upsert_event`
+Create or update an event using a structured object. Requires `FLYPOST_WRITE_TOKEN`.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `event` | object | Yes | Flypost event schema object |
+
+**Example prompt:** *"Upsert this event: { name: 'Open House', address: '123 Main St', startTime: '2026-03-08T13:00:00Z' }"*
+
+---
+
+### `check_in`
+Record an attendee check-in at an event. Requires `FLYPOST_WRITE_TOKEN`.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `lat` | number | Yes | Check-in latitude |
+| `lng` | number | Yes | Check-in longitude |
+| `buyerToken` | string | Yes | Buyer/attendee identifier |
+| `eventId` | string | No | Specific event ID (auto-matched by location if omitted) |
+
+**Example prompt:** *"Check in buyer token 'tok_abc' at 37.7749, -122.4194"*
+
+---
+
+### `submit_feedback`
+Submit post-visit feedback. Requires `FLYPOST_WRITE_TOKEN`.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `attendanceId` | string | No* | From check-in response |
+| `eventId` | string | No* | Used with buyerToken if no attendanceId |
+| `buyerToken` | string | No* | Used with eventId if no attendanceId |
+| `wouldBuy` | boolean | Yes | Would the attendee buy? |
+| `wantsSimilar` | boolean | Yes | Want similar recommendations? |
+| `feedbackText` | string | No | Free-text feedback |
+
+*Provide either `attendanceId` or both `eventId` + `buyerToken`.
+
+**Example prompt:** *"Submit feedback for attendance att_xyz: wouldBuy true, wantsSimilar true, 'Beautiful kitchen'"*
+
+---
+
+## Verification
+
+```bash
+# Should start without errors (press Ctrl+C to stop)
+cd mcp && node flypost-mcp-server.js
+```
+
+After connecting Claude Desktop or Claude Code:
+1. Ask: *"Find open houses near 37.7749, -122.4194"* → calls `search_events_near`
+2. Ask: *"Publish this open house: 123 Main St, Sunday 1-4pm, $1.2M"* → calls `parse_and_publish`

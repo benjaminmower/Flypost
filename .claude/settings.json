@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "flypost": {
+      "command": "node",
+      "args": ["mcp/flypost-mcp-server.js"],
+      "env": {
+        "FLYPOST_API_BASE": "https://proxyv4-a7jlfl42zq-uw.a.run.app",
+        "FLYPOST_WRITE_TOKEN": "goflypost"
+      }
+    }
+  }
+}
