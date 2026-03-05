@@ -56,7 +56,7 @@ app.use((req, res, next) => {
     res.set('Content-Type', 'text/plain; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=86400');
     return res.status(200).send(
-      ['User-agent: *', 'Disallow: /', 'Allow: /llms.txt', 'Allow: /openapi.json', ''].join('\n'),
+      ['User-agent: *', 'Disallow: /', 'Allow: /llms.txt', 'Allow: /openapi.json', 'Allow: /.well-known/', ''].join('\n'),
     );
   }
 
