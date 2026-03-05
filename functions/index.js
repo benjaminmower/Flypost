@@ -47,6 +47,8 @@ import { onRequest } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import { fromZonedTime, toZonedTime } from 'date-fns-tz'
 import { startOfWeek, addWeeks, format } from 'date-fns'
+import { Resend } from 'resend'
+import { marked } from 'marked'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -58,6 +60,8 @@ const LA_TIMEZONE = 'America/Los_Angeles'
 
 // Secret for HTTP trigger authentication
 const DIGEST_TRIGGER_TOKEN = defineSecret('DIGEST_TRIGGER_TOKEN')
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
+const DIGEST_RECIPIENTS = defineSecret('DIGEST_RECIPIENTS')
 
 /**
  * Constant-time string comparison to prevent timing attacks
@@ -614,12 +618,58 @@ async function persistDigest(docId, digest) {
 /**
  * Shared digest generation logic (internal, not exported)
  * Used by both scheduled and HTTP-triggered functions
- * 
+ *
  * @param {object} options - Options object
  * @param {Date} options.now - Current date/time (defaults to now)
  * @returns {Promise<object>} - Digest result with metadata
  * @private
  */
+
+/**
+ * Send the weekly digest as an HTML email via Resend.
+ * Requires RESEND_API_KEY and DIGEST_RECIPIENTS env vars.
+ * Logs a warning and returns early if either is missing.
+ *
+ * @param {object} params
+ * @param {string} params.summaryMarkdown - Markdown content to email
+ * @param {string} params.docId - Week document ID used as email subject suffix
+ * @returns {Promise<void>}
+ */
+async function sendDigestEmail({ summaryMarkdown, docId }) {
+  const apiKey = RESEND_API_KEY.value()
+  const recipientsRaw = DIGEST_RECIPIENTS.value()
+  if (!apiKey || !recipientsRaw) {
+    console.warn('RESEND_API_KEY or DIGEST_RECIPIENTS not set — skipping email send')
+    return
+  }
+  const to = recipientsRaw.split(',').map(s => s.trim()).filter(Boolean)
+
+  const bodyHtml = marked.parse(summaryMarkdown)
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: 40px auto; color: #111; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+    th { background: #f5f5f5; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+    code { background: #f0f0f0; padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
+  </style></head><body>${bodyHtml}</body></html>`
+
+  const resend = new Resend(apiKey)
+  const { error } = await resend.emails.send({
+    from: 'Flypost Digest <report@attendance.goflypost.com>',
+    to,
+    subject: `Flypost Weekly Report Card — ${docId}`,
+    html,
+  })
+
+  if (error) {
+    console.error('Resend send failed:', error)
+    throw new Error(`Resend error: ${error.message}`)
+  }
+  console.log(`Digest email sent to ${to.join(', ')} for week ${docId}`)
+}
+
 async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
   const startTime = Date.now()
   console.log('=== Starting Weekly Feedback Digest Generation ===')
@@ -727,7 +777,16 @@ async function runWeeklyFeedbackDigest({ now = new Date() } = {}) {
     console.log('Step 6: Persisting digest to Firestore...')
     await persistDigest(docId, digest)
     console.log(`Step 6 complete: Digest persisted (${Date.now() - startTime}ms elapsed)`)
-    
+
+    // Send digest email (non-fatal — digest is already persisted)
+    console.log('Step 7: Sending digest email...')
+    try {
+      await sendDigestEmail({ summaryMarkdown, docId })
+      console.log(`Step 7 complete: Email sent (${Date.now() - startTime}ms elapsed)`)
+    } catch (emailError) {
+      console.error('Step 7 failed: Could not send digest email (digest already persisted):', emailError)
+    }
+
     const totalTime = Date.now() - startTime
     console.log('=== Digest generation complete ===')
     console.log(`Total events: ${eventDigests.length}`)
@@ -765,7 +824,8 @@ export const generateWeeklyFeedbackDigest = onSchedule(
     schedule: '0 0 * * 1', // Every Monday at 00:00
     timeZone: LA_TIMEZONE,
     memory: '512MiB',
-    timeoutSeconds: 540 // 9 minutes
+    timeoutSeconds: 540, // 9 minutes
+    secrets: [DIGEST_TRIGGER_TOKEN, RESEND_API_KEY, DIGEST_RECIPIENTS]
   },
   async (event) => {
     await runWeeklyFeedbackDigest()
@@ -779,7 +839,7 @@ export const generateWeeklyFeedbackDigest = onSchedule(
  */
 export const generateWeeklyFeedbackDigestHttp = onRequest(
   {
-    secrets: [DIGEST_TRIGGER_TOKEN],
+    secrets: [DIGEST_TRIGGER_TOKEN, RESEND_API_KEY, DIGEST_RECIPIENTS],
     memory: '512MiB',
     timeoutSeconds: 540 // 9 minutes
   },
