@@ -3,10 +3,11 @@
  * Hybrid storage: maintains in-memory store for tests while also persisting to Firestore
  */
 
-import { 
-  saveEvent as saveToFirestore, 
-  getAllEvents as getFirestoreEvents, 
+import {
+  saveEvent as saveToFirestore,
+  getAllEvents as getFirestoreEvents,
   isFirestoreEnabled,
+  getFirestoreClient,
   findEventByCanonicalKey, // Legacy
   findEventByIdentity as findEventByIdentityFirestore, // New brokerage-agnostic identity
   getEventByIdFromFirestore, // Get event by document ID
@@ -236,6 +237,20 @@ export async function getEventByIdAny(eventId, useFirestore = false) {
       if (event) {
         console.log(`📍 Found event by ID in Firestore: ${eventId}`)
         return event
+      }
+      // Fallback: search by flypost.eventId field (handles doc ID mismatch)
+      try {
+        const db = getFirestoreClient()
+        const snapshot = await db.collection('events')
+          .where('flypost.eventId', '==', eventId)
+          .limit(1)
+          .get()
+        if (!snapshot.empty) {
+          console.log(`📍 Found event by flypost.eventId field in Firestore: ${eventId}`)
+          return snapshot.docs[0].data()
+        }
+      } catch (fieldScanError) {
+        console.error('⚠️  Firestore field-scan fallback failed:', fieldScanError.message)
       }
       console.log(`📍 Event not found in Firestore, checking memory: ${eventId}`)
     } catch (error) {
