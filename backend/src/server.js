@@ -15,7 +15,7 @@ import { parseEventWithLLM } from './llmParser.js'
 import { validateEventData, getSchema } from './validation.js'
 import { storeEvent, getEventsNear, getStorageStats, clearEvents, findEventByIdentity, getEventById, getEventByIdAny } from './storage.js'
 import { computeEventHash } from './hashUtils.js'
-import { isFirestoreEnabled, getEventsCollection } from './firestoreClient.js'
+import { isFirestoreEnabled, getFirestoreClient } from './firestoreClient.js'
 import { computeCanonicalKey, computeEventIdentity } from './utils/canonicalKey.js'
 import { extractPriceFromText, hasValidListPrice } from './utils/priceExtractor.js'
 import { sanitizeEvent } from './utils/northStarEnforcer.js'
@@ -1152,8 +1152,8 @@ async function scrapeHeroImageUrl(url) {
 async function setHeroImageUrl(eventId, heroImageUrl) {
   if (!isFirestoreEnabled()) return
   try {
-    const collection = getEventsCollection()
-    await collection.doc(eventId).update({ 'flypost.heroImageUrl': heroImageUrl ?? null })
+    const db = getFirestoreClient()
+    await db.collection('events').doc(eventId).update({ 'flypost.heroImageUrl': heroImageUrl ?? null })
   } catch (err) {
     console.warn(`⚠️ Hero image Firestore update failed for ${eventId}:`, err.message)
   }
