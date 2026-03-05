@@ -23,6 +23,7 @@ Capabilities:
   - GET /v1/events/{event_id} - Retrieve specific event by ID
   - POST /api/chat - Web Concierge: natural-language query interface, returns markdown response (conditional on ENABLE_CONCIERGE=true)
   - POST /api/chat/stream - SSE streaming version of Web Concierge (conditional on ENABLE_CONCIERGE=true)
+  - Events may include an occurrences[] array for multi-slot events (e.g. open houses with multiple showing times). Each occurrence has occurrenceId, startDate, endDate, label, and local (date/startTime/endTime in wall-clock time).
 
 Access: Public (no authentication required)
   - Full event details publicly accessible — no brokerage scoping or tiered access

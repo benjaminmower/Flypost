@@ -51,7 +51,16 @@
         "properties": {
           "occurrenceId": { "type": "string" },
           "startDate": { "type": "string", "format": "date-time" },
-          "endDate": { "type": "string", "format": "date-time" }
+          "endDate": { "type": "string", "format": "date-time" },
+          "label": { "type": "string", "description": "Human-readable slot label (e.g. 'Saturday', 'Afternoon')" },
+          "local": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string", "description": "Local date (YYYY-MM-DD)" },
+              "startTime": { "type": "string", "description": "Local start time (HH:mm, 24-hour)" },
+              "endTime": { "type": "string", "description": "Local end time (HH:mm, 24-hour)" }
+            }
+          }
         }
       },
       "Event": {
@@ -90,8 +99,7 @@
           "meta": {
             "type": "object",
             "properties": {
-              "count": { "type": "integer" },
-              "precision": { "type": "string", "enum": ["full", "reduced"] }
+              "count": { "type": "integer" }
             }
           }
         }

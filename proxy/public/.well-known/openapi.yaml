@@ -536,6 +536,36 @@ components:
               example: "https://www.zillow.com/homedetails/123-Main-St"
             - type: "null"
           description: External listing URL (required field, can be null)
+        occurrences:
+          type: array
+          description: Time slots for multi-slot events (e.g. open houses with Saturday + Sunday showings)
+          items:
+            type: object
+            properties:
+              occurrenceId:
+                type: string
+              startDate:
+                type: string
+                format: date-time
+              endDate:
+                type: string
+                format: date-time
+              label:
+                type: string
+                description: Human-readable slot label (e.g. "Saturday", "Afternoon")
+              local:
+                type: object
+                description: Wall-clock local time for the slot
+                properties:
+                  date:
+                    type: string
+                    description: "Local date (YYYY-MM-DD)"
+                  startTime:
+                    type: string
+                    description: "Local start time (HH:mm, 24-hour)"
+                  endTime:
+                    type: string
+                    description: "Local end time (HH:mm, 24-hour)"
         source:
           type: object
           description: Optional source provenance information

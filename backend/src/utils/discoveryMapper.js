@@ -249,6 +249,27 @@ export function toDiscoveryEventV1(event, options = {}) {
     discoveryEvent.source = { kind: sourceKind, url: sourceUrl }
   }
 
+  // Optional: occurrences (multi-slot events)
+  const rawOccurrences = event.flypost?.occurrences
+  if (Array.isArray(rawOccurrences) && rawOccurrences.length > 0) {
+    discoveryEvent.occurrences = rawOccurrences.map(occ => {
+      const mapped = {
+        occurrenceId: occ.occurrenceId,
+        startDate: occ.startDate,
+        endDate: occ.endDate,
+      }
+      if (occ.label) mapped.label = occ.label
+      if (occ.local) {
+        mapped.local = {
+          date: occ.local.date,
+          startTime: occ.local.startTime,
+          endTime: occ.local.endTime,
+        }
+      }
+      return mapped
+    })
+  }
+
   return discoveryEvent
 }
 

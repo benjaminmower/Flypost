@@ -77,6 +77,7 @@ app.use((req, res, next) => {
         '',
         '- GET /v1/events/near?lat=&lng=&radius_mi=: Discover open houses and events near a coordinate. Returns name, dates, address, organizer, and listing URL.',
         '- GET /v1/events/:event_id: Fetch a single event by its Flypost ID.',
+        '- Events may contain an occurrences[] array for multi-slot events with fields: occurrenceId, startDate, endDate, label, local.date, local.startTime, local.endTime.',
         '- POST /api/chat: Web Concierge — ask a natural-language question about nearby events. Pass { message, lat, lng, conversationHistory? }. Returns { success, message (markdown), timestamp }. Conditional on ENABLE_CONCIERGE=true.',
         '- POST /api/chat/stream: SSE streaming version of Web Concierge. Same request body. Returns text/event-stream with events: {"type":"connected"}, {"type":"token","content":"..."}, {"type":"done","duration":ms}, {"type":"error","message":"..."}. Conditional on ENABLE_CONCIERGE=true.',
         '- GET /api/chat/health: Web Concierge health check.',
