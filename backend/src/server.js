@@ -338,7 +338,13 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
 
     // Accept an explicit existingEventId to target a specific event for update
     // This is separate from flypost.eventId (which is always stripped)
-    const explicitExistingEventId = body.existingEventId || null
+    const EVT_ID_PATTERN = /\bevt_[a-z0-9]+_\d+\b/i
+    const extractedEventId = (body.naturalLanguageInput ?? body.text ?? body.input ?? '')
+      .match(EVT_ID_PATTERN)?.[0] || null
+    const explicitExistingEventId = body.existingEventId || extractedEventId || null
+    if (extractedEventId && !body.existingEventId) {
+      console.log(`🔍 Extracted existingEventId from natural language: ${extractedEventId}`)
+    }
 
     // Accept aliases for ergonomics
     let naturalLanguageInput =
@@ -603,6 +609,21 @@ app.post('/api/parse-and-publish', writeLimiter, async (req, res) => {
       }
     } else {
       console.log(`⚠️  Could not compute event identity (missing address or startDate) — will insert as new`)
+    }
+
+    // Phase 2: if 3-part identity (with URL) failed, retry without URL
+    if (!existingEvent && tempIdentity && tempIdentity.split('|').length === 3) {
+      const addressTimeIdentity = tempIdentity.split('|').slice(0, 2).join('|')
+      try {
+        existingEvent = await findEventByIdentity(addressTimeIdentity)
+        if (existingEvent) {
+          isUpdate = true
+          updateCount = (existingEvent.flypost?.updateCount || 0) + 1
+          console.log(`🔄 Found existing event ${existingEvent.flypost.eventId} via address+time fallback (URL changed)`)
+        }
+      } catch (err) {
+        console.error('⚠️ Error in address+time fallback identity check:', err)
+      }
     }
 
     // 4b. If caller supplied existingEventId, use direct lookup (overrides identity match)
@@ -1806,6 +1827,21 @@ app.post('/v1/events/upsert', writeLimiter, async (req, res) => {
       }
     } else {
       console.log(`⚠️  Could not compute event identity (missing address or startDate) — will insert as new`)
+    }
+
+    // Phase 2: if 3-part identity (with URL) failed, retry without URL
+    if (!existingEvent && tempIdentity && tempIdentity.split('|').length === 3) {
+      const addressTimeIdentity = tempIdentity.split('|').slice(0, 2).join('|')
+      try {
+        existingEvent = await findEventByIdentity(addressTimeIdentity)
+        if (existingEvent) {
+          isUpdate = true
+          updateCount = (existingEvent.flypost?.updateCount || 0) + 1
+          console.log(`🔄 Found existing event ${existingEvent.flypost.eventId} via address+time fallback (URL changed)`)
+        }
+      } catch (err) {
+        console.error('⚠️ Error in address+time fallback identity check:', err)
+      }
     }
 
     // 5b. Fallback: direct lookup by caller-supplied existingEventId
