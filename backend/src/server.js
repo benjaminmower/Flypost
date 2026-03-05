@@ -1413,6 +1413,8 @@ function renderSharePageHtml(event) {
   
   actionButtonsHtml += '</div>' // Close actions
   
+  console.log(`[renderSharePageHtml] event.flypost?.heroImageUrl = ${event.flypost?.heroImageUrl}`)
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
