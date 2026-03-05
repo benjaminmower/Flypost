@@ -1095,8 +1095,8 @@ function generateIcsFile(event) {
   
   // Smart occurrence selection (same logic as share page)
   const timezone = event.flypost?.timezone || 'America/Los_Angeles'
-  const occurrences = event.flypost?.occurrences || []
-  
+  const occurrences = event.occurrences || []
+
   let selectedOccurrence = null
   const now = Date.now()
   
@@ -1191,80 +1191,54 @@ function renderSharePageHtml(event) {
   // Build description from event data
   let description = event.description || ''
   
-  // Smart occurrence selection for date/time display
+  // Format a single date/time slot: "Saturday, Mar 7 · 2:00 PM – 4:00 PM PST"
   const timezone = event.flypost?.timezone || 'America/Los_Angeles'
-  const occurrences = event.flypost?.occurrences || []
-  
-  let selectedOccurrence = null
-  const now = Date.now()
-  
-  if (occurrences.length > 0) {
-    // 1. Prefer current occurrence (now is within start/end window)
-    selectedOccurrence = occurrences.find(occ => {
-      const start = new Date(occ.startDate).getTime()
-      const end = new Date(occ.endDate).getTime()
-      return now >= start && now <= end
-    })
-    
-    // 2. Else next upcoming occurrence (soonest startDate > now)
-    if (!selectedOccurrence) {
-      const upcoming = occurrences
-        .filter(occ => new Date(occ.startDate).getTime() > now)
-        .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-      selectedOccurrence = upcoming[0]
-    }
-    
-    // 3. Else most recent past occurrence
-    if (!selectedOccurrence) {
-      const past = occurrences
-        .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
-      selectedOccurrence = past[0]
-    }
-  }
-  
-  // Use selected occurrence or fallback to event startDate
-  const startDate = selectedOccurrence ? selectedOccurrence.startDate : event.startDate
-  const endDate = selectedOccurrence ? selectedOccurrence.endDate : event.endDate
-  
-  // Format date/time with timezone awareness
-  let formattedDate = ''
-  let formattedTime = ''
-  
-  if (startDate) {
+  const occurrences = event.occurrences || []
+
+  const formatSlot = (startDate, endDate) => {
     try {
-      const dateObj = new Date(startDate)
-      
-      // Format date: "Monday, Jan 15"
-      const dateFormatter = new Intl.DateTimeFormat('en-US', {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-        timeZone: timezone
-      })
-      formattedDate = dateFormatter.format(dateObj)
-      
-      // Format time: "2:00 PM - 4:00 PM"
-      const timeFormatter = new Intl.DateTimeFormat('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: timezone
-      })
-      formattedTime = timeFormatter.format(dateObj)
-      
-      if (endDate) {
-        const endObj = new Date(endDate)
-        formattedTime += ' - ' + timeFormatter.format(endObj)
-      }
+      const startObj = new Date(startDate)
+      const datePart = new Intl.DateTimeFormat('en-US', {
+        weekday: 'long', month: 'short', day: 'numeric', timeZone: timezone
+      }).format(startObj)
+      const startTimePart = new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric', minute: '2-digit', timeZone: timezone
+      }).format(startObj)
+      if (!endDate) return `${datePart} · ${startTimePart}`
+      const endTimePart = new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: timezone
+      }).format(new Date(endDate))
+      return `${datePart} · ${startTimePart} – ${endTimePart}`
     } catch (err) {
-      console.error('Error formatting date:', err)
+      console.error('Error formatting slot:', err)
+      return null
     }
   }
-  
-  // Build full description
-  if (!description && formattedDate) {
-    description = `${formattedDate}${formattedTime ? ' • ' + formattedTime : ''}`
-  } else if (formattedDate) {
-    description = `${formattedDate}${formattedTime ? ' • ' + formattedTime : ''} • ${description}`
+
+  // Build one slot string per occurrence (sorted chronologically), falling back to event dates
+  let slotStrings = []
+  if (occurrences.length > 0) {
+    const sorted = [...occurrences].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+    slotStrings = sorted.map(occ => formatSlot(occ.startDate, occ.endDate)).filter(Boolean)
+  } else if (event.startDate) {
+    const slot = formatSlot(event.startDate, event.endDate)
+    if (slot) slotStrings = [slot]
+  }
+
+  // For OG description: use first/soonest upcoming occurrence (social crawlers read one tag)
+  const now = Date.now()
+  let ogSlot = slotStrings[0] || ''
+  if (occurrences.length > 0) {
+    const sorted = [...occurrences].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+    const upcoming = sorted.find(occ => new Date(occ.startDate).getTime() >= now) || sorted[0]
+    ogSlot = formatSlot(upcoming.startDate, upcoming.endDate) || ogSlot
+  }
+
+  // Build full description (metadata fallback)
+  if (!description && ogSlot) {
+    description = ogSlot
+  } else if (ogSlot) {
+    description = `${ogSlot} • ${description}`
   }
   
   // Extract address
@@ -1280,21 +1254,10 @@ function renderSharePageHtml(event) {
   
   // Generate concise description for OG tags (optimized for social media)
   let ogDescription = ''
-  if (formattedDate && formattedTime) {
-    // Shorten time format: "1:00 PM - 4:00 PM" -> "1 PM–4 PM"
-    // Remove :00 from times and use en dash
-    const shortTime = formattedTime
-      .replace(' - ', '–')
-      .replace(/(\d+):00\s/g, '$1 ') // Remove :00 before AM/PM
-    
-    ogDescription = `${formattedDate} • ${shortTime}`
+  if (ogSlot) {
+    ogDescription = ogSlot
     if (formattedAddress) {
       ogDescription += ` • Open house at ${formattedAddress}. Explore this beautiful property in person.`
-    }
-  } else if (formattedDate) {
-    ogDescription = formattedDate
-    if (formattedAddress) {
-      ogDescription += ` • Open house at ${formattedAddress}`
     }
   } else if (formattedAddress) {
     ogDescription = `Open house at ${formattedAddress}`
@@ -1310,8 +1273,7 @@ function renderSharePageHtml(event) {
   const safeUrl = escapeHtml(shareUrl)
   const safeImageUrl = escapeHtml(imageUrl)
   const safeAddress = escapeHtml(formattedAddress)
-  const safeDate = escapeHtml(formattedDate)
-  const safeTime = escapeHtml(formattedTime)
+  const safeSlots = slotStrings.map(s => escapeHtml(s))
   
   // Generate calendar download URL
   const slug = shareUrl.split('/').slice(-2, -1)[0] || 'event'
@@ -1337,7 +1299,7 @@ function renderSharePageHtml(event) {
   actionButtonsHtml += '<div class="secondary-actions">'
   
   // Add to Calendar button (Secondary)
-  if (startDate) {
+  if (event.startDate || occurrences.length > 0) {
     actionButtonsHtml += `
       <a href="${escapeHtml(calendarDownloadUrl)}" class="btn btn-secondary" download>
         📅 Add to Calendar
@@ -1626,8 +1588,7 @@ function renderSharePageHtml(event) {
     <div class="container">
       <h1>${safeTitle}</h1>
       <div class="meta">
-        ${safeDate ? `<div class="meta-item">📅 ${safeDate}</div>` : ''}
-        ${safeTime ? `<div class="meta-item">🕐 ${safeTime}</div>` : ''}
+        ${safeSlots.map(s => `<div class="meta-item">📅 ${s}</div>`).join('\n        ')}
         ${safeAddress ? `<div class="meta-item">📍 ${safeAddress}</div>` : ''}
       </div>
       ${actionButtonsHtml}
