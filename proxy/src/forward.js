@@ -412,6 +412,52 @@ module.exports = function createForward() {
       // Backend call
       //-------------------------------------
       const start = Date.now()
+
+      // SSE streaming endpoints must not be buffered — pipe directly to client
+      const isStreamEndpoint = originalPath === '/api/chat/stream'
+
+      if (isStreamEndpoint) {
+        const backendRes = await axios({
+          url: targetUrl,
+          method: req.method,
+          headers,
+          data,
+          responseType: 'stream',
+          validateStatus: () => true
+        })
+
+        const status = backendRes.status
+        const color =
+          status >= 500
+            ? '\x1b[31m'
+            : status >= 400
+            ? '\x1b[33m'
+            : '\x1b[32m'
+
+        Object.entries(backendRes.headers || {}).forEach(([k, v]) => {
+          if (!k) return
+          if (hopByHop.includes(k.toLowerCase())) return
+          try {
+            res.setHeader(k, v)
+          } catch (_) {}
+        })
+
+        setCors(res, origin)
+        res.status(status)
+
+        backendRes.data.on('end', () => {
+          const durationMs = Date.now() - start
+          console.log(
+            `[backend → proxy] ${color}${status}\x1b[0m ` +
+              `${req.method} ${req.originalUrl} ` +
+              `(stream ended, ${durationMs}ms, id=${requestId})`
+          )
+        })
+
+        backendRes.data.pipe(res)
+        return
+      }
+
       const backendRes = await axios({
         url: targetUrl,
         method: req.method,
