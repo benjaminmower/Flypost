@@ -261,6 +261,33 @@
             </form>
             <div id="publish-status" class="status hidden"></div>
         </div>
+
+        <!-- Developer Access — visible when signed in -->
+        <div id="developer-section" class="hidden max-w-xl mx-auto mt-4">
+            <div class="glass-card p-8 md:p-10 rounded-[2.5rem] md:rounded-[3.5rem] border-mint_leaf/10 text-left">
+                <h3 class="text-[10px] font-bold uppercase tracking-widest text-mint_leaf mb-1">Developer Access</h3>
+                <p class="text-[9px] uppercase tracking-widest text-air_force_blue-700 opacity-50 mb-6">Write Token for API Integrations</p>
+
+                <button id="generate-token-btn" class="bg-ink_black/60 border border-mint_leaf/30 text-mint_leaf text-xs font-bold uppercase tracking-widest py-3 px-6 rounded-xl hover:bg-mint_leaf/10 transition-all active:scale-95">
+                    Generate Write Token
+                </button>
+
+                <div id="token-output" class="hidden mt-5 space-y-3">
+                    <input
+                        id="write-token-input"
+                        type="text"
+                        readonly
+                        class="bg-ink_black/50 border border-white/10 w-full p-4 rounded-xl font-mono text-xs text-white focus:outline-none focus:border-mint_leaf/40 transition-all"
+                        placeholder="Token will appear here"
+                    />
+                    <button id="copy-token-btn" class="bg-mint_leaf text-ink_black text-xs font-black uppercase tracking-widest py-3 px-6 rounded-xl hover:bg-bright_snow transition-all active:scale-95">
+                        Copy Token
+                    </button>
+                </div>
+
+                <p id="token-status" class="mt-4 text-[10px] uppercase tracking-widest font-bold opacity-50"></p>
+            </div>
+        </div>
     </main>
 
     <footer class="mt-auto py-12 opacity-20">

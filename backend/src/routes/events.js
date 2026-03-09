@@ -4,11 +4,20 @@ import { isFirestoreEnabled } from '../firestoreClient.js'
 import { toDiscoveryEventsV1, toDiscoveryEventV1 } from '../utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse } from '../utils/sanitizer.js'
 import {
-  getBrokerageIdFromRequest,
   getAccessTier,
   applyTieredRateLimit,
   trackAndDetectAnomaly
 } from '../utils/requestHelpers.js'
+
+// Local helper: read brokerageId from query params (read routes only)
+function getBrokerageIdFromRequest(req, source) {
+  const headerId = req.get('x-flypost-brokerage-id')
+  if (headerId) return headerId
+  if (source === 'query') {
+    return (req.query && (req.query.brokerageId || req.query.brokerage_id)) || null
+  }
+  return null
+}
 
 const router = express.Router()
 

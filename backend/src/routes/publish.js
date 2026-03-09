@@ -4,7 +4,7 @@ import { parseEventWithLLM } from '../llmParser.js'
 import { validateEventData } from '../validation.js'
 import { storeEvent, findEventByIdentity, getEventByIdAny } from '../storage.js'
 import { computeEventHash } from '../hashUtils.js'
-import { isFirestoreEnabled } from '../firestoreClient.js'
+import { isFirestoreEnabled, getFirestoreClient } from '../firestoreClient.js'
 import { computeCanonicalKey, computeEventIdentity } from '../utils/canonicalKey.js'
 import { extractPriceFromText, hasValidListPrice } from '../utils/priceExtractor.js'
 import { mergeSources } from '../utils/sourceProvenance.js'
@@ -20,7 +20,7 @@ import {
   validateOpenHouseEndDate,
   convertOpenHouseLocalIntent
 } from '../utils/timeNormalization.js'
-import { getBrokerageIdFromRequest } from '../utils/requestHelpers.js'
+import { verifyIdToken } from '../utils/firebaseAdmin.js'
 import { triggerHeroImageScrape } from '../utils/heroImage.js'
 
 const router = express.Router()
@@ -79,20 +79,31 @@ router.post('/', writeLimiter, async (req, res) => {
   try {
     const body = req.body || {}
 
-    // tenancy: header wins, then body.brokerageId
-    const brokerageId =
-      getBrokerageIdFromRequest(req, 'body') || body.brokerageId || null
+    // Resolve identity from Firebase ID token OR x-flypost-write-token
+    let uid = null, agentEmail = null
 
-    // Check if this is a Firebase-authenticated request
-    const isFirebaseAuth = req.get('x-flypost-auth-provider') === 'firebase'
+    const authHeader = req.get('authorization') || ''
+    const writeToken = req.get('x-flypost-write-token')
 
-    // Require brokerageId for non-Firebase writes (machine/static-token flows)
-    // Firebase-authenticated browser writes can proceed without brokerageId
-    if (!brokerageId && !isFirebaseAuth) {
-      return res.status(400).json({
+    if (authHeader.startsWith('Bearer ')) {
+      try {
+        ;({ uid, email: agentEmail } = await verifyIdToken(authHeader.slice(7)))
+      } catch {
+        return res.status(401).json({ success: false, error: 'Invalid Firebase ID token' })
+      }
+    } else if (writeToken) {
+      const db = getFirestoreClient()
+      const snap = await db.collection('tokens').where('token', '==', writeToken).limit(1).get()
+      if (snap.empty) {
+        return res.status(401).json({ success: false, error: 'Invalid write token' })
+      }
+      const data = snap.docs[0].data()
+      uid = data.uid
+      agentEmail = data.email
+    } else {
+      return res.status(401).json({
         success: false,
-        error:
-          'Missing brokerageId. This should normally be injected by the proxy from the write token.'
+        error: 'Missing auth: provide Authorization: Bearer <firebase_id_token> or x-flypost-write-token'
       })
     }
 
@@ -128,7 +139,7 @@ router.post('/', writeLimiter, async (req, res) => {
     }
 
     console.log(
-      `🤖 Processing (brokerageId=${brokerageId || 'none'}, firebaseAuth=${isFirebaseAuth}): "${naturalLanguageInput.substring(0, 100)}..."`
+      `🤖 Processing (uid=${uid}): "${naturalLanguageInput.substring(0, 100)}..."`
     )
 
     // 1) Parse with LLM
@@ -299,7 +310,7 @@ router.post('/', writeLimiter, async (req, res) => {
     if (parsedEvent.occurrences && Array.isArray(parsedEvent.occurrences)) {
       console.log(`📅 Processing ${parsedEvent.occurrences.length} occurrences`)
 
-      const canonicalKeyForOcc = computeCanonicalKey(parsedEvent, brokerageId) || 'unknown'
+      const canonicalKeyForOcc = computeCanonicalKey(parsedEvent, null) || 'unknown'
       for (const occ of parsedEvent.occurrences) {
         if (!occ.occurrenceId && occ.startDate && occ.endDate) {
           occ.occurrenceId = generateOccurrenceId(canonicalKeyForOcc, occ.startDate, occ.endDate)
@@ -367,14 +378,18 @@ router.post('/', writeLimiter, async (req, res) => {
 
     // 5) Enrich event with server-side metadata
     const enrichedEvent = enrichEventMetadata(parsedEvent, {
-      brokerageId,
+      brokerageId: null,
       isUpdate,
       existingEventId: existingEvent?.flypost?.eventId,
       updateCount
     })
 
+    // Store submitter identity on every event
+    enrichedEvent.flypost.createdBy = uid
+    enrichedEvent.flypost.agentEmail = agentEmail
+
     // Legacy: Also compute old canonical key for backward compatibility during migration
-    const canonicalKey = computeCanonicalKey(enrichedEvent, brokerageId)
+    const canonicalKey = computeCanonicalKey(enrichedEvent, null)
     if (canonicalKey) {
       enrichedEvent.flypost.canonicalKey = canonicalKey
     }
@@ -430,7 +445,6 @@ router.post('/', writeLimiter, async (req, res) => {
     // 10) Prepare event for storage
     const eventToStore = {
       ...validatedEvent,
-      brokerageId,
       hash: eventHash
     }
 
@@ -444,13 +458,13 @@ router.post('/', writeLimiter, async (req, res) => {
     }
 
     console.log(
-      `🔐 Computed event hash: ${eventHash.value.substring(0, 16)}... (brokerageId=${brokerageId || 'none'})`
+      `🔐 Computed event hash: ${eventHash.value.substring(0, 16)}... (uid=${uid})`
     )
 
     // 11) Store (will handle upsert via eventIdentity)
     const storedEvent = await storeEvent(eventToStore)
     console.log(
-      `📦 ${isUpdate ? 'Updated' : 'Stored'} event: ${storedEvent.flypost.eventId} (brokerageId=${storedEvent.brokerageId || 'none'})`
+      `📦 ${isUpdate ? 'Updated' : 'Stored'} event: ${storedEvent.flypost.eventId} (uid=${uid})`
     )
     triggerHeroImageScrape(storedEvent)
     storedEvent.shareUrl = generateShareUrl(storedEvent)

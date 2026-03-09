@@ -8,7 +8,6 @@ import { computeCanonicalKey, computeEventIdentity } from '../utils/canonicalKey
 import { sanitizeEvent } from '../utils/northStarEnforcer.js'
 import { mergeSources, validateSource } from '../utils/sourceProvenance.js'
 import { enrichEventMetadata, normalizeEventDates } from '../utils/eventEnrichment.js'
-import { getBrokerageIdFromRequest } from '../utils/requestHelpers.js'
 import { triggerHeroImageScrape } from '../utils/heroImage.js'
 
 const router = express.Router()

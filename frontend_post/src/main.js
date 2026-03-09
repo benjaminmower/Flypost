@@ -26,6 +26,14 @@ const publishBtn = document.getElementById('publish-btn')
 const publishStatus = document.getElementById('publish-status')
 const publishResult = document.getElementById('publish-result')
 
+// DOM elements - Developer Access
+const developerSection = document.getElementById('developer-section')
+const generateTokenBtn = document.getElementById('generate-token-btn')
+const tokenOutput = document.getElementById('token-output')
+const writeTokenInput = document.getElementById('write-token-input')
+const copyTokenBtn = document.getElementById('copy-token-btn')
+const tokenStatus = document.getElementById('token-status')
+
 // App state
 let currentUser = null
 
@@ -105,6 +113,26 @@ function setupEventListeners() {
   if (eventForm) {
     eventForm.addEventListener('submit', handleEventSubmit)
   }
+
+  // Generate write token
+  if (generateTokenBtn) {
+    generateTokenBtn.addEventListener('click', handleGenerateToken)
+  }
+
+  // Copy token
+  if (copyTokenBtn) {
+    copyTokenBtn.addEventListener('click', async () => {
+      const token = writeTokenInput?.value
+      if (!token) return
+      try {
+        await navigator.clipboard.writeText(token)
+        copyTokenBtn.textContent = '✓ Copied!'
+        setTimeout(() => { copyTokenBtn.textContent = 'Copy Token' }, 2000)
+      } catch {
+        if (tokenStatus) tokenStatus.textContent = 'Failed to copy.'
+      }
+    })
+  }
 }
 
 // Update UI based on auth state
@@ -113,12 +141,47 @@ function updateAuthUI() {
     // User is signed in
     if (authSection) authSection.classList.add('hidden')
     if (publishSection) publishSection.classList.remove('hidden')
+    if (developerSection) developerSection.classList.remove('hidden')
     if (authStatus) authStatus.textContent = `Signed in as ${currentUser.email}`
   } else {
     // User is signed out
     if (authSection) authSection.classList.remove('hidden')
     if (publishSection) publishSection.classList.add('hidden')
+    if (developerSection) developerSection.classList.add('hidden')
     if (authStatus) authStatus.textContent = 'Not signed in.'
+  }
+}
+
+// Generate or retrieve a write token for the current user
+async function handleGenerateToken() {
+  if (!currentUser) return
+
+  if (generateTokenBtn) {
+    generateTokenBtn.disabled = true
+    generateTokenBtn.textContent = 'Generating...'
+  }
+  if (tokenStatus) tokenStatus.textContent = ''
+
+  try {
+    const idToken = await currentUser.getIdToken()
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.goflypost.com'
+    const response = await fetch(`${API_BASE}/v1/tokens/generate`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${idToken}` }
+    })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || `Request failed: ${response.status}`)
+
+    if (writeTokenInput) writeTokenInput.value = result.token
+    if (tokenOutput) tokenOutput.classList.remove('hidden')
+    if (tokenStatus) tokenStatus.textContent = 'Token ready. Keep this secret.'
+  } catch (e) {
+    if (tokenStatus) tokenStatus.textContent = 'Error: ' + (e.message || 'Unknown error')
+  } finally {
+    if (generateTokenBtn) {
+      generateTokenBtn.disabled = false
+      generateTokenBtn.textContent = 'Generate Write Token'
+    }
   }
 }
 

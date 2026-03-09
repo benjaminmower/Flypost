@@ -25,6 +25,7 @@ import shareRouter from './routes/share.js'
 import upsertRouter from './routes/upsert.js'
 import presenceRouter from './routes/presence.js'
 import feedbackRouter from './routes/feedback.js'
+import tokensRouter from './routes/tokens.js'
 
 dotenv.config()
 
@@ -102,6 +103,7 @@ app.use('/v1/events', eventsRouter)
 app.use('/e', shareRouter)
 app.use('/v1/presence', presenceRouter)
 app.use('/v1/feedback', feedbackRouter)
+app.use('/v1/tokens', tokensRouter)
 
 // Insights route (brokerage-level)
 app.get('/v1/brokerages/:brokerageId/insights', readLimiter, async (req, res) => {

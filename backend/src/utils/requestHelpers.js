@@ -44,20 +44,6 @@ export function trackAndDetectAnomaly(ip) {
   return false
 }
 
-// Helper: derive brokerageId from header/body/query
-export function getBrokerageIdFromRequest(req, source) {
-  const headerId = req.get('x-flypost-brokerage-id')
-  if (headerId) return headerId
-
-  if (source === 'body') {
-    return (req.body && (req.body.brokerageId || req.body.brokerage_id)) || null
-  }
-  if (source === 'query') {
-    return (req.query && (req.query.brokerageId || req.query.brokerage_id)) || null
-  }
-  return null
-}
-
 // Helper: reduce geo precision for public aggregate queries
 export function reduceGeoPrecision(lat, lng, precision = 2) {
   return {
@@ -66,17 +52,12 @@ export function reduceGeoPrecision(lat, lng, precision = 2) {
   }
 }
 
-// Helper: determine access tier (public vs brokerage-scoped)
+// Helper: determine access tier (public vs authenticated)
 export function getAccessTier(req) {
-  const brokerageId = getBrokerageIdFromRequest(req, 'query')
   // CodeQL: api_key in query is acceptable for read-only public API
   // Prefer header (x-api-key) but allow query param for AI plugin compatibility
   const hasApiKey = req.get('x-api-key') || req.query.api_key
-
-  if (brokerageId || hasApiKey) {
-    return 'brokerage' // Full fidelity
-  }
-  return 'public' // Reduced precision and fewer fields
+  return hasApiKey ? 'brokerage' : 'public'
 }
 
 // Dynamic rate limiting middleware based on access tier
