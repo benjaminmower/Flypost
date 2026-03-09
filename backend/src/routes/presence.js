@@ -13,7 +13,21 @@ const writeLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.3')
+const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.05')
+
+function logCheckInFailure(reason, { eventId, submittedLat, submittedLng, eventLat, eventLng, distanceMeters, eventStart, eventEnd, submittedTimestamp } = {}) {
+  console.error(JSON.stringify({
+    type: 'PRESENCE_CHECK_IN_FAILURE',
+    reason,
+    eventId: eventId ?? null,
+    submitted: { lat: submittedLat ?? null, lng: submittedLng ?? null },
+    expected: { lat: eventLat ?? null, lng: eventLng ?? null },
+    distanceMeters: distanceMeters ?? null,
+    activeWindow: { start: eventStart ?? null, end: eventEnd ?? null },
+    submittedTimestamp: submittedTimestamp ?? null,
+    serverTime: new Date().toISOString(),
+  }))
+}
 
 function toRadians(degrees) {
   return degrees * (Math.PI / 180)
@@ -38,6 +52,7 @@ router.post('/check-in', writeLimiter, async (req, res) => {
     const { eventId, lat, lng, buyerToken, method, timestamp } = req.body
 
     if (!buyerToken) {
+      logCheckInFailure('MISSING_BUYER_TOKEN', { eventId, submittedTimestamp: timestamp })
       return res.status(400).json({
         success: false,
         error: 'buyerToken is required'
@@ -48,6 +63,7 @@ router.post('/check-in', writeLimiter, async (req, res) => {
     const lngNum = Number(lng)
 
     if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+      logCheckInFailure('INVALID_COORDINATES', { eventId, submittedLat: latNum, submittedLng: lngNum, submittedTimestamp: timestamp })
       return res.status(400).json({
         success: false,
         error: 'lat and lng are required for presence verification'
@@ -69,6 +85,7 @@ router.post('/check-in', writeLimiter, async (req, res) => {
       )
 
       if (!nearbyEvents || nearbyEvents.length === 0) {
+        logCheckInFailure('NO_NEARBY_EVENT', { submittedLat: latNum, submittedLng: lngNum, submittedTimestamp: timestamp })
         return res.status(404).json({
           success: false,
           error: 'No events found within proximity for check-in',
@@ -85,6 +102,7 @@ router.post('/check-in', writeLimiter, async (req, res) => {
       try {
         matchedEvent = await getEventByIdAny(targetEventId, useFirestore)
         if (!matchedEvent) {
+          logCheckInFailure('EVENT_NOT_FOUND', { eventId: targetEventId, submittedLat: latNum, submittedLng: lngNum, submittedTimestamp: timestamp })
           return res.status(404).json({
             success: false,
             error: 'Event not found',
@@ -93,6 +111,7 @@ router.post('/check-in', writeLimiter, async (req, res) => {
         }
       } catch (error) {
         console.error('❌ Error fetching event for distance check:', error)
+        logCheckInFailure('EVENT_FETCH_ERROR', { eventId: targetEventId, submittedLat: latNum, submittedLng: lngNum, submittedTimestamp: timestamp })
         return res.status(500).json({
           success: false,
           error: 'Failed to fetch event for validation',
@@ -143,6 +162,14 @@ router.post('/check-in', writeLimiter, async (req, res) => {
 
         const nextOcc = upcomingOccurrences[0]
 
+        logCheckInFailure('EVENT_NOT_ACTIVE', {
+          eventId: targetEventId,
+          submittedLat: latNum,
+          submittedLng: lngNum,
+          eventStart: matchedEvent.occurrences.map(o => o.startDate).join(', '),
+          eventEnd: matchedEvent.occurrences.map(o => o.endDate).join(', '),
+          submittedTimestamp: timestamp,
+        })
         return res.status(400).json({
           success: false,
           error: 'EVENT_NOT_ACTIVE',
@@ -171,6 +198,7 @@ router.post('/check-in', writeLimiter, async (req, res) => {
       // Fallback to top-level startDate/endDate
       if (!matchedEvent.startDate) {
         console.error(`❌ Event ${targetEventId} missing startDate (cannot time-gate)`)
+        logCheckInFailure('EVENT_NOT_TIME_GATABLE', { eventId: targetEventId, submittedLat: latNum, submittedLng: lngNum, submittedTimestamp: timestamp })
         return res.status(400).json({
           success: false,
           error: 'EVENT_NOT_TIME_GATABLE',
@@ -180,6 +208,7 @@ router.post('/check-in', writeLimiter, async (req, res) => {
 
       if (!matchedEvent.endDate) {
         console.error(`❌ Event ${targetEventId} missing endDate (cannot time-gate)`)
+        logCheckInFailure('EVENT_NOT_TIME_GATABLE', { eventId: targetEventId, submittedLat: latNum, submittedLng: lngNum, submittedTimestamp: timestamp })
         return res.status(400).json({
           success: false,
           error: 'EVENT_NOT_TIME_GATABLE',
@@ -196,6 +225,7 @@ router.post('/check-in', writeLimiter, async (req, res) => {
         }
       } catch (error) {
         console.error(`❌ Failed to parse event times for ${targetEventId}:`, error.message)
+        logCheckInFailure('INVALID_EVENT_TIME_DATA', { eventId: targetEventId, submittedLat: latNum, submittedLng: lngNum, submittedTimestamp: timestamp })
         return res.status(500).json({
           success: false,
           error: 'Invalid event time data',
@@ -206,6 +236,14 @@ router.post('/check-in', writeLimiter, async (req, res) => {
       if (now < eventStart) {
         const minutesUntilStart = Math.round((eventStart - now) / 60000)
         console.log(`⏰ Check-in rejected: Event ${targetEventId} has not started yet (starts in ${minutesUntilStart} minutes)`)
+        logCheckInFailure('EVENT_NOT_STARTED', {
+          eventId: targetEventId,
+          submittedLat: latNum,
+          submittedLng: lngNum,
+          eventStart: matchedEvent.startDate,
+          eventEnd: matchedEvent.endDate,
+          submittedTimestamp: timestamp,
+        })
         return res.status(400).json({
           success: false,
           error: 'EVENT_NOT_STARTED',
@@ -218,6 +256,14 @@ router.post('/check-in', writeLimiter, async (req, res) => {
       if (now > eventEnd) {
         const minutesSinceEnd = Math.round((now - eventEnd) / 60000)
         console.log(`⏰ Check-in rejected: Event ${targetEventId} has already ended (ended ${minutesSinceEnd} minutes ago)`)
+        logCheckInFailure('EVENT_ALREADY_ENDED', {
+          eventId: targetEventId,
+          submittedLat: latNum,
+          submittedLng: lngNum,
+          eventStart: matchedEvent.startDate,
+          eventEnd: matchedEvent.endDate,
+          submittedTimestamp: timestamp,
+        })
         return res.status(400).json({
           success: false,
           error: 'EVENT_ALREADY_ENDED',
@@ -258,6 +304,17 @@ router.post('/check-in', writeLimiter, async (req, res) => {
       )
 
       if (actualDistanceKm > PRESENCE_RADIUS_KM) {
+        logCheckInFailure('TOO_FAR_FROM_EVENT', {
+          eventId: targetEventId,
+          submittedLat: latNum,
+          submittedLng: lngNum,
+          eventLat,
+          eventLng,
+          distanceMeters: actualDistanceMeters,
+          eventStart: eventStart?.toISOString() ?? null,
+          eventEnd: eventEnd?.toISOString() ?? null,
+          submittedTimestamp: timestamp,
+        })
         return res.status(404).json({
           success: false,
           error: 'No events found within proximity for check-in',
