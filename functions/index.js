@@ -194,7 +194,12 @@ async function batchQueryEvents(eventIds) {
     try {
       const doc = await eventsRef.doc(eventId).get()
       if (doc.exists) {
-        eventMap.set(eventId, doc.data())
+        const data = doc.data()
+        eventMap.set(eventId, {
+          ...data,
+          heroImageUrl: data.flypost?.heroImageUrl || null,
+          eventEndDate: data.endDate || null,
+        })
       }
     } catch (error) {
       // Log error but don't fail the entire digest
@@ -306,13 +311,20 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
         wantsSimilarCount: 0,
         wouldBuyYesCount: 0,
         wouldBuyMaybeCount: 0,
-        wouldBuyNoCount: 0
+        wouldBuyNoCount: 0,
+        likedResponses: [],
+        dislikedResponses: [],
       })
     }
     
     const stats = feedbackStatsByEventId.get(eventId)
     stats.feedbackCount++
-    
+
+    const liked = feedback.answers?.liked?.trim()
+    const disliked = feedback.answers?.disliked?.trim()
+    if (liked) stats.likedResponses.push(liked)
+    if (disliked) stats.dislikedResponses.push(disliked)
+
     // Legacy data handling: if wouldBuy is missing but wantsSimilar exists,
     // treat wantsSimilar as legacy wouldBuy intent
     const hasWouldBuy = feedback.answers?.wouldBuy !== null && feedback.answers?.wouldBuy !== undefined
@@ -369,7 +381,9 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
       wouldBuyMaybeCount: feedbackStats?.wouldBuyMaybeCount || 0,
       wouldBuyNoCount: feedbackStats?.wouldBuyNoCount || 0,
       occurrenceIds: attendanceStats ? Array.from(attendanceStats.occurrenceIds) : [],
-      feedbackRate: totalCheckIns === 0 ? 0 : feedbackCount / totalCheckIns
+      feedbackRate: totalCheckIns === 0 ? 0 : feedbackCount / totalCheckIns,
+      likedResponses: feedbackStats?.likedResponses || [],
+      dislikedResponses: feedbackStats?.dislikedResponses || [],
     }
     
     // Enrichment: prefer occurrence docs, fallback to event doc
@@ -419,9 +433,12 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
         } else if (eventData.url) {
           digest.listingUrl = eventData.url
         }
+
+        if (eventData.heroImageUrl) digest.heroImageUrl = eventData.heroImageUrl
+        if (eventData.eventEndDate) digest.eventEndDate = eventData.eventEndDate
       }
     }
-    
+
     eventDigests.push(digest)
   }
   
@@ -600,6 +617,202 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
   lines.push('*This report is an immutable record of real-world activity recorded by the Flypost Event Registry.*')
 
   return lines.join('\n')
+}
+
+/**
+ * Build a per-event markdown report card
+ *
+ * @param {object} eventDigest - Single event digest object from aggregateFeedbackAndAttendance
+ * @returns {string} - Markdown string
+ */
+function buildPerEventMarkdown(eventDigest) {
+  const dateFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: LA_TIMEZONE,
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric'
+  })
+
+  const address = eventDigest.eventAddress || `Event ${eventDigest.eventId}`
+
+  let startDateLabel = '—'
+  let endDateLabel = '—'
+  // eventDigest doesn't carry a startDate field; use eventEndDate for the end label
+  if (eventDigest.eventEndDate) {
+    endDateLabel = dateFormatter.format(new Date(eventDigest.eventEndDate))
+  }
+
+  const feedbackRatePct =
+    eventDigest.totalCheckIns === 0
+      ? 0
+      : Math.floor((eventDigest.feedbackCount / eventDigest.totalCheckIns) * 100)
+
+  const lines = []
+
+  lines.push(`# ${address} | FLYPOST EVENT REPORT CARD`)
+  lines.push(`Period: ${startDateLabel} — ${endDateLabel} (LA timezone)`)
+  if (eventDigest.listingUrl) {
+    lines.push(`Listing: ${eventDigest.listingUrl}`)
+  }
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('## ✅ ATTENDANCE')
+  lines.push(`- Verified check-ins: ${eventDigest.totalCheckIns || 0}`)
+  lines.push(`- Unique buyers: ${eventDigest.uniqueCheckInBuyers || 0}`)
+  lines.push(`- Feedback submissions: ${eventDigest.feedbackCount || 0} (${feedbackRatePct}%)`)
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('## 📈 MARKET INTENT')
+  lines.push(
+    `- **Would Buy:** ${eventDigest.wouldBuyYesCount || 0} yes • ${eventDigest.wouldBuyMaybeCount || 0} maybe • ${eventDigest.wouldBuyNoCount || 0} no`
+  )
+  lines.push(`- **Wants Similar:** ${eventDigest.wantsSimilarCount || 0}`)
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('## 💬 VERBATIM BUYER FEEDBACK')
+
+  const liked = eventDigest.likedResponses || []
+  const disliked = eventDigest.dislikedResponses || []
+
+  if (liked.length === 0 && disliked.length === 0) {
+    lines.push('_No written responses submitted._')
+  } else {
+    // Interleave liked and disliked in submission order (zip by index)
+    const maxLen = Math.max(liked.length, disliked.length)
+    for (let i = 0; i < maxLen; i++) {
+      if (i < liked.length) {
+        lines.push(`> **Liked:** "${liked[i]}"`)
+      }
+      if (i < disliked.length) {
+        lines.push(`> **Disliked:** "${disliked[i]}"`)
+      }
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Send a per-event report card email via Resend.
+ * Gmail-safe: hero image is injected with inline styles, not via markdown.
+ *
+ * @param {object} params
+ * @param {object} params.eventDigest - Single event digest
+ * @param {string} params.docId - Week document ID used in email subject
+ * @returns {Promise<void>}
+ */
+async function sendPerEventEmail({ eventDigest, docId }) {
+  const apiKey = RESEND_API_KEY.value()
+  const recipientsRaw = DIGEST_RECIPIENTS.value()
+  if (!apiKey || !recipientsRaw) {
+    console.warn('RESEND_API_KEY or DIGEST_RECIPIENTS not set — skipping per-event email send')
+    return
+  }
+  const to = recipientsRaw.split(',').map(s => s.trim()).filter(Boolean)
+
+  const address = eventDigest.eventAddress || `Event ${eventDigest.eventId}`
+  const markdown = buildPerEventMarkdown(eventDigest)
+  const bodyHtml = marked.parse(markdown)
+
+  const heroBlock = eventDigest.heroImageUrl
+    ? `<img src="${eventDigest.heroImageUrl}" alt="Property photo" style="width:100%;max-width:660px;height:auto;display:block;border-radius:4px;margin:0 auto 24px;" />`
+    : ''
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: 40px auto; color: #111; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+    th { background: #f5f5f5; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+    code { background: #f0f0f0; padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
+    blockquote { border-left: 3px solid #ddd; margin: 8px 0; padding: 4px 12px; color: #555; }
+  </style></head><body>${heroBlock}${bodyHtml}</body></html>`
+
+  const resend = new Resend(apiKey)
+  const { error } = await resend.emails.send({
+    from: 'Flypost Digest <report@attendance.goflypost.com>',
+    to,
+    subject: `Flypost Event Report — ${address} — ${docId}`,
+    html,
+  })
+
+  if (error) {
+    console.error('Resend per-event send failed:', error)
+    throw new Error(`Resend error: ${error.message}`)
+  }
+  console.log(`Per-event email sent for ${eventDigest.eventId} to ${to.join(', ')}`)
+}
+
+/**
+ * Orchestrate per-event digest emails for all events in the weekly window.
+ * Non-fatal per event — continues to next event on failure.
+ *
+ * @param {object} options
+ * @param {Date} options.now - Current date/time (defaults to now)
+ * @returns {Promise<{ eventCount: number, emailsSent: number, emailsFailed: number }>}
+ */
+async function runPerEventFeedbackDigest({ now = new Date() } = {}) {
+  console.log('=== Starting Per-Event Feedback Digest ===')
+  const startTime = Date.now()
+
+  const { windowStartIso, windowEndIso, docId } = calculateWeeklyWindow(now)
+  console.log(`Window: ${windowStartIso} to ${windowEndIso}`)
+
+  const [feedbackDocs, attendanceDocs] = await Promise.all([
+    queryFeedbackInWindow(windowStartIso, windowEndIso),
+    queryAttendanceInWindow(windowStartIso, windowEndIso),
+  ])
+
+  if (feedbackDocs.length === 0 && attendanceDocs.length === 0) {
+    console.log('No data in window — no per-event emails to send.')
+    return { eventCount: 0, emailsSent: 0, emailsFailed: 0 }
+  }
+
+  const allEventIds = [
+    ...new Set([
+      ...feedbackDocs.map(f => f.eventId).filter(Boolean),
+      ...attendanceDocs.map(a => a.eventId).filter(Boolean),
+    ])
+  ]
+
+  const occurrencePairs = []
+  const seenPairs = new Set()
+  for (const att of attendanceDocs) {
+    if (att.eventId && att.occurrenceId) {
+      const key = `${att.eventId}|${att.occurrenceId}`
+      if (!seenPairs.has(key)) {
+        seenPairs.add(key)
+        occurrencePairs.push({ eventId: att.eventId, occurrenceId: att.occurrenceId })
+      }
+    }
+  }
+
+  const [occurrenceMap, eventMap] = await Promise.all([
+    batchQueryOccurrences(occurrencePairs),
+    batchQueryEvents(allEventIds),
+  ])
+
+  const eventDigests = aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, occurrenceMap)
+
+  let emailsSent = 0
+  let emailsFailed = 0
+
+  for (const eventDigest of eventDigests) {
+    try {
+      await sendPerEventEmail({ eventDigest, docId })
+      emailsSent++
+    } catch (err) {
+      emailsFailed++
+      console.error(`Failed to send per-event email for ${eventDigest.eventId}:`, err.message)
+    }
+  }
+
+  console.log(`=== Per-Event Digest complete: ${emailsSent} sent, ${emailsFailed} failed (${Date.now() - startTime}ms) ===`)
+  return { eventCount: eventDigests.length, emailsSent, emailsFailed }
 }
 
 /**
@@ -895,6 +1108,56 @@ export const generateWeeklyFeedbackDigestHttp = onRequest(
         error: 'Internal server error',
         message: error.message
       })
+    }
+  }
+)
+
+/**
+ * Scheduled per-event digest — same Monday cadence as weekly digest
+ */
+export const generatePerEventFeedbackDigest = onSchedule(
+  {
+    schedule: '0 0 * * 1', // Every Monday at 00:00
+    timeZone: LA_TIMEZONE,
+    memory: '512MiB',
+    timeoutSeconds: 540,
+    secrets: [DIGEST_TRIGGER_TOKEN, RESEND_API_KEY, DIGEST_RECIPIENTS]
+  },
+  async () => {
+    await runPerEventFeedbackDigest()
+  }
+)
+
+/**
+ * HTTP-triggered per-event digest — same auth pattern as weekly digest HTTP trigger
+ */
+export const generatePerEventFeedbackDigestHttp = onRequest(
+  {
+    secrets: [DIGEST_TRIGGER_TOKEN, RESEND_API_KEY, DIGEST_RECIPIENTS],
+    memory: '512MiB',
+    timeoutSeconds: 540
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ ok: false, error: 'Method not allowed. Use POST.' })
+      return
+    }
+
+    const providedToken = req.get('X-Digest-Token')
+    const expectedToken = DIGEST_TRIGGER_TOKEN.value()
+
+    if (!providedToken || !constantTimeCompare(providedToken, expectedToken)) {
+      console.warn('Unauthorized per-event digest trigger attempt')
+      res.status(401).json({ ok: false, error: 'unauthorized' })
+      return
+    }
+
+    try {
+      const result = await runPerEventFeedbackDigest()
+      res.status(200).json({ success: true, ...result })
+    } catch (error) {
+      console.error('Error in HTTP-triggered per-event digest:', error)
+      res.status(500).json({ ok: false, error: 'Internal server error', message: error.message })
     }
   }
 )
