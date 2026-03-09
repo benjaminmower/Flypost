@@ -80,12 +80,12 @@ requirements based on request origin:
 4. **Machine/Server Callers** (no origin or non-browser origin)
    - Can use Firebase Bearer OR static write token
    - Static token accepted in: x-flypost-write-token header OR Authorization: Bearer
-   - Token mapped to brokerageId by proxy
+
 
 ### Surface Separation Rationale
 
 - **ASK**: Public discovery minimizes barriers, enables broad search/exploration
-- **POST**: Authenticated publishing with tenancy (brokerageId) for event ownership
+- **POST**: Authenticated publishing — write token (x-flypost-write-token) or Firebase auth required
 - **PRESENCE**: Strict origin restriction prevents fabricated attendance/feedback
 
 ## Base URLs

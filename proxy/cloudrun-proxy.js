@@ -94,7 +94,6 @@ app.use((req, res, next) => {
         '## Rate limits',
         '',
         '- Discovery (public): 100 req / 15 min per IP',
-        '- Discovery (brokerage api_key): 500 req / 15 min per IP',
         '- Write endpoints: 50 req / 15 min per IP',
         '- /api/chat, /api/chat/stream: 20 req / 15 min per IP (shared)',
         '',

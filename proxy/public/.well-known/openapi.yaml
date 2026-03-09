@@ -575,7 +575,7 @@ components:
           properties:
             kind:
               type: string
-              enum: [mls, brokerage_roster, manual, third_party]
+              enum: [mls, manual, third_party]
               description: Source type
               example: "mls"
             url:
