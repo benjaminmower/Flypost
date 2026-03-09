@@ -121,7 +121,8 @@ module.exports = function createForward() {
       // Fallback to simple split if URL parsing fails (shouldn't happen)
       originalPath = req.originalUrl.split('?')[0].split('#')[0]
     }
-    const isApiPost = req.method === 'POST' && originalPath.startsWith('/api/')
+    const isApiPost = req.method === 'POST' &&
+      (originalPath.startsWith('/api/') || originalPath.startsWith('/v1/tokens/'))
     const isParseAndPublish =
       req.method === 'POST' && originalPath === '/api/parse-and-publish'
 
@@ -270,7 +271,10 @@ module.exports = function createForward() {
 
           const hasValidStaticToken = Boolean(matchedStaticToken)
 
-          if (!firebaseUser && !hasValidStaticToken) {
+          // Allow requests with x-flypost-write-token to pass through even if the token
+          // isn't in the proxy's static WRITE_TOKENS list — the backend validates these
+          // Firestore-backed per-user tokens directly.
+          if (!firebaseUser && !hasValidStaticToken && !headerToken) {
             setCors(res, origin)
             console.log(`🔒 No valid auth for ${req.method} ${originalPath} from ${origin || 'no-origin'}`)
             return res.status(401).json({

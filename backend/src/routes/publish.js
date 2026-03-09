@@ -20,7 +20,6 @@ import {
   validateOpenHouseEndDate,
   convertOpenHouseLocalIntent
 } from '../utils/timeNormalization.js'
-import { verifyIdToken } from '../utils/firebaseAdmin.js'
 import { triggerHeroImageScrape } from '../utils/heroImage.js'
 
 const router = express.Router()
@@ -79,17 +78,20 @@ router.post('/', writeLimiter, async (req, res) => {
   try {
     const body = req.body || {}
 
-    // Resolve identity from Firebase ID token OR x-flypost-write-token
-    let uid = null, agentEmail = null
+    // Resolve identity from proxy-injected Firebase headers OR x-flypost-write-token.
+    // The proxy (forward.js) strips the Authorization header before forwarding, and
+    // injects x-flypost-auth-uid / x-flypost-auth-email after verifying the Firebase token.
+    let uid = null
+    let agentEmail = null
 
-    const authHeader = req.get('authorization') || ''
+    const isFirebaseAuth = req.get('x-flypost-auth-provider') === 'firebase'
     const writeToken = req.get('x-flypost-write-token')
 
-    if (authHeader.startsWith('Bearer ')) {
-      try {
-        ;({ uid, email: agentEmail } = await verifyIdToken(authHeader.slice(7)))
-      } catch {
-        return res.status(401).json({ success: false, error: 'Invalid Firebase ID token' })
+    if (isFirebaseAuth) {
+      uid = req.get('x-flypost-auth-uid') || null
+      agentEmail = req.get('x-flypost-auth-email') || null
+      if (!uid) {
+        return res.status(401).json({ success: false, error: 'Missing Firebase uid from proxy' })
       }
     } else if (writeToken) {
       const db = getFirestoreClient()

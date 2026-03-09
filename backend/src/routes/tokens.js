@@ -1,13 +1,18 @@
 import express from 'express'
 import crypto from 'crypto'
-import { verifyIdToken } from '../utils/firebaseAdmin.js'
 import { getFirestoreClient } from '../firestoreClient.js'
 
 const router = express.Router()
 
 /**
  * POST /v1/tokens/generate
- * Requires: Authorization: Bearer <firebase_id_token>
+ * Called from the browser (post.goflypost.com) with a valid Firebase session.
+ * The proxy (forward.js) verifies the Firebase ID token and injects:
+ *   x-flypost-auth-provider: 'firebase'
+ *   x-flypost-auth-uid: <uid>
+ *   x-flypost-auth-email: <email>
+ * The Authorization header is stripped by the proxy before reaching here.
+ *
  * Idempotent — returns existing token if one already exists for the uid.
  * Stores token in Firestore tokens/{uid}.
  *
@@ -15,16 +20,11 @@ const router = express.Router()
  * lookups in publish.js. Create it in the Firebase console or firestore.indexes.json.
  */
 router.post('/generate', async (req, res) => {
-  const authHeader = req.get('authorization') || ''
-  if (!authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, error: 'Missing Authorization: Bearer <firebase_id_token>' })
-  }
+  const uid = req.get('x-flypost-auth-uid') || null
+  const email = req.get('x-flypost-auth-email') || null
 
-  let uid, email
-  try {
-    ;({ uid, email } = await verifyIdToken(authHeader.slice(7)))
-  } catch {
-    return res.status(401).json({ success: false, error: 'Invalid or expired Firebase ID token' })
+  if (!uid) {
+    return res.status(401).json({ success: false, error: 'Firebase authentication required' })
   }
 
   try {

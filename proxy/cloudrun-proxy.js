@@ -210,6 +210,7 @@ app.post('/v1/feedback/submit', forward);
 // Optionally forward entire prefixes (useful for future subpaths)
 app.use('/v1/presence', forward);
 app.use('/v1/feedback', forward);
+app.use('/v1/tokens', forward);
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 app.listen(PORT, '0.0.0.0', () => {
