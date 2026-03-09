@@ -655,7 +655,8 @@ function buildPerEventMarkdown(eventDigest) {
 
   const lines = []
 
-  lines.push(`# ${address} | FLYPOST EVENT REPORT CARD`)
+  lines.push(`# ${address}`)
+  lines.push('### Open House Report Card')
   lines.push(`Period: ${startDateLabel} — ${endDateLabel} (LA timezone)`)
   if (eventDigest.listingUrl) {
     lines.push(`Listing: ${eventDigest.listingUrl}`)
@@ -686,16 +687,19 @@ function buildPerEventMarkdown(eventDigest) {
   if (liked.length === 0 && disliked.length === 0) {
     lines.push('_No written responses submitted._')
   } else {
-    // Interleave liked and disliked in submission order (zip by index)
     const maxLen = Math.max(liked.length, disliked.length)
     for (let i = 0; i < maxLen; i++) {
+      lines.push(`**Buyer ${i + 1}**`)
       if (i < liked.length) {
-        lines.push('')
         lines.push(`> **Liked:** "${liked[i]}"`)
       }
       if (i < disliked.length) {
-        lines.push('')
         lines.push(`> **Disliked:** "${disliked[i]}"`)
+      }
+      if (i < maxLen - 1) {
+        lines.push('')
+        lines.push('---')
+        lines.push('')
       }
     }
   }
