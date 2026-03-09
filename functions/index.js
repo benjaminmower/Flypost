@@ -637,9 +637,15 @@ function buildPerEventMarkdown(eventDigest) {
 
   let startDateLabel = '—'
   let endDateLabel = '—'
-  // eventDigest doesn't carry a startDate field; use eventEndDate for the end label
+  if (eventDigest.startDate) {
+    startDateLabel = new Date(eventDigest.startDate).toLocaleDateString('en-US', {
+      timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric'
+    })
+  }
   if (eventDigest.eventEndDate) {
-    endDateLabel = dateFormatter.format(new Date(eventDigest.eventEndDate))
+    endDateLabel = new Date(eventDigest.eventEndDate).toLocaleDateString('en-US', {
+      timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric'
+    })
   }
 
   const feedbackRatePct =
@@ -684,9 +690,11 @@ function buildPerEventMarkdown(eventDigest) {
     const maxLen = Math.max(liked.length, disliked.length)
     for (let i = 0; i < maxLen; i++) {
       if (i < liked.length) {
+        lines.push('')
         lines.push(`> **Liked:** "${liked[i]}"`)
       }
       if (i < disliked.length) {
+        lines.push('')
         lines.push(`> **Disliked:** "${disliked[i]}"`)
       }
     }
