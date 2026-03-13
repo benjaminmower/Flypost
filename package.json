@@ -22,7 +22,8 @@
   },
   "dependencies": {
     "dotenv": "^17.2.3",
-    "openai": "^4.104.0"
+    "openai": "^4.104.0",
+    "qrcode": "^1.5.4"
   },
   "keywords": [
     "flypost",

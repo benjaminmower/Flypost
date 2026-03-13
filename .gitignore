@@ -22,4 +22,7 @@ node_modules/
 node_modules.nosync/
 **/node_modules/
 **/node_modules.nosync/
-node_modules 2/
+node_modules 2/.DS_Store
+flypost-qr.svg
+.DS_Store
+flypost-qr.svg
