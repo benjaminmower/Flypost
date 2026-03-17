@@ -255,6 +255,60 @@ export async function getFeedbackByBrokerage(brokerageId) {
 }
 
 /**
+ * Count attendance records by eventId
+ * @param {string} eventId - Event identifier
+ * @returns {Promise<number>} - Count of matching attendance records
+ */
+export async function countAttendanceByEvent(eventId) {
+  if (isFirestoreEnabled()) {
+    try {
+      const db = getFirestoreClient()
+      const snapshot = await db.collection('attendance')
+        .where('eventId', '==', eventId)
+        .count()
+        .get()
+      return snapshot.data().count
+    } catch (error) {
+      console.error('⚠️ Firestore attendance count failed:', error.message)
+      // Fall back to in-memory count
+    }
+  }
+
+  let count = 0
+  for (const attendance of attendanceStore.values()) {
+    if (attendance.eventId === eventId) count++
+  }
+  return count
+}
+
+/**
+ * Count feedback records by eventId
+ * @param {string} eventId - Event identifier
+ * @returns {Promise<number>} - Count of matching feedback records
+ */
+export async function countFeedbackByEvent(eventId) {
+  if (isFirestoreEnabled()) {
+    try {
+      const db = getFirestoreClient()
+      const snapshot = await db.collection('feedback')
+        .where('eventId', '==', eventId)
+        .count()
+        .get()
+      return snapshot.data().count
+    } catch (error) {
+      console.error('⚠️ Firestore feedback count failed:', error.message)
+      // Fall back to in-memory count
+    }
+  }
+
+  let count = 0
+  for (const feedback of feedbackStore.values()) {
+    if (feedback.eventId === eventId) count++
+  }
+  return count
+}
+
+/**
  * Clear all attendance and feedback records (for testing)
  * @returns {object} - Count of cleared records
  */

@@ -180,6 +180,33 @@ app.get('/v1/brokerages/:brokerageId/insights', readLimiter, async (req, res) =>
   }
 })
 
+// Event stats route (attendance + feedback counts)
+app.get('/v1/events/:eventId/stats', readLimiter, async (req, res) => {
+  try {
+    const { eventId } = req.params
+
+    const { countAttendanceByEvent, countFeedbackByEvent } = await import('./intelligenceStorage.js')
+    const [attendanceCount, feedbackCount] = await Promise.all([
+      countAttendanceByEvent(eventId),
+      countFeedbackByEvent(eventId)
+    ])
+
+    res.json({
+      success: true,
+      eventId,
+      attendanceCount,
+      feedbackCount
+    })
+  } catch (error) {
+    console.error('❌ Event stats error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve event stats',
+      details: error.message
+    })
+  }
+})
+
 /**
  * Dev-only utilities
  */
