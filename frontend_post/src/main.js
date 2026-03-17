@@ -650,8 +650,8 @@ function formatOccurrenceWindow(event) {
   const startD = new Date(startIso)
   const endD = endIso ? new Date(endIso) : null
   const dayStr = startD.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  const startTime = startD.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  const endTime = endD ? endD.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''
+  const startTime = startD.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  const endTime = endD ? endD.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : ''
   return endTime ? `${dayStr} · ${startTime}–${endTime}` : `${dayStr} · ${startTime}`
 }
 
@@ -659,13 +659,31 @@ function renderListings(events, stats) {
   const section = document.getElementById('listings-section')
   if (!section) return
 
-  const cards = events.map((ev, i) => {
-    const status = getEventStatus(ev)
+  // Pair each event with its stats and computed status
+  const tagged = events.map((ev, i) => ({
+    ev,
+    stats: stats[i] || {},
+    status: getEventStatus(ev)
+  }))
+
+  const live     = tagged.filter(t => t.status === 'live')
+  const upcoming = tagged.filter(t => t.status === 'upcoming')
+    .sort((a, b) => new Date(a.ev.startDate) - new Date(b.ev.startDate))
+  const ended    = tagged.filter(t => t.status === 'ended')
+    .sort((a, b) => new Date(b.ev.endDate) - new Date(a.ev.endDate))
+
+  const activeGroups = [live, upcoming, ended].filter(g => g.length > 0)
+  const showDividers = activeGroups.length > 1
+
+  const dividerLabel = (label) =>
+    `<div class="px-1 mt-4 mb-2"><span class="text-[10px] font-bold uppercase tracking-widest text-white/20">${label}</span></div>`
+
+  function buildCard({ ev, stats, status }) {
     const address = formatAddress(ev)
     const window = formatOccurrenceWindow(ev)
     const heroUrl = ev.flypost?.heroImageUrl
     const eventId = ev.flypost?.eventId
-    const { attendanceCount = 0, feedbackCount = 0 } = stats[i] || {}
+    const { attendanceCount = 0, feedbackCount = 0 } = stats
 
     const statusBadge = status === 'live'
       ? `<span class="text-mint_leaf font-bold text-[10px] uppercase tracking-widest flex items-center gap-1"><span class="animate-pulse">●</span> LIVE</span>`
@@ -688,13 +706,27 @@ function renderListings(events, stats) {
         </div>
       </div>
     `
-  }).join('')
+  }
+
+  const groups = [
+    { items: live,     label: 'Live' },
+    { items: upcoming, label: 'Upcoming' },
+    { items: ended,    label: 'Ended' },
+  ]
+
+  const body = groups
+    .filter(g => g.items.length > 0)
+    .map(g => `
+      ${showDividers ? dividerLabel(g.label) : ''}
+      <div class="space-y-3">${g.items.map(buildCard).join('')}</div>
+    `)
+    .join('')
 
   section.innerHTML = `
     <div class="mb-3 px-1">
       <span class="text-[10px] font-bold uppercase tracking-widest text-mint_leaf">Your Listings</span>
     </div>
-    <div class="space-y-3 mb-6">${cards}</div>
+    <div class="mb-6">${body}</div>
   `
 }
 
