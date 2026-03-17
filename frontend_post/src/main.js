@@ -639,7 +639,11 @@ function formatOccurrenceWindow(event) {
     if (date && startTime && endTime) {
       const d = new Date(date + 'T00:00:00')
       const dayStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-      return `${dayStr} · ${startTime}–${endTime}`
+      const startD = new Date(`${date}T${startTime}`)
+      const endD = new Date(`${date}T${endTime}`)
+      const startFmt = startD.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+      const endFmt = endD.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+      return `${dayStr} · ${startFmt}–${endFmt}`
     }
   }
 
