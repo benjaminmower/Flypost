@@ -8,8 +8,10 @@ import {
   startEmailLinkSignIn,
   completeEmailLinkSignIn,
   subscribeToAuth,
-  auth
+  auth,
+  db
 } from './firebase.js'
+import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore'
 
 // DOM elements - Auth
 const authSection = document.getElementById('auth-section')
@@ -143,6 +145,7 @@ function updateAuthUI() {
     if (publishSection) publishSection.classList.remove('hidden')
     if (developerSection) developerSection.classList.remove('hidden')
     if (authStatus) authStatus.textContent = `Signed in as ${currentUser.email}`
+    loadListings(currentUser)
   } else {
     // User is signed out
     if (authSection) authSection.classList.remove('hidden')
@@ -563,6 +566,164 @@ function resetForm() {
     publishBtn.disabled = false
     publishBtn.textContent = 'Publish Event'
   }
+}
+
+// ─── Agent Listings Dashboard ───────────────────────────────────────────────
+
+async function loadListings(user) {
+  try {
+    const q = query(
+      collection(db, 'events'),
+      where('flypost.agentEmail', '==', user.email),
+      orderBy('startDate', 'desc'),
+      limit(10)
+    )
+    const snap = await getDocs(q)
+    if (snap.empty) return
+
+    const events = snap.docs.map(d => d.data())
+
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.goflypost.com'
+    const stats = await Promise.all(
+      events.map(ev =>
+        fetch(`${API_BASE}/v1/events/${ev.flypost.eventId}/stats`)
+          .then(r => r.json())
+          .catch(() => ({ attendanceCount: 0, feedbackCount: 0 }))
+      )
+    )
+
+    renderListings(events, stats)
+    scheduleStatsRefresh(events)
+  } catch (err) {
+    console.warn('[Flypost] loadListings error:', err)
+  }
+}
+
+function getEventStatus(event) {
+  const now = Date.now()
+  const occurrences = event.occurrences?.length ? event.occurrences : null
+
+  if (occurrences) {
+    for (const occ of occurrences) {
+      const start = new Date(occ.startDate).getTime()
+      const end = new Date(occ.endDate).getTime()
+      if (now >= start && now <= end) return 'live'
+    }
+    const anyUpcoming = occurrences.some(occ => new Date(occ.startDate).getTime() > now)
+    if (anyUpcoming) return 'upcoming'
+    return 'ended'
+  }
+
+  const start = new Date(event.startDate).getTime()
+  const end = new Date(event.endDate).getTime()
+  if (now >= start && now <= end) return 'live'
+  if (start > now) return 'upcoming'
+  return 'ended'
+}
+
+function formatAddress(event) {
+  const loc = event.location?.address
+  if (!loc) return event.location?.name || ''
+  const { streetAddress, addressLocality, addressRegion, postalCode } = loc
+  return [streetAddress, addressLocality, addressRegion, postalCode]
+    .filter(Boolean)
+    .join(', ')
+    .replace(/, ([A-Z]{2}), /, ', $1 ')
+}
+
+function formatOccurrenceWindow(event) {
+  const occurrences = event.occurrences?.length ? event.occurrences : null
+  const now = Date.now()
+
+  let occ = null
+  if (occurrences) {
+    // Prefer next upcoming; fall back to most recent
+    occ = occurrences.find(o => new Date(o.startDate).getTime() > now)
+      || occurrences[occurrences.length - 1]
+  }
+
+  if (occ?.local) {
+    const { date, startTime, endTime } = occ.local
+    if (date && startTime && endTime) {
+      const d = new Date(date + 'T00:00:00')
+      const dayStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      return `${dayStr} · ${startTime}–${endTime}`
+    }
+  }
+
+  const startIso = occ?.startDate || event.startDate
+  const endIso = occ?.endDate || event.endDate
+  if (!startIso) return ''
+
+  const startD = new Date(startIso)
+  const endD = endIso ? new Date(endIso) : null
+  const dayStr = startD.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const startTime = startD.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const endTime = endD ? endD.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''
+  return endTime ? `${dayStr} · ${startTime}–${endTime}` : `${dayStr} · ${startTime}`
+}
+
+function renderListings(events, stats) {
+  const section = document.getElementById('listings-section')
+  if (!section) return
+
+  const cards = events.map((ev, i) => {
+    const status = getEventStatus(ev)
+    const address = formatAddress(ev)
+    const window = formatOccurrenceWindow(ev)
+    const heroUrl = ev.flypost?.heroImageUrl
+    const eventId = ev.flypost?.eventId
+    const { attendanceCount = 0, feedbackCount = 0 } = stats[i] || {}
+
+    const statusBadge = status === 'live'
+      ? `<span class="text-mint_leaf font-bold text-[10px] uppercase tracking-widest flex items-center gap-1"><span class="animate-pulse">●</span> LIVE</span>`
+      : status === 'upcoming'
+      ? `<span class="text-air_force_blue-700 font-bold text-[10px] uppercase tracking-widest opacity-70">Upcoming</span>`
+      : `<span class="text-white/30 font-bold text-[10px] uppercase tracking-widest">Ended</span>`
+
+    const thumb = heroUrl
+      ? `<img src="${escapeHtml(heroUrl)}" alt="" class="w-14 h-14 object-cover rounded-xl flex-shrink-0" />`
+      : ''
+
+    return `
+      <div class="glass-card rounded-2xl p-4 flex gap-3 items-start" data-event-id="${escapeHtml(eventId || '')}">
+        ${thumb}
+        <div class="flex-1 min-w-0">
+          <div class="font-bold text-sm leading-tight truncate">${escapeHtml(address)}</div>
+          <div class="text-xs text-air_force_blue-700 opacity-70 mt-0.5">${escapeHtml(window)}</div>
+          <div class="mt-1.5">${statusBadge}</div>
+          <div class="stats-row text-[10px] text-air_force_blue-700 mt-1.5">👥 ${attendanceCount} checked in · 💬 ${feedbackCount} feedback</div>
+        </div>
+      </div>
+    `
+  }).join('')
+
+  section.innerHTML = `
+    <div class="mb-3 px-1">
+      <span class="text-[10px] font-bold uppercase tracking-widest text-mint_leaf">Your Listings</span>
+    </div>
+    <div class="space-y-3 mb-6">${cards}</div>
+  `
+}
+
+function scheduleStatsRefresh(events) {
+  const liveEvents = events.filter(ev => getEventStatus(ev) === 'live')
+  if (!liveEvents.length) return
+
+  setInterval(async () => {
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.goflypost.com'
+    for (const ev of liveEvents) {
+      const res = await fetch(`${API_BASE}/v1/events/${ev.flypost.eventId}/stats`)
+        .then(r => r.json())
+        .catch(() => null)
+      if (!res) continue
+      const card = document.querySelector(`[data-event-id="${ev.flypost.eventId}"]`)
+      if (card) {
+        card.querySelector('.stats-row').textContent =
+          `👥 ${res.attendanceCount} checked in · 💬 ${res.feedbackCount} feedback`
+      }
+    }
+  }, 60_000)
 }
 
 // Start app

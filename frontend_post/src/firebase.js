@@ -11,6 +11,7 @@ import {
   signInWithEmailLink,
   onAuthStateChanged
 } from 'firebase/auth'
+import { getFirestore } from 'firebase/firestore'
 
 // Firebase config using Vite's environment variables
 const firebaseConfig = {
@@ -37,6 +38,7 @@ if (!firebaseConfig.apiKey) {
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
 export const auth = getAuth(app)
+export const db = getFirestore(app)
 
 /**
  * Start the email link sign-in flow
