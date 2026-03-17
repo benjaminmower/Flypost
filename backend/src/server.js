@@ -196,8 +196,10 @@ app.get('/v1/agents/:email/events', readLimiter, async (req, res) => {
     }
 
     const db = getFirestoreClient()
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
     const snapshot = await db.collection('events')
       .where('flypost.agentEmail', '==', email)
+      .where('startDate', '>=', cutoff)
       .orderBy('startDate', 'desc')
       .limit(10)
       .get()

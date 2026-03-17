@@ -85,7 +85,9 @@ real market feedback.
 - **Hosting:** Netlify (ask.goflypost.com, post.goflypost.com, presence.goflypost.com)
 - **Proxy:** Google Cloud Run (proxyv4) — routes all /v1/ traffic to backend
 - **AI:** OpenAI API (natural language parse and publish)
-- **Email/Auth:** Resend (magic link auth)
+- **Auth:** Firebase Auth (magic link) — session scoped per domain currently.
+  Future: configure auth cookie on `.goflypost.com` root domain to share
+  sessions across post.goflypost.com and dashboard.goflypost.com seamlessly.
 - **Marketing site:** Webflow (goflypost.com)
 - **Schema standard:** schema.org Event / GeoCoordinates / PostalAddress
 - **Dev tools:** Claude Code, GitHub Copilot, ChatGPT, GitHub
@@ -184,7 +186,46 @@ Returns:
 
 ---
 
-## Poster Score (Roadmap)
+## Agent Dashboard (as of 2026-03-17)
+
+Lives at post.goflypost.com — renders between the Active Session header
+and the post form when agent is authenticated via Firebase auth.
+
+**Behavior:**
+- Queries `GET /v1/agents/:email/events` — backend endpoint that fetches
+  Firestore events where `flypost.agentEmail` == authenticated user's email
+- Returns last 30 days of events only — implemented as
+  `where('startDate', '>=', cutoff).orderBy('startDate', 'desc')`
+  where cutoff = now - 30 days as ISO string. No additional index needed
+  because the range filter and orderBy are on the same field (startDate).
+- All stats fetched in parallel via Promise.all from `/v1/events/:eventId/stats`
+- Auto-refreshes stats every 60 seconds for LIVE events only
+- Groups events: LIVE → UPCOMING (soonest first) → ENDED (most recent first)
+
+**Each event card shows:**
+- Hero image thumbnail (flypost.heroImageUrl) if available
+- Property address
+- Date and time window in 12-hour format
+- Status badge: LIVE (mint_leaf, pulsing dot) / UPCOMING / ENDED
+- Attendance count and feedback count
+
+**Architecture note:**
+- Frontend does NOT query Firestore directly — all data goes through backend API
+- Firestore composite index required: `flypost.agentEmail` ASC + `startDate` DESC
+  Named "agent dashboard" in Firebase Console
+
+**Future surface separation (post-MVP):**
+- post.goflypost.com → posting only, single purpose
+- dashboard.goflypost.com → agent home base, all listings and live stats
+- Requires Firebase auth cookie on `.goflypost.com` root domain for shared sessions
+- Do not build until 5+ agents are actively using both surfaces
+
+**March 28th monitoring plan:**
+- You post Alexis's event, set flypost.agentEmail to her email
+- Send Alexis magic link to post.goflypost.com
+- She authenticates once, sees her listings in YOUR LISTINGS section
+- Watches check-ins and feedback update live during the open house
+- No curl required, no you being present
 
 Proprietary 0-100 composite score per listing. Inputs:
 - Verified attendance count
@@ -301,7 +342,21 @@ who walked through the door or why they didn't make an offer."
 
 ---
 
-## Founder
+## March 28th Pre-Flight Checklist
+
+1. Get Alexis's listing address — not on her Compass page yet as of 2026-03-17
+2. Post event via post.goflypost.com with real MLS listing URL
+3. Confirm heroImageUrl populated in Firestore after posting
+4. Go to the address in person — test geofence by hitting presence endpoint on phone
+5. Confirm event appears in YOUR LISTINGS on agent dashboard
+6. Send Alexis magic link to post.goflypost.com so she can watch live
+7. Have QR stands (in QC/shipping) or Compass-branded cardstock as backup
+8. After event: curl stats endpoint, generate report for Alexis
+9. March 29th: send Rick Edler the report with one line — no ask
+
+**Success metric:** 50%+ feedback conversion rate (feedbackCount / attendanceCount)
+
+---
 
 **Benjamin "Bronco" Mower** — sole founder, 100% equity
 
