@@ -219,7 +219,26 @@ async function handleEventSubmit(e) {
     
     showStatus(`✅ Success! Event "${event?.name || 'Untitled'}" published with ID: ${eventId}`, 'success')
     showResult(JSON.stringify(result, null, 2))
-    
+
+    // Reset button and clear textarea
+    if (publishBtn) {
+      publishBtn.disabled = false
+      publishBtn.textContent = 'Publish Event'
+    }
+    if (eventInput) eventInput.value = ''
+
+    // Add "Post Another" button below result
+    const existingPostAnother = document.getElementById('post-another-btn')
+    if (existingPostAnother) existingPostAnother.remove()
+    const postAnotherBtn = document.createElement('button')
+    postAnotherBtn.id = 'post-another-btn'
+    postAnotherBtn.textContent = 'Post Another'
+    postAnotherBtn.style.cssText = 'margin-top:16px;width:100%;background:transparent;border:1px solid rgba(255,255,255,0.15);color:#f7f7f7;font-weight:700;font-size:14px;padding:12px 24px;border-radius:12px;cursor:pointer;'
+    postAnotherBtn.addEventListener('click', resetForm)
+    if (publishResult && publishResult.parentNode) {
+      publishResult.parentNode.insertBefore(postAnotherBtn, publishResult.nextSibling)
+    }
+
     // Display share URL if available
     if (shareUrl) {
       displayShareUrl(shareUrl)
@@ -527,6 +546,22 @@ function displayShareUrl(url) {
         }
       }
     })
+  }
+}
+
+// Reset form to initial state
+function resetForm() {
+  if (eventInput) eventInput.value = ''
+  hideResult()
+  if (publishStatus) {
+    publishStatus.textContent = ''
+    publishStatus.classList.add('hidden')
+  }
+  document.getElementById('share-url-container')?.remove()
+  document.getElementById('post-another-btn')?.remove()
+  if (publishBtn) {
+    publishBtn.disabled = false
+    publishBtn.textContent = 'Publish Event'
   }
 }
 
