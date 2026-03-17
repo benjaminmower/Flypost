@@ -10,7 +10,7 @@ let feedbackUrl = null
 let currentEvent = null
 
 // DOM elements
-let viewCheckIn, viewSuccess, viewFeedback
+let viewCheckIn, viewSuccess, viewFeedback, viewThankyou
 let btnCheckIn, statusMsg
 let buyYes, buyMaybe, buyNo, wouldBuyInput
 let similarYes, similarNo, wantsSimilarInput
@@ -39,10 +39,11 @@ function getBuyerToken() {
 }
 
 function showView(viewName) {
-  [viewCheckIn, viewSuccess, viewFeedback].forEach(v => v?.classList.add('hidden'))
+  [viewCheckIn, viewSuccess, viewFeedback, viewThankyou].forEach(v => v?.classList.add('hidden'))
   if (viewName === 'check-in') viewCheckIn.classList.remove('hidden')
   else if (viewName === 'success') viewSuccess.classList.remove('hidden')
   else if (viewName === 'feedback') viewFeedback.classList.remove('hidden')
+  else if (viewName === 'thankyou') viewThankyou.classList.remove('hidden')
 }
 
 function updateSuccessScreen(event) {
@@ -116,8 +117,7 @@ async function handleFeedbackSubmit() {
       wouldBuy
     })
     if (res.success) {
-      showNotification('Thank you!', 'success')
-      setTimeout(() => window.location.href = 'https://ask.goflypost.com', 1500)
+      showView('thankyou')
     }
   } catch (e) {
       showNotification(e.message, 'error')
@@ -129,6 +129,7 @@ function init() {
   viewCheckIn = document.getElementById('view-checkin')
   viewSuccess = document.getElementById('view-success')
   viewFeedback = document.getElementById('view-feedback')
+  viewThankyou = document.getElementById('view-thankyou')
   btnCheckIn = document.getElementById('btn-checkin')
   statusMsg = document.getElementById('status-msg')
   
