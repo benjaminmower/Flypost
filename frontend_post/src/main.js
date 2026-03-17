@@ -8,10 +8,8 @@ import {
   startEmailLinkSignIn,
   completeEmailLinkSignIn,
   subscribeToAuth,
-  auth,
-  db
+  auth
 } from './firebase.js'
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore'
 
 // DOM elements - Auth
 const authSection = document.getElementById('auth-section')
@@ -572,18 +570,12 @@ function resetForm() {
 
 async function loadListings(user) {
   try {
-    const q = query(
-      collection(db, 'events'),
-      where('flypost.agentEmail', '==', user.email),
-      orderBy('startDate', 'desc'),
-      limit(10)
-    )
-    const snap = await getDocs(q)
-    if (snap.empty) return
-
-    const events = snap.docs.map(d => d.data())
-
     const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.goflypost.com'
+    const data = await fetch(`${API_BASE}/v1/agents/${encodeURIComponent(user.email)}/events`)
+      .then(r => r.json())
+    const events = data.events
+    if (!events?.length) return
+
     const stats = await Promise.all(
       events.map(ev =>
         fetch(`${API_BASE}/v1/events/${ev.flypost.eventId}/stats`)

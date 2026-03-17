@@ -180,6 +180,40 @@ app.get('/v1/brokerages/:brokerageId/insights', readLimiter, async (req, res) =>
   }
 })
 
+// Agent listings route — returns events published by a given agent email
+app.get('/v1/agents/:email/events', readLimiter, async (req, res) => {
+  try {
+    const { email } = req.params
+
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'email is required' })
+    }
+
+    const { isFirestoreEnabled, getFirestoreClient } = await import('./firestoreClient.js')
+
+    if (!isFirestoreEnabled()) {
+      return res.json({ success: true, events: [] })
+    }
+
+    const db = getFirestoreClient()
+    const snapshot = await db.collection('events')
+      .where('flypost.agentEmail', '==', email)
+      .orderBy('startDate', 'desc')
+      .limit(10)
+      .get()
+
+    const events = snapshot.docs.map(doc => {
+      const { _firestoreMetadata, ...eventData } = doc.data()
+      return eventData
+    })
+
+    res.json({ success: true, events })
+  } catch (error) {
+    console.error('❌ Agent events error:', error)
+    res.status(500).json({ success: false, error: 'Failed to retrieve agent events', details: error.message })
+  }
+})
+
 // Event stats route (attendance + feedback counts)
 app.get('/v1/events/:eventId/stats', readLimiter, async (req, res) => {
   try {

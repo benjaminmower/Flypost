@@ -195,6 +195,7 @@ app.get('/', (req, res) => {
 
 // --- forward route registrations ---
 app.get('/health', forward);
+app.get('/v1/agents/:email/events', forward);
 app.get('/v1/events/near', forward);
 app.get('/v1/events/:event_id/stats', forward);
 app.get('/v1/events/:event_id', forward);
