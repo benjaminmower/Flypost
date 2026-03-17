@@ -63,6 +63,8 @@
         .thumb-active { opacity: 1 !important; filter: grayscale(0) !important; transform: scale(1.2); }
         /* Clamped scale: Mobile is punchy but fits; Desktop is massive. */
         .text-hero { font-size: clamp(2.4rem, 11vw, 8.5rem); letter-spacing: -0.04em; }
+        @keyframes check-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .check-pop { animation: check-pop 0.4s ease-out both; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center p-4 md:p-10 text-center justify-start">
@@ -111,6 +113,10 @@
 
         <div id="view-success" class="hidden">
             <img id="success-hero-image" class="hidden w-full rounded-2xl object-cover max-h-[220px] mb-6" alt="" />
+            <svg id="success-checkmark" class="check-pop mx-auto mb-6" width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="40" cy="40" r="38" stroke="#40c9a2" stroke-width="4"/>
+                <polyline points="22,42 34,54 58,28" stroke="#40c9a2" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             <h2 class="text-3xl md:text-5xl font-black mb-4 tracking-tighter uppercase">Checked In.</h2>
             <p id="success-address" class="hidden text-sm md:text-base text-air_force_blue-700 opacity-60 mb-10"></p>
         </div>
