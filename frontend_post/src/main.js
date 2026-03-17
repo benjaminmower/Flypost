@@ -569,6 +569,19 @@ function resetForm() {
 // ─── Agent Listings Dashboard ───────────────────────────────────────────────
 
 async function loadListings(user) {
+  const section = document.getElementById('listings-section')
+  if (section) {
+    section.innerHTML = `
+      <details class="faq-details mb-6 glass-card rounded-2xl border-mint_leaf/10 overflow-hidden">
+        <summary class="cursor-pointer p-5 md:p-6 font-bold text-base md:text-lg text-mint_leaf hover:text-bright_snow transition-colors flex justify-between items-center">
+          <span>YOUR LISTINGS (...)</span>
+        </summary>
+        <div class="px-5 md:px-6 pb-5 md:pb-6 pt-2">
+          <div class="glass-card rounded-2xl animate-pulse" style="height:82px;"></div>
+        </div>
+      </details>
+    `
+  }
   try {
     const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.goflypost.com'
     const data = await fetch(`${API_BASE}/v1/agents/${encodeURIComponent(user.email)}/events`)
@@ -727,11 +740,9 @@ function renderListings(events, stats) {
     .join('')
 
   const total = tagged.length
-  const hasActive = live.length > 0 || upcoming.length > 0
-  const openAttr = hasActive ? ' open' : ''
 
   section.innerHTML = `
-    <details class="faq-details mb-6 glass-card rounded-2xl border-mint_leaf/10 overflow-hidden"${openAttr}>
+    <details class="faq-details mb-6 glass-card rounded-2xl border-mint_leaf/10 overflow-hidden">
       <summary class="cursor-pointer p-5 md:p-6 font-bold text-base md:text-lg text-mint_leaf hover:text-bright_snow transition-colors flex justify-between items-center">
         <span>YOUR LISTINGS (${total})</span>
       </summary>
