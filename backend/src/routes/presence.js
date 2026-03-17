@@ -336,8 +336,6 @@ router.post('/check-in', writeLimiter, async (req, res) => {
       checkInTime: timestamp || new Date().toISOString(),
       presenceProof: {
         method: method || 'geo_time',
-        lat: latNum,
-        lng: lngNum,
         matchedBy
       }
     }
