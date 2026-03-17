@@ -196,6 +196,7 @@ app.get('/', (req, res) => {
 // --- forward route registrations ---
 app.get('/health', forward);
 app.get('/v1/events/near', forward);
+app.get('/v1/events/:event_id/stats', forward);
 app.get('/v1/events/:event_id', forward);
 app.get('/e/:slug/:fpid/calendar.ics', forward); // Calendar download (public, no auth)
 app.get('/e/:slug/:fpid', forward);
