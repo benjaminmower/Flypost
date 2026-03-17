@@ -7,10 +7,11 @@ import { checkIn, submitFeedback } from './api.js'
 const CHECK_IN_CACHE_DURATION = 2 * 60 * 60 * 1000
 let currentAttendanceId = null
 let feedbackUrl = null
+let currentEvent = null
 
 // DOM elements
 let viewCheckIn, viewSuccess, viewFeedback
-let btnCheckIn, statusMsg, smsLink
+let btnCheckIn, statusMsg
 let buyYes, buyMaybe, buyNo, wouldBuyInput
 let similarYes, similarNo, wantsSimilarInput
 
@@ -44,6 +45,31 @@ function showView(viewName) {
   else if (viewName === 'feedback') viewFeedback.classList.remove('hidden')
 }
 
+function updateSuccessScreen(event) {
+  const heroImg = document.getElementById('success-hero-image')
+  const addressEl = document.getElementById('success-address')
+
+  if (heroImg) {
+    if (event?.heroImageUrl) {
+      heroImg.src = event.heroImageUrl
+      heroImg.classList.remove('hidden')
+    } else {
+      heroImg.classList.add('hidden')
+    }
+  }
+
+  if (addressEl) {
+    if (event?.address) {
+      addressEl.textContent = event.address
+      addressEl.classList.remove('hidden')
+    } else {
+      addressEl.classList.add('hidden')
+    }
+  }
+
+  setTimeout(() => showView('feedback'), 2000)
+}
+
 async function handleCheckIn() {
   statusMsg.innerText = 'Requesting location...'
   btnCheckIn.disabled = true
@@ -54,11 +80,21 @@ async function handleCheckIn() {
       if (response.success && response.attendance) {
         currentAttendanceId = response.attendance.attendanceId
         feedbackUrl = `https://presence.goflypost.com/f/${currentAttendanceId}`
-        smsLink.href = `sms:&body=${encodeURIComponent('Feedback link: ' + feedbackUrl)}`
+        currentEvent = response.event || null
         showView('success')
+        updateSuccessScreen(currentEvent)
       }
-    } catch (e) { statusMsg.innerText = e.message; btnCheckIn.disabled = false; }
-  }, () => { statusMsg.innerText = 'Location required.'; btnCheckIn.disabled = false; })
+    } catch (e) {
+      const msg = e.message?.includes('proximity')
+        ? "You don't appear to be at the open house. Make sure you're inside the property and try again."
+        : e.message
+      statusMsg.innerText = msg
+      btnCheckIn.disabled = false
+    }
+  }, () => {
+    statusMsg.innerText = 'Location access is required. Tap AA in your address bar → Website Settings → Location → Allow, then try again.'
+    btnCheckIn.disabled = false
+  })
 }
 
 async function handleFeedbackSubmit() {
@@ -95,7 +131,6 @@ function init() {
   viewFeedback = document.getElementById('view-feedback')
   btnCheckIn = document.getElementById('btn-checkin')
   statusMsg = document.getElementById('status-msg')
-  smsLink = document.getElementById('sms-link')
   
   // wouldBuy elements (3-way)
   buyYes = document.getElementById('buy-yes')
@@ -109,10 +144,6 @@ function init() {
   wantsSimilarInput = document.getElementById('feedback-wantsSimilar')
 
   btnCheckIn?.addEventListener('click', handleCheckIn)
-  document.getElementById('btn-copy-link')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(feedbackUrl); showNotification('Copied!', 'success')
-  })
-  document.getElementById('btn-open-feedback')?.addEventListener('click', () => showView('feedback'))
   document.getElementById('btn-submit-feedback')?.addEventListener('click', handleFeedbackSubmit)
 
   // wouldBuy emoji toggle logic (3-way)

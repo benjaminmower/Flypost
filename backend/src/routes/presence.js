@@ -363,6 +363,19 @@ router.post('/check-in', writeLimiter, async (req, res) => {
       response.attendance.occurrenceId = matchedOccurrenceId
     }
 
+    const addressParts = [
+      matchedEvent.location?.address?.streetAddress,
+      matchedEvent.location?.address?.addressLocality,
+      matchedEvent.location?.address?.addressRegion,
+      matchedEvent.location?.address?.postalCode,
+    ].filter(Boolean)
+
+    response.event = {
+      address: addressParts.length > 0 ? addressParts.join(', ') : undefined,
+      ...(matchedEvent.name ? { name: matchedEvent.name } : {}),
+      ...(matchedEvent.flypost?.heroImageUrl ? { heroImageUrl: matchedEvent.flypost.heroImageUrl } : {}),
+    }
+
     res.json(response)
   } catch (error) {
     console.error('❌ Check-in error:', error)
