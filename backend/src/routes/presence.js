@@ -13,7 +13,7 @@ const writeLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.05')
+const PRESENCE_RADIUS_KM = parseFloat(process.env.PRESENCE_RADIUS_KM || '0.1')
 
 function logCheckInFailure(reason, { eventId, submittedLat, submittedLng, eventLat, eventLng, distanceMeters, eventStart, eventEnd, submittedTimestamp } = {}) {
   console.error(JSON.stringify({
@@ -318,7 +318,7 @@ router.post('/check-in', writeLimiter, async (req, res) => {
         return res.status(404).json({
           success: false,
           error: 'No events found within proximity for check-in',
-          hint: `Closest event is ${actualDistanceMeters} m away (threshold ${thresholdMeters} m)`
+          hint: 'Move closer to the event location and try again'
         })
       }
     } else {

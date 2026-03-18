@@ -26,7 +26,7 @@ You can't scrape it, synthesize it, or buy it from the MLS.
 **Core primitives:**
 
 - **POST** — Agents publish open house events in natural language via post.goflypost.com. OpenAI parses into structured Firestore records with geo coordinates, time windows, and schema.org Event format.
-- **PRESENCE** — Buyers check in on-site via geofenced QR code (50 meter radius). Time-gated to active event window. No app required.
+- **PRESENCE** — Buyers check in on-site via geofenced QR code (100 meter radius). Time-gated to active event window. No app required.
 - **ASK** — Conversational query engine for the event registry. Queryable by API.
 - **SHARE** — Agent-facing share page for each listing. Buyers can check in, add to calendar, get directions.
 
@@ -96,7 +96,7 @@ real market feedback.
 
 ## Presence Verification
 
-**Radius:** 0.05 km (50 meters)
+**Radius:** 0.1 km (100 meters)
 
 - Tight enough to exclude neighbors
 - Loose enough for GPS drift inside a house
