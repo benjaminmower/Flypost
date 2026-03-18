@@ -103,17 +103,14 @@ router.post('/submit', writeLimiter, async (req, res) => {
       })
     }
 
-    const normalizedLiked = normalizeFeedbackText(answers.liked)
-    const normalizedDisliked = normalizeFeedbackText(answers.disliked)
+    const normalizedDifferent = normalizeFeedbackText(answers.different)
     const normalizedWouldBuy = normalizeWouldBuy(answers.wouldBuy)
 
     const feedback = await storeFeedback({
       attendanceId: attendance.attendanceId,
       eventId: attendance.eventId,
       answers: {
-        liked: normalizedLiked,
-        disliked: normalizedDisliked,
-        wantsSimilar: answers.hasOwnProperty('wantsSimilar') ? Boolean(answers.wantsSimilar) : null,
+        different: normalizedDifferent,
         wouldBuy: normalizedWouldBuy
       },
       brokerageAffiliation: brokerageAffiliation || null,

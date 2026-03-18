@@ -13,9 +13,8 @@ const sampleFeedback = [
     attendanceId: 'att_a',
     createdAt: '2025-12-30T10:00:00.000Z',
     answers: {
-      liked: 'Great location',
-      disliked: null,
-      wantsSimilar: true
+      different: 'Would need a larger kitchen',
+      wouldBuy: 'maybe'
     }
   },
   {
@@ -24,9 +23,8 @@ const sampleFeedback = [
     attendanceId: 'att_b',
     createdAt: '2025-12-30T11:30:00.000Z',
     answers: {
-      liked: 'Nice house',
-      disliked: 'Too small',
-      wantsSimilar: false
+      different: 'Price would need to drop 10%',
+      wouldBuy: 'no'
     }
   },
   {
@@ -35,9 +33,8 @@ const sampleFeedback = [
     attendanceId: 'att_c',
     createdAt: '2026-01-02T15:00:00.000Z',
     answers: {
-      liked: 'Beautiful view',
-      disliked: null,
-      wantsSimilar: true
+      different: null,
+      wouldBuy: 'yes'
     }
   },
   {
@@ -46,9 +43,8 @@ const sampleFeedback = [
     attendanceId: 'att_d',
     createdAt: '2026-01-03T14:00:00.000Z',
     answers: {
-      liked: null,
-      disliked: null,
-      wantsSimilar: true
+      different: null,
+      wouldBuy: 'yes'
     }
   }
 ]
@@ -191,17 +187,22 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap) 
     if (!feedbackStatsByEventId.has(eventId)) {
       feedbackStatsByEventId.set(eventId, {
         feedbackCount: 0,
-        wantsSimilarCount: 0
+        wouldBuyYesCount: 0,
+        wouldBuyMaybeCount: 0,
+        wouldBuyNoCount: 0,
+        differentResponses: []
       })
     }
-    
+
     const stats = feedbackStatsByEventId.get(eventId)
     stats.feedbackCount++
-    
-    // Track wantsSimilar
-    if (feedback.answers?.wantsSimilar === true) {
-      stats.wantsSimilarCount++
-    }
+
+    const different = feedback.answers?.different?.trim()
+    if (different) stats.differentResponses.push(different)
+
+    if (feedback.answers?.wouldBuy === 'yes') stats.wouldBuyYesCount++
+    else if (feedback.answers?.wouldBuy === 'maybe') stats.wouldBuyMaybeCount++
+    else if (feedback.answers?.wouldBuy === 'no') stats.wouldBuyNoCount++
   }
   
   // Get UNION of all eventIds
@@ -224,7 +225,10 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap) 
       feedbackCount,
       totalCheckIns,
       uniqueCheckInBuyers: attendanceStats?.uniqueCheckInBuyers.size || 0,
-      wantsSimilarCount: feedbackStats?.wantsSimilarCount || 0,
+      wouldBuyYesCount: feedbackStats?.wouldBuyYesCount || 0,
+      wouldBuyMaybeCount: feedbackStats?.wouldBuyMaybeCount || 0,
+      wouldBuyNoCount: feedbackStats?.wouldBuyNoCount || 0,
+      differentResponses: feedbackStats?.differentResponses || [],
       occurrenceIds: attendanceStats ? Array.from(attendanceStats.occurrenceIds) : [],
       feedbackRate: totalCheckIns === 0 ? 0 : feedbackCount / totalCheckIns
     }
@@ -291,7 +295,7 @@ eventDigests.forEach((digest, i) => {
   console.log(`  Total Check-ins: ${digest.totalCheckIns}`)
   console.log(`  Feedback Count: ${digest.feedbackCount}`)
   console.log(`  Unique Check-in Buyers: ${digest.uniqueCheckInBuyers}`)
-  console.log(`  Want Similar: ${digest.wantsSimilarCount}`)
+  console.log(`  Would Buy: ${digest.wouldBuyYesCount} yes / ${digest.wouldBuyMaybeCount} maybe / ${digest.wouldBuyNoCount} no`)
   console.log(`  Feedback Rate: ${(digest.feedbackRate * 100).toFixed(1)}%`)
   console.log(`  Occurrences: ${digest.occurrenceIds.length > 0 ? digest.occurrenceIds.join(', ') : 'N/A'}`)
   console.log(`  Listing URL: ${digest.listingUrl || 'N/A'}`)

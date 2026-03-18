@@ -302,8 +302,7 @@
                   "answers": {
                     "type": "object",
                     "properties": {
-                      "liked": { "type": "string", "maxLength": 500 },
-                      "disliked": { "type": "string", "maxLength": 500 },
+                      "different": { "type": "string", "maxLength": 500 },
                       "wouldBuy": { "type": "string", "enum": ["yes", "maybe", "no"] }
                     }
                   }

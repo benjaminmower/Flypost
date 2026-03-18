@@ -22,10 +22,10 @@
  *     feedbackCount: number,           // Total feedback responses
  *     totalCheckIns: number,           // Total check-ins in weekly window (from attendance.createdAt)
  *     uniqueCheckInBuyers: number,     // Unique buyers who checked in (deduplicated by buyerToken)
- *     wantsSimilarCount: number,       // Number who want similar homes (new field)
  *     wouldBuyYesCount: number,        // Buy intent: yes (includes legacy data)
  *     wouldBuyMaybeCount: number,      // Buy intent: maybe
  *     wouldBuyNoCount: number,         // Buy intent: no (includes legacy data)
+ *     differentResponses: string[],    // "What would need to be different?" verbatim responses
  *     occurrenceIds: string[],         // List of occurrence IDs (if multi-slot)
  *     feedbackRate: number,            // feedbackCount / totalCheckIns (0 if no check-ins)
  *     eventAddress: string?,           // Optional: event address if available
@@ -35,7 +35,7 @@
  * 
  * Note: Events with check-ins but no feedback will appear with feedbackCount = 0
  * Sorted by totalCheckIns desc, then feedbackCount desc
- * Legacy data handling: Old feedback with only wantsSimilar is mapped to wouldBuy (true->yes, false->no)
+ * Legacy data handling: Old feedback with only wantsSimilar is mapped to wouldBuy (true->yes, false->no). wantsSimilar field is no longer collected.
  * 
  * Privacy: No PII is logged. buyerToken, answers text, and contact info are never logged.
  */
@@ -308,28 +308,24 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
     if (!feedbackStatsByEventId.has(eventId)) {
       feedbackStatsByEventId.set(eventId, {
         feedbackCount: 0,
-        wantsSimilarCount: 0,
         wouldBuyYesCount: 0,
         wouldBuyMaybeCount: 0,
         wouldBuyNoCount: 0,
-        likedResponses: [],
-        dislikedResponses: [],
+        differentResponses: [],
       })
     }
-    
+
     const stats = feedbackStatsByEventId.get(eventId)
     stats.feedbackCount++
 
-    const liked = feedback.answers?.liked?.trim()
-    const disliked = feedback.answers?.disliked?.trim()
-    if (liked) stats.likedResponses.push(liked)
-    if (disliked) stats.dislikedResponses.push(disliked)
+    const different = feedback.answers?.different?.trim()
+    if (different) stats.differentResponses.push(different)
 
     // Legacy data handling: if wouldBuy is missing but wantsSimilar exists,
     // treat wantsSimilar as legacy wouldBuy intent
     const hasWouldBuy = feedback.answers?.wouldBuy !== null && feedback.answers?.wouldBuy !== undefined
     const hasWantsSimilar = feedback.answers?.wantsSimilar !== null && feedback.answers?.wantsSimilar !== undefined
-    
+
     if (hasWouldBuy) {
       // New data: use wouldBuy field
       if (feedback.answers.wouldBuy === 'yes') {
@@ -339,11 +335,6 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
       } else if (feedback.answers.wouldBuy === 'no') {
         stats.wouldBuyNoCount++
       }
-      
-      // Also track wantsSimilar separately if present
-      if (feedback.answers.wantsSimilar === true) {
-        stats.wantsSimilarCount++
-      }
     } else if (hasWantsSimilar) {
       // Legacy data: map wantsSimilar to wouldBuy
       // true => "yes", false => "no"
@@ -352,7 +343,6 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
       } else if (feedback.answers.wantsSimilar === false) {
         stats.wouldBuyNoCount++
       }
-      // Do NOT count legacy wantsSimilar in wantsSimilarCount
     }
   }
   
@@ -376,14 +366,12 @@ function aggregateFeedbackAndAttendance(feedbackDocs, attendanceDocs, eventMap, 
       feedbackCount,
       totalCheckIns,
       uniqueCheckInBuyers: attendanceStats?.uniqueCheckInBuyers.size || 0,
-      wantsSimilarCount: feedbackStats?.wantsSimilarCount || 0,
       wouldBuyYesCount: feedbackStats?.wouldBuyYesCount || 0,
       wouldBuyMaybeCount: feedbackStats?.wouldBuyMaybeCount || 0,
       wouldBuyNoCount: feedbackStats?.wouldBuyNoCount || 0,
+      differentResponses: feedbackStats?.differentResponses || [],
       occurrenceIds: attendanceStats ? Array.from(attendanceStats.occurrenceIds) : [],
       feedbackRate: totalCheckIns === 0 ? 0 : feedbackCount / totalCheckIns,
-      likedResponses: feedbackStats?.likedResponses || [],
-      dislikedResponses: feedbackStats?.dislikedResponses || [],
     }
     
     // Enrichment: prefer occurrence docs, fallback to event doc
@@ -481,7 +469,6 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
   let totalCheckIns = 0
   let uniqueBuyersSum = 0
   let totalFeedback = 0
-  let totalWantsSimilar = 0
 
   let totalWouldBuyYes = 0
   let totalWouldBuyMaybe = 0
@@ -491,7 +478,6 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
     totalCheckIns += event.totalCheckIns || 0
     uniqueBuyersSum += event.uniqueCheckInBuyers || 0
     totalFeedback += event.feedbackCount || 0
-    totalWantsSimilar += event.wantsSimilarCount || 0
 
     totalWouldBuyYes += event.wouldBuyYesCount || 0
     totalWouldBuyMaybe += event.wouldBuyMaybeCount || 0
@@ -515,14 +501,13 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
       event.totalCheckIns === 0 ? 0 : Math.floor((event.feedbackCount / event.totalCheckIns) * 100)
 
     scoreboardRows.push(
-      `| ${addressCell} | ${event.totalCheckIns || 0} | ${event.uniqueCheckInBuyers || 0} | ${event.feedbackCount || 0} | ${ratePct}% | ${event.wantsSimilarCount || 0} | \`${event.eventId}\` |`
+      `| ${addressCell} | ${event.totalCheckIns || 0} | ${event.uniqueCheckInBuyers || 0} | ${event.feedbackCount || 0} | ${ratePct}% | \`${event.eventId}\` |`
     )
   }
 
   // Top signal heuristic:
-  // 1) highest wantsSimilarCount
-  // 2) tie-breaker: highest totalCheckIns
-  // 3) then feedbackCount
+  // 1) highest totalCheckIns
+  // 2) tie-breaker: highest feedbackCount
   let top = null
   for (const event of eventDigests) {
     if (!top) {
@@ -532,13 +517,6 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
 
     const a = event
     const b = top
-
-    const aW = a.wantsSimilarCount || 0
-    const bW = b.wantsSimilarCount || 0
-    if (aW !== bW) {
-      if (aW > bW) top = a
-      continue
-    }
 
     const aC = a.totalCheckIns || 0
     const bC = b.totalCheckIns || 0
@@ -573,16 +551,15 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
   lines.push('## 📈 MARKET INTENT SIGNALS')
   lines.push(`* **Direct Feedback Rate:** **${feedbackRatePct}%** (${totalFeedback} ${submissionWord})`)
   lines.push(`* **Buy Intent (Would You Buy?):** **${totalWouldBuyYes} yes** • **${totalWouldBuyMaybe} maybe** • **${totalWouldBuyNo} no**`)
-  lines.push(`* **Flypost "Wants Similar" Pulse:** **${totalWantsSimilar}** active intents`)
   lines.push('')
   lines.push('---')
   lines.push('')
   lines.push('## 📊 EVENT SCOREBOARD')
-  lines.push('| Address | In | Unique | Feedback | Rate | Wants Similar | Flypost ID |')
-  lines.push('|---|---:|---:|---:|---:|---:|---|')
+  lines.push('| Address | In | Unique | Feedback | Rate | Flypost ID |')
+  lines.push('|---|---:|---:|---:|---:|---|')
 
   if (scoreboardRows.length === 0) {
-    lines.push('| _No events in this window._ | 0 | 0 | 0 | 0% | 0 | `—` |')
+    lines.push('| _No events in this window._ | 0 | 0 | 0 | 0% | `—` |')
   } else {
     lines.push(...scoreboardRows)
   }
@@ -601,7 +578,7 @@ function buildWeeklyDigestSummaryMarkdown({ windowStartIso, windowEndIso, eventD
 
     lines.push(`**📍 ${topAddress}**`)
     lines.push(
-      `Verified check-ins: **${top.totalCheckIns || 0}** • Feedback rate: **${topRatePct}%** • Wants Similar: **${top.wantsSimilarCount || 0}**`
+      `Verified check-ins: **${top.totalCheckIns || 0}** • Feedback rate: **${topRatePct}%**`
     )
     lines.push(
       `Buy intent: **${top.wouldBuyYesCount || 0} yes** • **${top.wouldBuyMaybeCount || 0} maybe** • **${top.wouldBuyNoCount || 0} no**`
@@ -675,28 +652,20 @@ function buildPerEventMarkdown(eventDigest) {
   lines.push(
     `- **Would Buy:** ${eventDigest.wouldBuyYesCount || 0} yes • ${eventDigest.wouldBuyMaybeCount || 0} maybe • ${eventDigest.wouldBuyNoCount || 0} no`
   )
-  lines.push(`- **Wants Similar:** ${eventDigest.wantsSimilarCount || 0}`)
   lines.push('')
   lines.push('---')
   lines.push('')
   lines.push('## 💬 VERBATIM BUYER FEEDBACK')
 
-  const liked = eventDigest.likedResponses || []
-  const disliked = eventDigest.dislikedResponses || []
+  const different = eventDigest.differentResponses || []
 
-  if (liked.length === 0 && disliked.length === 0) {
+  if (different.length === 0) {
     lines.push('_No written responses submitted._')
   } else {
-    const maxLen = Math.max(liked.length, disliked.length)
-    for (let i = 0; i < maxLen; i++) {
+    for (let i = 0; i < different.length; i++) {
       lines.push(`**Buyer ${i + 1}**`)
-      if (i < liked.length) {
-        lines.push(`> **Liked:** "${liked[i]}"`)
-      }
-      if (i < disliked.length) {
-        lines.push(`> **Disliked:** "${disliked[i]}"`)
-      }
-      if (i < maxLen - 1) {
+      lines.push(`> **What would need to be different:** "${different[i]}"`)
+      if (i < different.length - 1) {
         lines.push('')
         lines.push('---')
         lines.push('')

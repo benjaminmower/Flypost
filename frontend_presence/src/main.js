@@ -13,7 +13,6 @@ let currentEvent = null
 let viewCheckIn, viewSuccess, viewFeedback, viewThankyou
 let btnCheckIn, statusMsg
 let buyYes, buyMaybe, buyNo, wouldBuyInput
-let similarYes, similarNo, wantsSimilarInput
 
 function showNotification(message, type = 'info') {
   const notification = document.createElement('div')
@@ -99,21 +98,16 @@ async function handleCheckIn() {
 }
 
 async function handleFeedbackSubmit() {
-  const liked = document.getElementById('feedback-liked')?.value || ''
-  const disliked = document.getElementById('feedback-disliked')?.value || ''
+  const different = document.getElementById('feedback-different')?.value || ''
   const wouldBuy = wouldBuyInput?.value || null
-  const wantsSimilar = wantsSimilarInput?.value === "true" ? true : 
-                       wantsSimilarInput?.value === "false" ? false : null
 
   if (!currentAttendanceId) return showNotification('Check in first', 'error')
 
   try {
     const btn = document.getElementById('btn-submit-feedback')
     btn.disabled = true; btn.textContent = 'Sending...'
-    const res = await submitFeedback(currentAttendanceId, { 
-      liked, 
-      disliked, 
-      wantsSimilar,
+    const res = await submitFeedback(currentAttendanceId, {
+      different,
       wouldBuy
     })
     if (res.success) {
@@ -139,11 +133,6 @@ function init() {
   buyNo = document.getElementById('buy-no')
   wouldBuyInput = document.getElementById('feedback-wouldBuy')
   
-  // wantsSimilar elements (2-way)
-  similarYes = document.getElementById('similar-yes')
-  similarNo = document.getElementById('similar-no')
-  wantsSimilarInput = document.getElementById('feedback-wantsSimilar')
-
   btnCheckIn?.addEventListener('click', handleCheckIn)
   document.getElementById('btn-submit-feedback')?.addEventListener('click', handleFeedbackSubmit)
 
@@ -167,18 +156,6 @@ function init() {
     buyNo.classList.add('thumb-active')
   })
   
-  // wantsSimilar emoji toggle logic (2-way)
-  similarYes?.addEventListener('click', () => {
-    if (wantsSimilarInput) wantsSimilarInput.value = "true"
-    similarYes.classList.add('thumb-active')
-    similarNo.classList.remove('thumb-active')
-  })
-  similarNo?.addEventListener('click', () => {
-    if (wantsSimilarInput) wantsSimilarInput.value = "false"
-    similarYes.classList.remove('thumb-active')
-    similarNo.classList.add('thumb-active')
-  })
-
   const feedbackMatch = window.location.pathname.match(/^\/f\/([^/]+)$/)
   if (feedbackMatch) { currentAttendanceId = feedbackMatch[1]; showView('feedback') }
   else { showView('check-in') }

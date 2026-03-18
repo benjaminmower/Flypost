@@ -130,31 +130,22 @@ app.get('/v1/brokerages/:brokerageId/insights', readLimiter, async (req, res) =>
         byEvent[eid] = {
           eventId: eid,
           totalResponses: 0,
-          wantsSimilarCount: 0,
-          likedSnippets: [],
-          dislikedSnippets: []
+          differentSnippets: []
         }
       }
 
       byEvent[eid].totalResponses++
-      if (feedback.answers.wantsSimilar) {
-        byEvent[eid].wantsSimilarCount++
-      }
 
-      if (feedback.answers.liked) {
-        byEvent[eid].likedSnippets.push(feedback.answers.liked)
-      }
-      if (feedback.answers.disliked) {
-        byEvent[eid].dislikedSnippets.push(feedback.answers.disliked)
+      if (feedback.answers.different) {
+        byEvent[eid].differentSnippets.push(feedback.answers.different)
       }
 
       if (recentVerbatims.length < 10) {
         recentVerbatims.push({
           feedbackId: feedback.feedbackId,
           eventId: feedback.eventId,
-          liked: feedback.answers.liked,
-          disliked: feedback.answers.disliked,
-          wantsSimilar: feedback.answers.wantsSimilar,
+          different: feedback.answers.different,
+          wouldBuy: feedback.answers.wouldBuy,
           createdAt: feedback.createdAt
         })
       }

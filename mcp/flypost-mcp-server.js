@@ -162,15 +162,14 @@ server.tool(
     eventId: z.string().optional().describe("Event ID (used with buyerToken if attendanceId is not available)"),
     buyerToken: z.string().optional().describe("Buyer token (used with eventId if attendanceId is not available)"),
     wouldBuy: z.boolean().describe("Whether the attendee would buy"),
-    wantsSimilar: z.boolean().describe("Whether the attendee wants similar event recommendations"),
-    feedbackText: z.string().optional().describe("Optional free-text feedback"),
+    different: z.string().optional().describe("What would need to be different for the attendee to make an offer"),
   },
-  async ({ attendanceId, eventId, buyerToken, wouldBuy, wantsSimilar, feedbackText }) => {
-    const body = { wouldBuy, wantsSimilar }
+  async ({ attendanceId, eventId, buyerToken, wouldBuy, different }) => {
+    const body = { wouldBuy }
     if (attendanceId) body.attendanceId = attendanceId
     if (eventId) body.eventId = eventId
     if (buyerToken) body.buyerToken = buyerToken
-    if (feedbackText) body.feedbackText = feedbackText
+    if (different) body.different = different
 
     const data = await apiFetch("/v1/feedback/submit", {
       method: "POST",
