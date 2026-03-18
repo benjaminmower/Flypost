@@ -300,15 +300,15 @@ export async function queryEventsByLocationAndTime(filters = {}) {
     )
 
     if (hasGeoFilters) {
-      const withGeo = events.filter(e => e?.location?.geo?.latitude && e?.location?.geo?.longitude)
+      const withGeo = events.filter(e =>
+        (e?.location?.geo?.latitude && e?.location?.geo?.longitude) ||
+        (e?.flypost?.geo?.latitude && e?.flypost?.geo?.longitude)
+      )
       if (withGeo.length > 0) {
         const filtered = withGeo.filter(event => {
-          const distance = calculateDistance(
-            filters.latitude,
-            filters.longitude,
-            event.location.geo.latitude,
-            event.location.geo.longitude
-          )
+          const lat = event.location?.geo?.latitude ?? event.flypost?.geo?.latitude
+          const lng = event.location?.geo?.longitude ?? event.flypost?.geo?.longitude
+          const distance = calculateDistance(filters.latitude, filters.longitude, lat, lng)
           return distance <= filters.radiusKm
         })
         console.log(`🔥 Firestore query (geo-filtered) returned ${filtered.length} of ${withGeo.length} geo-tagged events (from ${events.length} total)`)
