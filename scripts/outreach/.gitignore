@@ -1,3 +1,5 @@
 .env
 *.sqlite
 node_modules/
+decisions.log
+manual_lookup.txt
