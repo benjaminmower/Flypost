@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { insertListing } from './db.js';
+import { insertListing, getExistingUrls } from './db.js';
 
 const SEARCH_URL = 'https://www.redfin.com/zipcode/90405/filter/min-days-on-market=1mo';
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -61,7 +61,7 @@ async function collectListingUrls(page) {
 
 async function extractListingData(page, url) {
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(2000);
 
     const data = await page.evaluate(() => {
@@ -83,24 +83,31 @@ async function extractListingData(page, url) {
       // Price
       const list_price = getText('.price') || getText('[data-rf-test-id="abp-price"]') || getText('.statsValue');
 
-      // Agent info — Redfin listing agent section
-      const agentSection = document.querySelector('.agent-basic-info, .listing-agent, [data-rf-test-id="listing-agent"]');
-      const agent_name = agentSection?.querySelector('.agent-name, .name')?.textContent?.trim()
-        ?? getText('.listing-agent-name')
-        ?? null;
-      const brokerage = agentSection?.querySelector('.agent-company, .brokerage')?.textContent?.trim()
-        ?? getText('.listing-agent-brokerage')
-        ?? null;
+      // Agent info — first agentInfoItem-agentDisplay block (listing agent)
+      const agentSection = document.querySelector('[data-rf-test-id="agentInfoItem-agentDisplay"]');
 
-      // Phone
-      let agent_phone = null;
-      const phoneEl = [...document.querySelectorAll('a[href^="tel:"]')];
-      if (phoneEl.length) agent_phone = phoneEl[0].href.replace('tel:', '');
+      const agent_name = agentSection
+        ?.querySelector('span.agent-basic-details--heading > span')
+        ?.textContent?.trim() ?? null;
 
-      // Email — rarely present on Redfin but check anyway
+      // Strip bullet dot and surrounding whitespace from brokerage text
+      const brokerage = agentSection
+        ?.querySelector('span.agent-basic-details--broker')
+        ?.textContent?.replace(/[•·]/g, '').trim() ?? null;
+
+      // Phone — "310-998-7175 (agent)" → strip " (agent)"
+      const phoneRaw = agentSection
+        ?.querySelector('[data-rf-test-id="agentInfoItem-agentPhoneNumber"]')
+        ?.textContent?.trim() ?? null;
+      const agent_phone = phoneRaw ? phoneRaw.replace(/\s*\(agent\)/i, '').trim() : null;
+
+      // Email — plain text node "bjorn@bjornfarrugia.com (agent)"
       let agent_email = null;
-      const emailEl = document.querySelector('a[href^="mailto:"]');
-      if (emailEl) agent_email = emailEl.href.replace('mailto:', '').split('?')[0];
+      const emailDiv = agentSection?.querySelector('div.email-addresses');
+      if (emailDiv) {
+        const match = emailDiv.textContent.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
+        if (match) agent_email = match[0].toLowerCase();
+      }
 
       return { address, dom, list_price, agent_name, brokerage, agent_phone, agent_email };
     });
@@ -112,40 +119,63 @@ async function extractListingData(page, url) {
   }
 }
 
-export async function scrapeRedfin() {
-  console.log('[scrape] Launching browser...');
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
+async function newContext(browser) {
+  return browser.newContext({
     userAgent: USER_AGENT,
     viewport: { width: 1280, height: 900 },
     locale: 'en-US',
   });
-  const page = await context.newPage();
+}
 
+export async function scrapeRedfin() {
+  // Session 1: collect listing URLs, then close browser completely.
+  // Keeping the search session alive poisons subsequent listing requests
+  // with Redfin's bot-detection cookies.
+  let urls;
+  {
+    console.log('[scrape] Session 1: collecting listing URLs...');
+    const browser = await chromium.launch({ headless: true });
+    const ctx = await newContext(browser);
+    const page = await ctx.newPage();
+    try {
+      urls = await collectListingUrls(page);
+    } finally {
+      await browser.close(); // full close — no shared state leaks into Session 2
+    }
+    console.log(`[scrape] Found ${urls.length} listing URLs`);
+  }
+
+  const existing = getExistingUrls();
+  const newUrls = urls.filter(u => !existing.has(u));
+  console.log(`[scrape] ${newUrls.length} new to scrape (${urls.length - newUrls.length} already in DB)`);
+
+  if (newUrls.length === 0) return { scraped: 0, skipped: urls.length };
+
+  // Session 2: fresh browser with no search-page cookies.
+  // Each listing gets its own context; 3-5s random delay between visits.
   let scraped = 0;
   let skipped = 0;
 
+  console.log('[scrape] Session 2: extracting listing details...');
+  const browser = await chromium.launch({ headless: true });
   try {
-    console.log('[scrape] Collecting listing URLs...');
-    const urls = await collectListingUrls(page);
-    console.log(`[scrape] Found ${urls.length} listing URLs`);
+    for (let i = 0; i < newUrls.length; i++) {
+      const url = newUrls[i];
+      console.log(`[scrape] (${i + 1}/${newUrls.length}) ${url}`);
 
-    for (let i = 0; i < urls.length; i++) {
-      const url = urls[i];
-      console.log(`[scrape] (${i + 1}/${urls.length}) ${url}`);
-
-      const data = await extractListingData(page, url);
-      if (!data) { skipped++; continue; }
-
-      const inserted = insertListing(data);
-      if (inserted) {
-        scraped++;
-      } else {
-        skipped++;
+      const ctx = await newContext(browser);
+      const page = await ctx.newPage();
+      try {
+        const data = await extractListingData(page, url);
+        if (!data) { skipped++; continue; }
+        insertListing(data) ? scraped++ : skipped++;
+      } finally {
+        await ctx.close();
       }
 
-      // Polite delay
-      await page.waitForTimeout(1000 + Math.random() * 1000);
+      if (i < newUrls.length - 1) {
+        await new Promise(r => setTimeout(r, 3000 + Math.random() * 2000));
+      }
     }
   } finally {
     await browser.close();

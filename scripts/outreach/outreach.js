@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { initDb, getStats } from './db.js';
+import { initDb, getStats, resetDrafts } from './db.js';
 import { scrapeRedfin } from './scrape.js';
 import { findEmails } from './findEmail.js';
 import { generateDrafts } from './draftEmail.js';
@@ -10,6 +10,12 @@ async function main() {
 
   // 1. Init DB
   initDb();
+
+  // Reset drafts if requested
+  if (process.argv.includes('--reset-drafts')) {
+    const n = resetDrafts();
+    console.log(`[db] Reset draft_created for ${n} listings\n`);
+  }
 
   // 2. Step 1: Scrape Redfin for stale Santa Monica listings
   console.log('--- Step 1: Scraping Redfin ---');

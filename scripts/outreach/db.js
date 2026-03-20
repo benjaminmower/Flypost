@@ -57,6 +57,12 @@ export function updateDraft(redfin_url) {
   `).run({ redfin_url });
 }
 
+export function getExistingUrls() {
+  return new Set(
+    db.prepare('SELECT redfin_url FROM listings').all().map(r => r.redfin_url)
+  );
+}
+
 export function getPendingEmailLookup() {
   return db.prepare(`SELECT * FROM listings WHERE email_source IS NULL`).all();
 }
@@ -65,6 +71,10 @@ export function getPendingDrafts() {
   return db.prepare(`
     SELECT * FROM listings WHERE agent_email IS NOT NULL AND draft_created = 0
   `).all();
+}
+
+export function resetDrafts() {
+  return db.prepare(`UPDATE listings SET draft_created = 0, draft_created_at = NULL`).run().changes;
 }
 
 export function getStats() {
