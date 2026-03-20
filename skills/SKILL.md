@@ -26,7 +26,7 @@ You can't scrape it, synthesize it, or buy it from the MLS.
 **Core primitives:**
 
 - **POST** — Agents publish open house events in natural language via post.goflypost.com. OpenAI parses into structured Firestore records with geo coordinates, time windows, and schema.org Event format.
-- **PRESENCE** — Buyers check in on-site via geofenced QR code (100 meter radius). Time-gated to active event window. No app required.
+- **PRESENCE** — Buyers check in on-site via geofenced QR code (50 meter radius). Time-gated to active event window. No app required.
 - **ASK** — Conversational query engine for the event registry. Queryable by API.
 - **SHARE** — Agent-facing share page for each listing. Buyers can check in, add to calendar, get directions.
 
@@ -78,6 +78,44 @@ real market feedback.
 
 ---
 
+## Why the Feedback Channel Is Collapsing (Research Finding — March 2026)
+
+Three forces are simultaneously closing the agent-form feedback channel:
+
+**1. Incentive misalignment.** The buyer's agent has zero upside and meaningful
+downside in providing candid feedback. Honest responses can signal their client's
+interest level, expose negotiating position, or be forwarded to a seller whose
+incentives conflict with candor. This is not unprofessional — it is rational.
+
+**2. Identity exposure.** In many MLS-integrated systems, feedback is routed
+to the seller directly. Agents report sellers Googling them and calling to argue.
+The rational response: radio buttons and "not interested." Candor and identity
+are incompatible in the current structure. Agents give honest feedback only to
+colleagues they personally know — "relationship-filtered candor."
+
+**3. Generational attitude shift.** Younger agents view non-response as
+legitimate. This will not improve with better automation or more follow-up
+sequences.
+
+**ShowingTime allows up to 9 automated follow-up requests per showing.**
+That is a confession about how badly the channel performs.
+
+**The failed QR code test:** A seller independently placed a generic anonymous
+QR survey at their open house and got zero responses. This confirms that
+anonymity alone is not enough. Flypost succeeds where generic surveys fail
+because:
+- The check-in is the hook (presence verification, calendar, directions)
+- Feedback follows an interaction the buyer already initiated
+- Presence is server-enforced (Haversine check, time gating, origin restriction)
+- The signal is credible because it is verified
+
+**The moat restatement:** Curb Hero cannot add anonymous feedback without
+cannibalizing lead capture — their primary revenue engine. If they did, they
+would destroy their 6,000+ CRM integration strategy. They know the use case.
+Their business model structurally prevents them from serving it.
+
+---
+
 ## Tech Stack
 
 - **Backend:** Node.js / Express
@@ -96,7 +134,7 @@ real market feedback.
 
 ## Presence Verification
 
-**Radius:** 0.1 km (100 meters)
+**Radius:** 0.05 km (50 meters)
 
 - Tight enough to exclude neighbors
 - Loose enough for GPS drift inside a house
@@ -254,17 +292,25 @@ intelligence platform.
 - 1% penetration = $7.5M ARR
 - Future layers: brokerage API access, ground-truth data licensing
 
+**Pricing philosophy:**
+- Lead with $150/listing not $50/event — commits agent to the whole listing
+- Never mention price in cold outreach — forces a reply
+- At the moment an agent asks a seller to reduce by $25,000, $50 is not
+  a line item worth discussing. Frame around outcome, not cost.
+- The data asset is the long-term strategic leverage, not per-event revenue
+
 ---
 
 ## Competitive Landscape
 
 | Competitor | Model | Gap |
 |---|---|---|
-| Curb Hero | Free lead capture, 6000+ CRM integrations | No anonymous feedback, no presence, no registry |
+| Curb Hero | Free lead capture, 6000+ CRM integrations | No anonymous feedback, no presence, no registry — business model conflict |
 | Spacio | Paid analytics, brokerage dashboards | Identity-linked, agent-mediated |
 | Open Home Pro | Simple lead capture, offline | No intelligence layer |
-| ShowingTime | Private showing scheduling | Agent-mediated, not open houses |
+| ShowingTime | Private showing scheduling | Agent-mediated, channel collapsing, 9 follow-ups = admission of failure |
 | SurveyStance | iPad kiosk, emoji feedback | Hardware-dependent, no geofencing, unfunded |
+| Generic QR surveys | Anonymous buyer feedback | No presence verification, empirically produces zero responses |
 
 **Key insight:** Curb Hero's own docs call anonymous buyer feedback
 "the make or break moment" for stale listings — but their business model
@@ -292,11 +338,27 @@ Stop optimizing copy. Fix distribution.
 - In-person demos at NAR chapter meetings and brokerage floor meetings
 - CEO-level entry at brokerages (Rick Edler) to get in front of whole teams at once
 
-**Email template for stale listing outreach:**
-> "I noticed your listing at [address] has been on for [X] days with [Y] views.
-> Flypost captures anonymous buyer feedback at open houses — honest reactions
-> buyers won't share to an agent's face but would put in a ballot box.
-> Would you be open to trying it on your next open house?"
+**Cold email subject line that works:**
+"Why are buyers walking away from [address]?"
+
+Do not include pricing in cold email. Forces a reply. Lead with the pain,
+not the product. Assume agents are smart — do not explain why feedback
+matters to sellers. They know.
+
+**Cold email body (4-5 sentences max):**
+- First sentence: specific address and DOM count
+- One sentence on Flypost using "honest reactions they won't share to your
+  face but will leave in a ballot box"
+- "Works next weekend."
+- Sign off as Bronco
+- No bullet points, no bold, plain text, written like a human from their phone
+
+**Sending timing:**
+- Draft Thursday or Friday
+- Send Sunday night or Monday morning — agents are debriefing weekend
+  open houses, pain is fresh
+- If listing has an open house THIS weekend → send immediately
+- "Works next weekend" loses punch if sent Monday afternoon
 
 **QR code placement pitch:**
 Don't replace the sign-in sheet. Sign-in sheet captures leads.
@@ -314,11 +376,91 @@ who walked through the door or why they didn't make an offer."
 
 ---
 
-## Active Pipeline (as of 2026-03-17)
+## Outreach Agent (scripts/outreach/) — Built 2026-03-19
+
+A Node.js script that automates the full outreach pipeline. Lives entirely
+in `scripts/outreach/`. No changes to `backend/`.
+
+**What it does:**
+1. Scrapes Redfin for Santa Monica listings with 30+ DOM using Playwright
+2. Extracts agent name, email, brokerage, phone directly from Redfin listing pages
+3. Falls back to brokerage website scraping for missing emails
+4. Calls Anthropic API to generate personalized cold emails per listing
+5. Saves drafts to Gmail via Gmail API — Bronco reviews and sends manually
+
+**Key technical decisions:**
+- Two separate Playwright browser sessions — search page and listing pages
+  must be in different contexts or Redfin flags the session as a bot
+- `networkidle` wait strategy required — agent section is client-side rendered
+- Idempotent across runs — SQLite dedup by redfin_url, draft_created flag
+  prevents duplicate emails
+- Gmail drafts (not send) — human reviews every email before it goes out
+- OOB OAuth flow — prints auth URL to console, user pastes code back
+
+**Results from first run (2026-03-19):**
+- 41 listings scraped (Santa Monica, 30+ DOM)
+- 31 emails found directly on Redfin
+- 1 email found via brokerage site
+- 9 not found (flagged for manual lookup)
+- 32 drafts created in Gmail
+
+**SQLite schema:**
+```sql
+CREATE TABLE listings (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  redfin_url       TEXT UNIQUE NOT NULL,
+  address          TEXT,
+  dom              INTEGER,
+  list_price       TEXT,
+  agent_name       TEXT,
+  brokerage        TEXT,
+  agent_phone      TEXT,
+  agent_email      TEXT,
+  email_source     TEXT,  -- 'redfin' | 'brokerage_site' | 'not_found' | NULL
+  draft_created    INTEGER DEFAULT 0,
+  draft_created_at TEXT,
+  scraped_at       TEXT DEFAULT (datetime('now'))
+);
+```
+
+**To run:**
+```bash
+cd scripts/outreach
+node outreach.js
+```
+
+**To reset drafts (re-generate without re-scraping):**
+```bash
+node outreach.js --reset-drafts
+```
+
+**Environment:**
+```
+ANTHROPIC_API_KEY=sk-ant-...
+GMAIL_CREDENTIALS_PATH=../../credentials.json
+GMAIL_TOKEN_PATH=../../token.json
+```
+
+**Redfin bot detection notes:**
+- Redfin blocks headless Playwright aggressively
+- Fix: two separate browser contexts (search URL in Session 1, listing pages in Session 2)
+- Add 3-5 second random delays between listing page visits
+- Do not run more than once per day — IP rate limiting is real
+- The search page visit is what triggers the flag; clean sessions for listing pages work
+
+**CAN-SPAM compliance:**
+- Cold B2B email to professionals at business emails is legal
+- Add physical address or city/state to email footer
+- No opt-in required for B2B outreach in the US
+
+---
+
+## Active Pipeline (as of 2026-03-19)
 
 - **Alexis Gallardo** (Compass) — Open house March 28/29, confirmed deployment,
   actively referring other agents. Most important relationship in the pipeline.
-- **Guy Reid** (Douglas Elliman) — Text sent re: 2530 Beverley Ave open house
+- **Guy Reid** (Douglas Elliman) — Text sent re: 2530 Beverley Ave open house.
+  Guy's listing is in the outreach DB (raphael.barragan.re@gmail.com listed).
 - **Rick Edler** (Vista Sotheby's CEO) — Met Dec 2025. His verbatim feedback:
   "It doesn't add value for the person selling the house. An app that shows
   that X is a client of X brokerage and knows when you visit an open house
@@ -337,8 +479,11 @@ who walked through the door or why they didn't make an offer."
   **Brokerage team meetings: first Wednesday of every month, Cheesecake Factory.**
   Target April first Wednesday for in-person demo with Vista team.
 - **Will Cooper** (BHHS Utah) — Text sent, family connection
-- **Neyshia Go** (Sotheby's) — Email sent, 82 DOM listing
+- **Neyshia Go** (Sotheby's) — In outreach DB. Do not send cold email —
+  warmer conversation already in progress.
 - Megan's Marine St report sent — awaiting response
+- **32 Santa Monica agents** — drafts in Gmail as of 2026-03-19, ready to send
+  Sunday night / Monday morning
 
 ---
 
@@ -358,6 +503,8 @@ who walked through the door or why they didn't make an offer."
 
 ---
 
+## Founder
+
 **Benjamin "Bronco" Mower** — sole founder, 100% equity
 
 - Built entirely with AI tools (Claude Code, GitHub Copilot, ChatGPT)
@@ -375,6 +522,8 @@ who walked through the door or why they didn't make an offer."
 - Ground truth in an era of synthetic data
 - The data asset (attendance registry) grows with every check-in and cannot be replicated
 - Poster Score is the proprietary intelligence layer that justifies data licensing
+- Structurally advantaged: dominant players cannot enter without cannibalizing
+  their core lead-capture revenue model
 
 ---
 
@@ -384,5 +533,6 @@ who walked through the door or why they didn't make an offer."
 - Main entry: `backend/src/server.js`
 - Presence logic: `backend/src/routes/presence.js`
 - Proxy config: `proxy/cloudrun-proxy.js` — all new /v1/ routes must be added here
+- Outreach agent: `scripts/outreach/outreach.js`
 - Package: Node.js / Express, Firebase Admin, OpenAI SDK, date-fns-tz, AJV, express-rate-limit
 - License: Apache-2.0
