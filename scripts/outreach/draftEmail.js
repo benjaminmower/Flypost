@@ -14,7 +14,9 @@ ${addr} has been on for ${days} days. Buyers are walking through and not telling
 
 Flypost captures anonymous buyer feedback at open houses — honest reactions they won't share to your face but will leave in a ballot box.
 
-$50. Works next weekend.`;
+Works next weekend.
+
+Bronco @ Flypost`;
 
   return { subject, body };
 }
