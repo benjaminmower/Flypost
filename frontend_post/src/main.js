@@ -414,23 +414,13 @@ function displayShareUrl(url) {
   container.innerHTML = `
     <div style="padding: 16px;">
       <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600;">Share this event</h3>
-      <div style="display: flex; gap: 8px; align-items: center;">
-        <input 
-          type="text" 
-          id="share-url-input"
-          value="${escapeHtml(url)}" 
-          readonly 
-          style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 14px;"
-        />
-        <button 
-          id="copy-share-url-btn"
-          class="bg-mint_leaf"
-          style="padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; white-space: nowrap;"
-        >
-          Copy
-        </button>
-      </div>
-      <div id="copy-feedback" style="margin-top: 8px; color: #28a745; font-size: 14px; min-height: 20px;"></div>
+      <button
+        id="copy-share-url-btn"
+        class="bg-mint_leaf"
+        style="padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; white-space: nowrap;"
+      >
+        View Event Page
+      </button>
     </div>
   `
   
@@ -442,35 +432,9 @@ function displayShareUrl(url) {
   
   // Add event listener for copy button (NO inline onclick)
   const copyBtn = document.getElementById('copy-share-url-btn')
-  const copyFeedback = document.getElementById('copy-feedback')
-  
+
   if (copyBtn) {
-    copyBtn.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(url)
-        
-        // Show feedback
-        if (copyFeedback) {
-          copyFeedback.textContent = '✓ Copied!'
-          
-          // Clear feedback after 2 seconds
-          setTimeout(() => {
-            copyFeedback.textContent = ''
-          }, 2000)
-        }
-      } catch (err) {
-        console.error('Failed to copy:', err)
-        if (copyFeedback) {
-          copyFeedback.textContent = 'Failed to copy'
-          copyFeedback.style.color = '#dc3545'
-          
-          setTimeout(() => {
-            copyFeedback.textContent = ''
-            copyFeedback.style.color = '#28a745'
-          }, 2000)
-        }
-      }
-    })
+    copyBtn.addEventListener('click', () => window.open(url, '_blank'))
   }
 }
 
