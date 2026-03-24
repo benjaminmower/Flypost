@@ -74,6 +74,8 @@ router.post('/check-in', writeLimiter, async (req, res) => {
     let matchedBy = 'explicit'
     let matchedEvent = null
 
+    const now = new Date()
+
     // If no eventId provided, find nearest event
     if (!targetEventId) {
       const useFirestore = isFirestoreEnabled()
@@ -93,7 +95,34 @@ router.post('/check-in', writeLimiter, async (req, res) => {
         })
       }
 
-      matchedEvent = nearbyEvents[0]
+      const liveEvents = nearbyEvents.filter(event => {
+        if (event.flypost?.queryable === false) return false
+        if (event.occurrences && event.occurrences.length > 0) {
+          return event.occurrences.some(occ => {
+            try {
+              const s = new Date(occ.startDate)
+              const e = new Date(occ.endDate)
+              return !isNaN(s.getTime()) && !isNaN(e.getTime()) && now >= s && now <= e
+            } catch { return false }
+          })
+        }
+        try {
+          const s = new Date(event.startDate)
+          const e = new Date(event.endDate)
+          return !isNaN(s.getTime()) && !isNaN(e.getTime()) && now >= s && now <= e
+        } catch { return false }
+      })
+
+      if (liveEvents.length === 0) {
+        logCheckInFailure('NO_NEARBY_EVENT', { submittedLat: latNum, submittedLng: lngNum, submittedTimestamp: timestamp })
+        return res.status(404).json({
+          success: false,
+          error: 'No events found within proximity for check-in',
+          hint: 'Make sure you are at the event location'
+        })
+      }
+
+      matchedEvent = liveEvents[0]
       targetEventId = matchedEvent.flypost.eventId
       matchedBy = 'nearest'
       console.log(`📍 Matched nearest event: ${targetEventId}`)
@@ -121,8 +150,6 @@ router.post('/check-in', writeLimiter, async (req, res) => {
     }
 
     // STRICT TIME GATING: Validate check-in is within event time window
-    const now = new Date()
-
     let matchedOccurrenceId = null
     let eventStart, eventEnd
 
