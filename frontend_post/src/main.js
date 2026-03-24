@@ -274,31 +274,7 @@ async function handleEventSubmit(e) {
           ">
             📋 Share this event
           </h3>
-          <div style="
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-          " class="share-input-wrapper">
-            <input 
-              type="text" 
-              id="share-url-input"
-              value="${escapeHtml(url)}" 
-              readonly 
-              style="
-                background: rgba(6, 8, 16, 0.5);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                color: #f7f7f7;
-                font-family: monospace;
-                font-size: 14px;
-                padding: 12px 16px;
-                border-radius: 12px;
-                outline: none;
-                transition: border-color 0.2s;
-              "
-              onfocus="this.style.borderColor='rgba(64, 201, 162, 0.5)'"
-              onblur="this.style.borderColor='rgba(255, 255, 255, 0.1)'"
-            />
-            <button 
+          <button
               id="copy-share-url-btn"
               style="
                 background: #40c9a2;
@@ -313,25 +289,12 @@ async function handleEventSubmit(e) {
                 transition: all 0.2s;
               "
               onmouseover="this.style.background='#f7f7f7'"
-              onmouseout="if(!this.dataset.copied){this.style.background='#40c9a2'}"
+              onmouseout="this.style.background='#40c9a2'"
               onmousedown="this.style.transform='scale(0.98)'"
               onmouseup="this.style.transform='scale(1)'"
             >
-              Copy Link
+              View Event Page
             </button>
-          </div>
-          <div 
-            id="copy-feedback" 
-            style="
-              color: #40c9a2;
-              font-size: 14px;
-              font-weight: 600;
-              margin-top: 12px;
-              min-height: 24px;
-              opacity: 0;
-              transition: opacity 0.3s;
-            "
-          ></div>
         `
         
         // Apply responsive styles using media query (only if not already added)
@@ -370,48 +333,9 @@ async function handleEventSubmit(e) {
         
         // Add event listener for copy button
         const copyBtn = document.getElementById('copy-share-url-btn')
-        const copyFeedback = document.getElementById('copy-feedback')
         
         if (copyBtn) {
-          copyBtn.addEventListener('click', async () => {
-            try {
-              await navigator.clipboard.writeText(url)
-              
-              // Show feedback with animation
-              if (copyFeedback) {
-                copyFeedback.textContent = '✓ Copied to clipboard!'
-                copyFeedback.style.opacity = '1'
-                
-                // Fade out after 2 seconds
-                setTimeout(() => {
-                  copyFeedback.style.opacity = '0'
-                }, 2000)
-              }
-              
-              // Visual button feedback
-              copyBtn.textContent = '✓ Copied!'
-              copyBtn.style.background = '#f7f7f7'
-              copyBtn.dataset.copied = 'true'
-              
-              setTimeout(() => {
-                copyBtn.textContent = 'Copy Link'
-                copyBtn.style.background = '#40c9a2'
-                delete copyBtn.dataset.copied
-              }, 2000)
-            } catch (err) {
-              console.error('Failed to copy:', err)
-              if (copyFeedback) {
-                copyFeedback.textContent = '✗ Failed to copy'
-                copyFeedback.style.color = '#d82e7e' // hot_berry
-                copyFeedback.style.opacity = '1'
-                
-                setTimeout(() => {
-                  copyFeedback.style.opacity = '0'
-                  copyFeedback.style.color = '#40c9a2' // mint_leaf
-                }, 2000)
-              }
-            }
-          })
+          copyBtn.addEventListener('click', () => window.open(url, '_blank'))
         }
       }
   } catch (e) {
