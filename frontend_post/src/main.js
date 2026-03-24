@@ -245,99 +245,6 @@ async function handleEventSubmit(e) {
       displayShareUrl(shareUrl)
     }
 
-      /**
-       * Display share URL with copy button (improved styling)
-       */
-      function displayShareUrl(url) {
-        // Remove any existing share URL display
-        const existing = document.getElementById('share-url-container')
-        if (existing) {
-          existing.remove()
-        }
-
-        // Create share URL container with glassmorphic styling
-        const container = document.createElement('div')
-        container.id = 'share-url-container'
-        container.className = 'glass-card mt-4'
-        container.style.padding = '24px'
-        container.style.borderRadius = '24px'
-        container.style.border = '1px solid rgba(64, 201, 162, 0.2)'
-        
-        container.innerHTML = `
-          <h3 style="
-            color: #40c9a2;
-            font-size: 16px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 16px;
-          ">
-            📋 Share this event
-          </h3>
-          <button
-              id="copy-share-url-btn"
-              style="
-                background: #40c9a2;
-                color: #060810;
-                font-weight: 700;
-                font-size: 14px;
-                padding: 12px 24px;
-                border-radius: 12px;
-                border: none;
-                cursor: pointer;
-                box-shadow: 0 4px 12px rgba(64, 201, 162, 0.3);
-                transition: all 0.2s;
-              "
-              onmouseover="this.style.background='#f7f7f7'"
-              onmouseout="this.style.background='#40c9a2'"
-              onmousedown="this.style.transform='scale(0.98)'"
-              onmouseup="this.style.transform='scale(1)'"
-            >
-              View Event Page
-            </button>
-        `
-        
-        // Apply responsive styles using media query (only if not already added)
-        if (!document.getElementById('share-url-responsive-styles')) {
-          const style = document.createElement('style')
-          style.id = 'share-url-responsive-styles'
-          style.textContent = `
-            @media (min-width: 768px) {
-              #share-url-container {
-                padding: 32px !important;
-                border-radius: 32px !important;
-              }
-              #share-url-container h3 {
-                font-size: 18px !important;
-              }
-              #share-url-container .share-input-wrapper {
-                flex-direction: row !important;
-              }
-              #share-url-container input {
-                font-size: 16px !important;
-              }
-              #share-url-container button {
-                font-size: 16px !important;
-                white-space: nowrap;
-              }
-            }
-          `
-          document.head.appendChild(style)
-        }
-        
-        // Insert after publish status
-        const publishStatus = document.getElementById('publish-status')
-        if (publishStatus && publishStatus.parentNode) {
-          publishStatus.parentNode.insertBefore(container, publishStatus.nextSibling)
-        }
-        
-        // Add event listener for copy button
-        const copyBtn = document.getElementById('copy-share-url-btn')
-        
-        if (copyBtn) {
-          copyBtn.addEventListener('click', () => window.open(url, '_blank'))
-        }
-      }
   } catch (e) {
     console.error('❌ Publish failed:', e)
     
@@ -395,47 +302,31 @@ function escapeHtml(text) {
   return div.innerHTML
 }
 
-/**
- * Display share URL with copy button
- */
 function displayShareUrl(url) {
-  // Remove any existing share URL display
   const existing = document.getElementById('share-url-container')
-  if (existing) {
-    existing.remove()
-  }
+  if (existing) existing.remove()
 
-  // Create share URL container
   const container = document.createElement('div')
   container.id = 'share-url-container'
-  container.className = 'glass-card'
-  container.style.marginTop = '20px'
-  
+  container.className = 'glass-card p-8 rounded-[2.5rem] border-mint_leaf/10 shadow-2xl mt-4'
+
   container.innerHTML = `
-    <div style="padding: 16px;">
-      <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600;">Share this event</h3>
-      <button
-        id="copy-share-url-btn"
-        class="bg-mint_leaf"
-        style="padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; white-space: nowrap;"
-      >
-        View Event Page
-      </button>
-    </div>
+    <p class="text-[10px] font-bold uppercase tracking-widest text-mint_leaf mb-4">Event Published</p>
+    <button
+      id="view-event-btn"
+      class="bg-mint_leaf text-ink_black w-full py-4 rounded-2xl font-black text-lg hover:bg-bright_snow transition-all active:scale-95"
+    >
+      View Event Page
+    </button>
   `
-  
-  // Insert after publish status
+
   const publishStatus = document.getElementById('publish-status')
   if (publishStatus && publishStatus.parentNode) {
     publishStatus.parentNode.insertBefore(container, publishStatus.nextSibling)
   }
-  
-  // Add event listener for copy button (NO inline onclick)
-  const copyBtn = document.getElementById('copy-share-url-btn')
 
-  if (copyBtn) {
-    copyBtn.addEventListener('click', () => window.open(url, '_blank'))
-  }
+  const btn = document.getElementById('view-event-btn')
+  if (btn) btn.addEventListener('click', () => window.open(url, '_blank'))
 }
 
 // Reset form to initial state
