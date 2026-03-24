@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
 import { chromium } from 'playwright';
 import { google } from 'googleapis';
-import { initDb, insertListing, getExistingUrls, updateDraft } from './db.js';
+import { initDb, insertListing, getExistingUrls, updateDraft, getPendingDrafts, resetDrafts } from './db.js';
 import { ensureAuth } from './gmail.js';
 import { MARKETS } from './markets.config.js';
 
@@ -38,7 +38,7 @@ const tools = [
       'Scrape stale listings from Redfin for a given zipcode. ' +
       'Uses two separate Playwright browser sessions: Session 1 collects listing URLs ' +
       'from the search page then closes the browser completely; Session 2 opens a fresh ' +
-      'browser and visits each listing page individually with networkidle wait so the agent ' +
+      'browser and visits each listing page individually waiting for the agent ' +
       'section is fully hydrated, with 3–5 s random delays between visits. ' +
       'Inserts new listings into SQLite (INSERT OR IGNORE by redfin_url). ' +
       'Returns { listings, scraped, skipped, possibleBlock }. ' +
@@ -57,7 +57,7 @@ const tools = [
     name: 'scrapeZillow',
     description:
       'Fallback scraper when Redfin blocks. Attempts to scrape stale listings from Zillow for a zipcode. ' +
-      'Same two-session Playwright pattern with networkidle and 3–5 s delays. ' +
+      'Same two-session Playwright pattern with domcontentloaded and 3–5 s delays. ' +
       'Returns { listings, scraped, skipped, possibleBlock }. ' +
       'NOTE: If this also returns possibleBlock: true, log the market and move on.',
     input_schema: {
@@ -266,8 +266,8 @@ async function collectListingUrls(page, searchUrl) {
 
   while (true) {
     const pageUrl = pageNum === 1 ? searchUrl : `${searchUrl}/page-${pageNum}`;
-    await page.goto(pageUrl, { waitUntil: 'networkidle', timeout: 60000 });
-    await page.waitForTimeout(1000);
+    await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForSelector('.HomeCardContainer', { timeout: 15000 }).catch(() => {});
 
     const links = await page.$$eval(
       'a[href*="/home/"]',
@@ -292,8 +292,8 @@ async function collectListingUrls(page, searchUrl) {
 
 async function extractListingData(page, url) {
   try {
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
-    await page.waitForTimeout(1000);
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForSelector('[data-rf-test-id="agentInfoItem-agentDisplay"]', { timeout: 15000 }).catch(() => {});
 
     const data = await page.evaluate(() => {
       const getText = (sel) => document.querySelector(sel)?.textContent?.trim() ?? null;
@@ -498,28 +498,22 @@ async function toolFindEmailOnBrokerageSite({ agentName, brokerage }) {
 }
 
 async function toolDraftEmail({ address, dom, agentName }) {
-  const system = `You write short, direct cold outreach emails for Flypost, a tool that captures anonymous buyer feedback at open houses via geofenced QR code. Never be condescending. Assume the agent is smart and knows their job. Do not explain why feedback matters to sellers — they know. Lead with the specific pain. Be a human, not a marketer.`;
+  const firstName = agentName?.split(' ')[0] ?? 'there';
+  const addr = address ?? 'your listing';
+  const days = dom ?? '30+';
 
-  const user = `Write a cold outreach email for a listing agent.
-Address: ${address}
-Days on market: ${dom}
-Subject line: "Why are buyers walking away from ${address}?"
-Body must be 4-5 sentences maximum. Include:
-- The specific address and DOM count in the first sentence
-- One sentence describing Flypost using the phrase "honest reactions they won't share to your face but will leave in a ballot box"
-- "Works next weekend."
-- Sign off as Bronco
-Do not include pricing. No bullet points. No bold. Write like a human from their phone.`;
+  const subject = `Why are buyers walking away from ${addr}?`;
 
-  const response = await anthropic.messages.create({
-    model:      'claude-sonnet-4-20250514',
-    max_tokens: 512,
-    system,
-    messages:   [{ role: 'user', content: user }],
-  });
+  const body = `Hi ${firstName},
 
-  const body    = response.content.find((b) => b.type === 'text')?.text?.trim() ?? '';
-  const subject = `Why are buyers walking away from ${address}?`;
+${addr} has been on for ${days} days. Buyers are walking through and not telling you why they're leaving.
+
+Flypost captures anonymous buyer feedback at open houses — honest reactions they won't share to your face but will leave in a ballot box.
+
+Works next weekend.
+
+Bronco @ Flypost`;
+
   return { subject, body };
 }
 
@@ -684,7 +678,58 @@ async function runAgentLoop(userPrompt) {
 
 // ── MAIN ─────────────────────────────────────────────────────────────────────
 
+async function runDraftsOnly() {
+  console.log('=== Flypost Outreach Agent — Drafts Only ===\n');
+
+  db = initDb();
+
+  const pending = getPendingDrafts();
+  console.log(`Found ${pending.length} listing(s) with email but no draft.\n`);
+
+  if (pending.length === 0) return;
+
+  for (const listing of pending) {
+    const { subject, body } = await toolDraftEmail({
+      address:   listing.address,
+      dom:       listing.dom,
+      agentName: listing.agent_name,
+    });
+
+    console.log(`  Drafting for ${listing.agent_name} — ${listing.address}`);
+
+    const result = await toolSaveGmailDraft({
+      to:         listing.agent_email,
+      subject,
+      body,
+      redfin_url: listing.redfin_url,
+    });
+
+    if (result.success) {
+      console.log(`  ✓ Draft saved`);
+    } else {
+      console.log(`  ✗ Draft failed: ${result.error ?? 'unknown error'}`);
+    }
+  }
+
+  console.log(`\nDone. ${stats.draftsCreated}/${pending.length} drafts created.`);
+
+  if (stats.errors.length > 0) {
+    console.log(`\nErrors (${stats.errors.length}):`);
+    stats.errors.forEach((e) => console.log(`  - ${e}`));
+  }
+}
+
 async function main() {
+  if (process.argv.includes('--reset-drafts')) {
+    db = initDb();
+    const count = resetDrafts();
+    console.log(`Reset draft_created = 0 for ${count} listing(s).`);
+    return;
+  }
+
+  const draftsOnly = process.argv.includes('--drafts-only');
+  if (draftsOnly) return runDraftsOnly();
+
   console.log('=== Flypost Outreach Agent (AI) ===\n');
 
   db = initDb();
