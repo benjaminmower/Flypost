@@ -1,3 +1,7 @@
+[build]
+  command = "npm run build:css"
+  publish = "."
+
 [[redirects]]
   from = "/e/*"
   to = "https://api.goflypost.com/e/:splat"
@@ -5,7 +9,31 @@
   force = true
 
 [[redirects]]
+  from = "/docs"
+  to = "/docs.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/privacy"
+  to = "/privacy.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/tos"
+  to = "/tos.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/product"
+  to = "/product.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
-  to = "https://flypost.webflow.io/:splat"
+  to = "/index.html"
   status = 200
   force = true
