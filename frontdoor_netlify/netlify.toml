@@ -1,7 +1,3 @@
-[build]
-  command = "npm run build:css"
-  publish = "."
-
 [[redirects]]
   from = "/e/*"
   to = "https://api.goflypost.com/e/:splat"
