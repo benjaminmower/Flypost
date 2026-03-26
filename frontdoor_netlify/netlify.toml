@@ -1,3 +1,6 @@
+[build]
+  publish = "frontdoor_netlify"
+
 [[redirects]]
   from = "/e/*"
   to = "https://api.goflypost.com/e/:splat"
