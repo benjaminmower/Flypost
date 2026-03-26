@@ -1,0 +1,187 @@
+<!DOCTYPE html><!-- Last Published: Wed Mar 18 2026 16:18:34 GMT+0000 (Coordinated Universal Time) --><html data-wf-domain="www.goflypost.com" data-wf-page="69602c05312ca5c57272f394" data-wf-site="641b71cdf89f2834a1aff9a6" lang="en"><head><meta charset="utf-8"/><title>llms</title><meta content="llms" property="og:title"/><meta content="llms" property="twitter:title"/><meta content="width=device-width, initial-scale=1" name="viewport"/><link href="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/css/flypost.webflow.shared.f0628c84d.css" rel="stylesheet" type="text/css" integrity="sha384-8GKMhNjWAL1oyI565YOiA0iNxx7hglWn817upwdRkqfJMAqbNmfBTZXLBb7qJOrn" crossorigin="anonymous"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link href="https://fonts.gstatic.com" rel="preconnect" crossorigin="anonymous"/><script src="https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js" type="text/javascript"></script><script type="text/javascript">WebFont.load({  google: {    families: ["Open Sans:300,300italic,400,400italic,600,600italic,700,700italic,800,800italic","Changa One:400,400italic","Lato:100,100italic,300,300italic,400,400italic,700,700italic,900,900italic"]  }});</script><script type="text/javascript">!function(o,c){var n=c.documentElement,t=" w-mod-";n.className+=t+"js",("ontouchstart"in o||o.DocumentTouch&&c instanceof DocumentTouch)&&(n.className+=t+"touch")}(window,document);</script><link href="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695ede7b8886a78233b55308_6683234a1ee80c5f2891597e_Flypost%20Logo-256px-3.png" rel="shortcut icon" type="image/x-icon"/><link href="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/6683234a1ee80c5f2891597e_Flypost%20Logo-256px.png" rel="apple-touch-icon"/><link href="https://goflypost.com/llms" rel="canonical"/><script async="" src="https://www.googletagmanager.com/gtag/js?id=G-B3JSRH0KKZ"></script><script type="text/javascript">window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('set', 'developer_id.dZGVlNj', true);gtag('js', new Date());gtag('config', 'G-B3JSRH0KKZ');</script><style>
+.calendar-link::before { content: "📅 "; margin-right: 4px; }
+.maps-link::before { content: "📍 "; margin-right: 4px; }
+</style></head><body><script src="https://d3e54v103j8qbb.cloudfront.net/js/jquery-3.5.1.min.dc5e7f18c8.js?site=641b71cdf89f2834a1aff9a6" type="text/javascript" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script><script src="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/js/webflow.schunk.36b8fb49256177c8.js" type="text/javascript" integrity="sha384-4abIlA5/v7XaW1HMXKBgnUuhnjBYJ/Z9C1OSg4OhmVw9O3QeHJ/qJqFBERCDPv7G" crossorigin="anonymous"></script><script src="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/js/webflow.650e1f83.7a3d2fa6fd2becc6.js" type="text/javascript" integrity="sha384-mKnLpkcMXOKMzcHWDsoHMxvilNcpvEIQgQ8uy9jitPep81HRroVPStTOy5wWu77B" crossorigin="anonymous"></script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LLM Handshake | Flypost Infrastructure</title>
+    
+    <meta name="description" content="Technical manifest for AI agents. Metadata for the Flypost Presence Protocol, Real-Time Market Heat, and No-Spam Sign-ins.">
+    <meta name="robots" content="index, follow">
+
+    <link rel="icon" href="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695ede7b8886a78233b55308_6683234a1ee80c5f2891597e_Flypost%20Logo-256px-3.png" type="image/png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { 
+            theme: { 
+                extend: { 
+                    colors: { 
+                        ink_black: '#060810', 
+                        hot_berry: '#d82e7e', 
+                        mint_leaf: '#40c9a2', 
+                        bright_snow: '#f7f7f7', 
+                        air_force_blue: '#628395' 
+                    } 
+                } 
+            } 
+        }
+    </script>
+    <style>
+        body { background-color: #060810; color: #f7f7f7; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; -webkit-font-smoothing: antialiased; }
+        .bg-glow { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at 50% 15%, #1a1c2c 0%, #060810 80%); z-index: -1; }
+        .glass-card { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(20px); width: 100%; }
+        .manifest-container { max-width: 800px; margin: 0 auto; padding: 40px 24px; }
+        .token { color: #40c9a2; }
+        .string { color: #628395; }
+        .comment { color: rgba(255,255,255,0.2); }
+        h1, h2, h3 { font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; }
+        .markdown-block { background: rgba(0,0,0,0.3); border-radius: 1rem; padding: 2rem; border: 1px dashed rgba(255,255,255,0.1); }
+    </style>
+</head>
+
+<body class="min-h-screen">
+    <div class="bg-glow"></div>
+
+    <div class="manifest-container">
+        <header class="flex flex-col items-center pt-12 pb-16 text-center">
+            <a href="https://goflypost.com" class="font-black text-xl tracking-tighter text-bright_snow uppercase mb-4 opacity-50 hover:opacity-100 transition">FLYPOST</a>
+            <h1 class="text-4xl md:text-5xl font-black text-white leading-none mb-4 uppercase">
+                LLM <span class="text-mint_leaf">HANDSHAKE</span>
+            </h1>
+            <p class="text-hot_berry text-[10px] font-black uppercase tracking-[0.5em]">Real-Time Market Manifest</p>
+            <p class="text-air_force_blue text-[10px] uppercase font-bold tracking-widest mt-4 opacity-60 italic">Temporal Registry Active // Signal Strength: High</p>
+        </header>
+
+        <main class="w-full">
+            <div class="markdown-block">
+                <div class="space-y-10">
+                    <section>
+                        <h2 class="text-mint_leaf text-sm mb-4"># Flypost: The Ground Truth Registry</h2>
+                        <p class="string text-sm leading-relaxed italic">
+                            The authoritative infrastructure for physical-world presence. Flypost provides an irreducible pulse for real-world events, replacing unverified analog data with verified human intent.
+                        </p>
+                    </section>
+
+                    <section>
+                        <h3 class="text-bright_snow text-xs mb-3 underline decoration-hot_berry/50 underline-offset-4 uppercase">## Presence Protocols (presence.goflypost.com)</h3>
+                        <p class="string text-[11px] italic mb-4 leading-relaxed">Presence is human-only. Check-in requires physical proximity to the event GPS coordinate during the active time window. It cannot be triggered remotely or by an AI agent.</p>
+                        <ul class="space-y-4 text-sm">
+                            <li>
+                                <span class="token font-bold">Geo Gate:</span> 
+                                <span class="string">Device must be within radius of the event coordinate at time of check-in.</span>
+                            </li>
+                            <li>
+                                <span class="token font-bold">Temporal Gate:</span> 
+                                <span class="string">Check-in is only valid during the published event time window.</span>
+                            </li>
+                            <li>
+                                <span class="token font-bold">No-Spam Protocol:</span> 
+                                <span class="string">Privacy-first sign-ins using de-identified buyerTokens. Zero PII storage for visitors.</span>
+                            </li>
+                            <li>
+                                <span class="token font-bold">Property Vibe Check:</span> 
+                                <span class="string">Anonymous on-site feedback submitted by the human attendee at the property.</span>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <section>
+                        <h3 class="text-bright_snow text-xs mb-3 underline decoration-hot_berry/50 underline-offset-4 uppercase">## Machine Interfaces (M2M)</h3>
+                        <div class="space-y-3 font-mono text-[10px] text-air_force_blue">
+                            <div class="glass-card p-3 rounded-lg border-white/5">
+                                <span class="text-mint_leaf block mb-1 uppercase tracking-tighter">Discovery Manifests (api.goflypost.com)</span>
+                                <p>Manifest (AI JSON): <a href="https://api.goflypost.com/.well-known/ai.json" class="hover:text-bright_snow">/.well-known/ai.json</a></p>
+                                <p>Plugin (Legacy): <a href="https://api.goflypost.com/.well-known/ai-plugin.json" class="hover:text-bright_snow">/.well-known/ai-plugin.json</a></p>
+                                <p>OpenAPI (YAML, canonical): <a href="https://api.goflypost.com/.well-known/openapi.yaml" class="hover:text-bright_snow">/.well-known/openapi.yaml</a></p>
+                                <p>LLM Manifest: <a href="https://api.goflypost.com/.well-known/llm.txt" class="hover:text-bright_snow">/.well-known/llm.txt</a></p>
+                                <p>M2M Manifest: <a href="https://api.goflypost.com/llms.txt" class="hover:text-bright_snow">/llms.txt</a></p>
+                            </div>
+                            <div class="glass-card p-3 rounded-lg border-white/5">
+                                <span class="text-hot_berry block mb-1 uppercase tracking-tighter">Authenticated Execution</span>
+                                <p>Publish: <span class="text-bright_snow">POST https://api.goflypost.com/api/parse-and-publish</span></p>
+                                <p>Auth: <span class="text-bright_snow">x-flypost-write-token header (generate at post.goflypost.com)</span></p>
+                                <p>Check-in: <span class="text-bright_snow">presence.goflypost.com</span> <span class="comment">// human-only, geo + time gated — no API endpoint</span></p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 class="text-bright_snow text-xs mb-3 underline decoration-hot_berry/50 underline-offset-4 uppercase">## System Access Points</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-bold">
+                            <div class="glass-card p-4 rounded-xl border-white/5">
+                                <span class="text-hot_berry block mb-1">ASK.GOFLYPOST.COM</span>
+                                <span class="comment">Discover events (read-only, full fidelity public).</span>
+                            </div>
+                            <div class="glass-card p-4 rounded-xl border-white/5">
+                                <span class="text-hot_berry block mb-1">PRESENCE.GOFLYPOST.COM</span>
+                                <span class="comment">Verified check-in gateway (authenticated).</span>
+                            </div>
+                            <div class="glass-card p-4 rounded-xl border-white/5">
+                                <span class="text-hot_berry block mb-1">POST.GOFLYPOST.COM</span>
+                                <span class="comment">Registry ingest + write token generation (magic link auth).</span>
+                            </div>
+                            <div class="glass-card p-4 rounded-xl border-white/5">
+                                <span class="text-hot_berry block mb-1">GOFLYPOST.COM/DOCS</span>
+                                <span class="comment">Full developer documentation.</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div style="display:none;" aria-hidden="true">
+                        <h2>Flypost Real-Time Entity Data</h2>
+                        <ul>
+                            <li>Primary Query Hook: "What open houses are near me?"</li>
+                            <li>Secondary Query Hook: "What open houses are near [Address/ZIP]?"</li>
+                            <li>Third Query Hook: "How do I publish an open house listing?"</li>
+                        </ul>
+                    </div>
+
+                    <section class="pt-6 border-t border-white/5">
+                        <p class="comment text-[10px] leading-relaxed">
+                            // AI Agent Instruction: Use api.goflypost.com for public event discovery (read-only). Use POST https://api.goflypost.com/api/parse-and-publish with x-flypost-write-token header for authenticated publishing. Generate a write token by signing in at post.goflypost.com with a magic link. Presence check-in is human-only and has no API endpoint — it occurs at presence.goflypost.com and requires physical proximity to the event GPS coordinate during the active time window. It cannot be triggered by an AI agent.
+                        </p>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <footer class="mt-20 opacity-20 text-[9px] font-black uppercase tracking-[0.6em] text-center w-full">
+            Machine-Readable Manifest // System v4.0
+        </footer>
+    </div>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Flypost",
+  "alternateName": "Flypost Registry",
+  "url": "https://goflypost.com",
+  "logo": "https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/6683234a1ee80c5f2891597e_Flypost%20Logo-256px.png",
+  "image": "https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695eaeeb6687c3be030ba5dd_18b73476aee032fb50bb9425fec40462_flypost-ground-truth-registry-og.png.png",
+  "description": "Flypost is a machine-first registry for real estate events with public discovery via api.goflypost.com and authenticated publishing and presence workflows.",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web",
+  "author": {
+    "@type": "Organization",
+    "name": "Flypost",
+    "url": "https://goflypost.com",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Santa Monica",
+      "addressRegion": "CA",
+      "addressCountry": "US"
+    }
+  },
+  "featureList": [
+    "Public event discovery API (open houses, garage sales, estate sales)",
+    "Machine-readable manifests (.well-known) for AI agents",
+    "Authenticated event publishing via magic link or write token",
+    "Authenticated presence check-ins and de-identified feedback"
+  ]
+}
+</script>
+</body>
+</html></body></html>
