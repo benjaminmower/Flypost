@@ -12,7 +12,22 @@
   <link rel="icon" href="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695ede7b8886a78233b55308_6683234a1ee80c5f2891597e_Flypost%20Logo-256px-3.png" type="image/png" />
   <link rel="apple-touch-icon" href="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695ede7b8886a78233b55308_6683234a1ee80c5f2891597e_Flypost%20Logo-256px-3.png" />
 
-  <link rel="stylesheet" href="/flypost.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink_black: '#060810',
+            hot_berry: '#d82e7e',
+            mint_leaf: '#40c9a2',
+            bright_snow: '#f7f7f7',
+            air_force_blue: '#628395'
+          }
+        }
+      }
+    }
+  </script>
   <style>
     body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; margin: 0; padding: 0; }
     .bg-glow { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at 50% 15%, #1a1c2c 0%, #060810 80%); z-index: -1; }

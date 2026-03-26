@@ -4,12 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Flypost | The Event Registry</title>
-
+    
     <meta name="description" content="The immutable system of record for real-world presence. Deploy Flypost at your event to capture the truth of presence.">
     <meta property="og:title" content="Flypost | Ground Truth Registry">
     <meta property="og:image" content="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695eaeeb6687c3be030ba5dd_3bade265ff941b27916be3edc7ae7ea0_flypost-ground-truth-registry-og.png">
-
-    <link rel="stylesheet" href="/flypost.css">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { 
+            theme: { 
+                extend: { 
+                    colors: { 
+                        ink_black: '#060810', 
+                        hot_berry: '#d82e7e', 
+                        mint_leaf: '#40c9a2', 
+                        bright_snow: '#f7f7f7', 
+                        lemon_lime: '#e0e03e', 
+                        air_force_blue: '#628395' 
+                    } 
+                } 
+            } 
+        }
+    </script>
     <style>
         body { background-color: #060810; color: #f7f7f7; font-family: ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
         .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 15%, #1a1c2c 0%, #060810 80%); z-index: -1; }
@@ -17,26 +33,6 @@
         .glass-card:hover { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.2); transform: translateY(-4px); }
         .text-hero { font-size: clamp(2.8rem, 10vw, 8rem); letter-spacing: -0.05em; line-height: 0.85; }
         .center-lock { display: flex; flex-direction: column; align-items: center; width: 100%; }
-        .registry-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 1.5rem;
-          width: 100%;
-          text-align: left;
-        }
-        .two-col-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 3rem;
-          text-align: left;
-          max-width: 64rem;
-          width: 100%;
-          padding: 0 1rem;
-        }
-        @media (min-width: 768px) {
-          .registry-grid { grid-template-columns: repeat(3, 1fr); }
-          .two-col-grid { grid-template-columns: repeat(2, 1fr); }
-        }
     </style>
 </head>
 
@@ -44,11 +40,11 @@
     <div class="bg-glow"></div>
 
     <div class="center-lock px-6">
-
+        
         <header class="flex flex-col items-center pt-16 md:pt-24 pb-12 w-full max-w-5xl text-center">
             <div class="font-black text-3xl md:text-4xl tracking-tighter text-bright_snow uppercase mb-4">FLYPOST</div>
             <div class="w-full max-w-[120px] md:max-w-[320px] border-t border-white/10 mb-10"></div>
-
+            
             <h1 class="text-hero font-black text-white uppercase mb-8">
                 GROUND <br><span class="opacity-40">TRUTH.</span>
             </h1>
@@ -59,11 +55,11 @@
         </header>
 
         <main class="max-w-6xl w-full space-y-32 pb-32 flex flex-col items-center">
-
+            
             <div class="w-full flex flex-col items-center">
                 <h2 class="text-[10px] font-black uppercase tracking-[0.5em] text-air_force_blue-900 mb-12">Registry Ecosystem</h2>
-
-                <div class="registry-grid">
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full text-left">
                     <a href="https://post.goflypost.com" target="_blank" rel="noopener noreferrer" class="glass-card p-10 rounded-[3rem] relative overflow-hidden group">
                         <div class="text-[9px] font-black text-hot_berry tracking-[0.3em] mb-12 uppercase">01 / Ingest</div>
                         <h3 class="text-white text-4xl font-black uppercase tracking-tighter mb-2 group-hover:text-hot_berry transition-colors">POST</h3>
@@ -92,7 +88,7 @@
                     <h3 class="text-4xl md:text-5xl font-black tracking-tight leading-none uppercase">Built for <br><span class="opacity-50 italic">Inevitability.</span></h3>
                 </div>
 
-                <div class="two-col-grid">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12 text-left max-w-5xl w-full px-4">
                     <div class="space-y-4">
                         <h4 class="text-mint_leaf font-black uppercase text-[10px] tracking-widest">Phase 1 Architecture</h4>
                         <p class="text-air_force_blue-700 text-sm leading-relaxed">Weekly audits for Santa Monica open houses. High-fidelity intent data for sellers, verified and irreplaceable proof for agents.</p>
