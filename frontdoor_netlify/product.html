@@ -1,272 +1,142 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-<title>Flypost | Verified Presence for Open Houses</title>
-<meta name="title" content="Flypost | Verified Presence &amp; Anonymous Buyer Feedback" />
-<meta name="description" content="Flypost gives agents GPS-verified attendance counts and honest anonymous buyer feedback from every open house. No app required. Works this weekend." />
-<meta name="robots" content="index, follow" />
-
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://goflypost.com/product" />
-<meta property="og:title" content="Flypost | Verified Presence for Open Houses" />
-<meta property="og:description" content="GPS-verified attendance and anonymous buyer feedback for every open house. The data that currently doesn't exist anywhere else." />
-<meta property="og:image" content="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695eaeeb6687c3be030ba5dd_18b73476aee032fb50bb9425fec40462_flypost-ground-truth-registry-og.png.png" />
-<meta property="og:site_name" content="Flypost" />
-
-<meta property="twitter:card" content="summary_large_image" />
-<meta property="twitter:url" content="https://goflypost.com/product" />
-<meta property="twitter:title" content="Flypost | Verified Presence for Open Houses" />
-<meta property="twitter:description" content="GPS-verified attendance and anonymous buyer feedback for every open house. The data that currently doesn't exist anywhere else." />
-<meta property="twitter:image" content="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695eaeeb6687c3be030ba5dd_18b73476aee032fb50bb9425fec40462_flypost-ground-truth-registry-og.png.png" />
-
-<link rel="icon" href="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695ede7b8886a78233b55308_6683234a1ee80c5f2891597e_Flypost%20Logo-256px-3.png" type="image/png" />
-<link rel="canonical" href="https://goflypost.com/product" />
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "Flypost",
-  "alternateName": "Flypost Presence Verification",
-  "url": "https://goflypost.com",
-  "logo": "https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/6683234a1ee80c5f2891597e_Flypost%20Logo-256px.png",
-  "applicationCategory": "BusinessApplication",
-  "operatingSystem": "Web",
-  "description": "Flypost provides GPS-verified presence confirmation and anonymous buyer feedback for real estate open houses. Agents get verified attendance counts and honest buyer reactions — no app required for buyers.",
-  "author": {
-    "@type": "Organization",
-    "name": "Flypost, Inc.",
-    "url": "https://goflypost.com",
-    "email": "support@goflypost.com",
-    "address": {
-      "@type": "PostalAddress",
-      "addressLocality": "Santa Monica",
-      "addressRegion": "CA",
-      "addressCountry": "US"
-    }
-  },
-  "offers": {
-    "@type": "Offer",
-    "description": "Per open house event pricing. Contact for brokerage licensing.",
-    "url": "https://post.goflypost.com"
-  },
-  "featureList": [
-    "GPS-verified buyer presence confirmation",
-    "Anonymous buyer feedback collection",
-    "Real-time agent dashboard",
-    "Seller-ready post-event reports",
-    "No buyer app or account required",
-    "QR code check-in flow"
-  ],
-  "softwareHelp": {
-    "@type": "WebPage",
-    "url": "https://goflypost.com/docs",
-    "name": "Flypost Documentation"
-  },
-  "potentialAction": {
-    "@type": "Action",
-    "name": "Publish an Open House",
-    "target": "https://post.goflypost.com"
-  }
-}
-</script>
-
-<link rel="stylesheet" href="/flypost.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Flypost | The Event Registry</title>
+    
+    <meta name="description" content="The immutable system of record for real-world presence. Deploy Flypost at your event to capture the truth of presence.">
+    <meta property="og:title" content="Flypost | Ground Truth Registry">
+    <meta property="og:image" content="https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/695eaeeb6687c3be030ba5dd_3bade265ff941b27916be3edc7ae7ea0_flypost-ground-truth-registry-og.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink_black: '#060810',
+                        hot_berry: '#d82e7e',
+                        mint_leaf: '#40c9a2',
+                        bright_snow: '#f7f7f7',
+                        lemon_lime: '#e0e03e',
+                        air_force_blue: '#628395'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* White Mode Overrides */
+        body { background-color: #f7f7f7; color: #060810; font-family: ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+        .bg-glow { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 10%, #ffffff 0%, #f7f7f7 70%); z-index: -1; }
+        .glass-card { background: rgba(255, 255, 255, 0.6); border: 1px solid rgba(0, 0, 0, 0.08); backdrop-filter: blur(20px); transition: all 0.3s ease; box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.04); }
+        .glass-card:hover { background: rgba(255, 255, 255, 0.9); border-color: rgba(0, 0, 0, 0.15); transform: translateY(-4px); box-shadow: 0 12px 40px -5px rgba(0, 0, 0, 0.08); }
+        .text-hero { font-size: clamp(2.8rem, 10vw, 8rem); letter-spacing: -0.05em; line-height: 0.85; }
+        .center-lock { display: flex; flex-direction: column; align-items: center; width: 100%; }
+    </style>
 </head>
-<body class="p-6 md:p-12 max-w-5xl mx-auto space-y-20 relative bg-white text-ink_black font-mono antialiased">
 
-<!-- HEADER -->
-<header class="border-b border-black/10 pb-12">
-  <a href="https://goflypost.com" class="text-xs font-black tracking-[0.4em] text-hot_berry uppercase mb-4 block">Flypost Protocol</a>
-  <h1 class="text-5xl font-black tracking-tighter italic uppercase text-ink_black leading-none">For Agents &amp; Brokerages</h1>
-  <p class="text-air_force_blue mt-6 max-w-2xl text-lg leading-relaxed font-normal">
-    Verified attendance. Anonymous buyer feedback. The data that currently doesn't exist anywhere else.
-  </p>
-</header>
+<body class="min-h-screen flex flex-col items-center bg-bright_snow text-ink_black antialiased overflow-x-hidden selection:bg-hot_berry/10">
+    <div class="bg-glow"></div>
 
-<!-- THE GAP -->
-<section class="space-y-6">
-  <h2 class="text-mint_leaf text-sm tracking-widest font-black uppercase">01 / The Gap</h2>
-  <div class="bg-ink_black p-10 rounded-3xl relative overflow-hidden">
-    <div class="absolute top-0 left-6 text-[220px] font-black text-white/[0.04] leading-none select-none">"</div>
-    <p class="text-hot_berry text-[10px] font-black uppercase tracking-widest mb-6">What sellers actually want to know</p>
-    <blockquote class="text-2xl md:text-3xl font-black italic text-white leading-snug max-w-2xl relative z-10">
-      Buyers perform for agents during open houses. They tell the truth when the agent isn't in the room.
-    </blockquote>
-    <p class="text-white/40 text-sm mt-6 font-normal">
-      Every competitor — Curb Hero, Spacio, Open Home Pro — captures leads. Name, email, phone.<br/>
-      Flypost captures what happens after you leave.
-    </p>
-  </div>
-</section>
+    <div class="center-lock px-6">
+        
+        <header class="flex flex-col items-center pt-16 md:pt-24 pb-12 w-full max-w-5xl text-center">
+            <div class="font-black text-3xl md:text-4xl tracking-tighter text-ink_black uppercase mb-4">FLYPOST</div>
+            <div class="w-full max-w-[120px] md:max-w-[320px] border-t border-black/10 mb-10"></div>
+            
+            <h1 class="text-hero font-black text-ink_black uppercase mb-8">
+                GROUND <br><span class="opacity-20 italic">TRUTH.</span>
+            </h1>
+            <p class="text-air_force_blue text-lg md:text-2xl max-w-2xl font-medium tracking-tight leading-relaxed">
+                Flypost records what actually happened. <br class="hidden md:block">
+                The system of record for real-world presence.
+            </p>
+        </header>
 
-<!-- HOW IT WORKS -->
-<section class="space-y-6">
-  <h2 class="text-mint_leaf text-sm tracking-widest font-black uppercase">02 / How It Works</h2>
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div class="bg-gray-50 border border-gray-200 p-8 rounded-3xl">
-      <div class="text-5xl font-black text-black/10 leading-none mb-6">01</div>
-      <h3 class="text-hot_berry text-lg mb-3 font-black uppercase tracking-widest">Place the QR</h3>
-      <p class="text-[12px] text-air_force_blue leading-relaxed font-normal">A printed QR stand sits next to the sign-in sheet. No app. No setup at the door. Permanent URL — never needs reprinting.</p>
-    </div>
-    <div class="bg-gray-50 border border-gray-200 p-8 rounded-3xl">
-      <div class="text-5xl font-black text-black/10 leading-none mb-6">02</div>
-      <h3 class="text-hot_berry text-lg mb-3 font-black uppercase tracking-widest">Buyers Check In</h3>
-      <p class="text-[12px] text-air_force_blue leading-relaxed font-normal">GPS-verified presence confirms they're physically inside the property. Anonymous by design — no name, no email, no account required.</p>
-    </div>
-    <div class="bg-gray-50 border border-gray-200 p-8 rounded-3xl">
-      <div class="text-5xl font-black text-black/10 leading-none mb-6">03</div>
-      <h3 class="text-hot_berry text-lg mb-3 font-black uppercase tracking-widest">You Get the Truth</h3>
-      <p class="text-[12px] text-air_force_blue leading-relaxed font-normal">Verified attendance count, would-buy sentiment, and honest open-text feedback. Delivered to the agent. Share with your seller the same day.</p>
-    </div>
-  </div>
-</section>
+        <main class="max-w-6xl w-full space-y-32 pb-32 flex flex-col items-center">
+            
+            <div class="w-full flex flex-col items-center">
+                <h2 class="text-[10px] font-black uppercase tracking-[0.5em] text-air_force_blue/60 mb-12">Registry Ecosystem</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full text-left">
+                    <a href="https://post.goflypost.com" target="_blank" rel="noopener noreferrer" class="glass-card p-10 rounded-[3rem] relative overflow-hidden group">
+                        <div class="text-[9px] font-black text-hot_berry tracking-[0.3em] mb-12 uppercase">01 / Ingest</div>
+                        <h3 class="text-ink_black text-4xl font-black uppercase tracking-tighter mb-2 group-hover:text-hot_berry transition-colors">POST</h3>
+                        <p class="text-air_force_blue text-sm leading-relaxed mb-6 opacity-80">Mint the event. Agents publish natural-language updates into structured, immutable records.</p>
+                        <span class="text-[10px] font-bold text-hot_berry uppercase tracking-widest">Access Registry →</span>
+                    </a>
 
-<!-- WHAT AGENTS GET -->
-<section class="space-y-6">
-  <h2 class="text-mint_leaf text-sm tracking-widest font-black uppercase">03 / What Agents Get</h2>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div class="bg-white border border-gray-200 p-8 rounded-3xl">
-      <div class="text-2xl mb-4">📍</div>
-      <h3 class="text-ink_black text-sm mb-2 font-black uppercase tracking-widest">Verified Attendance</h3>
-      <p class="text-[12px] text-air_force_blue leading-relaxed font-normal">Not a sign-in sheet anyone can skip. GPS-confirmed presence means every count is real.</p>
-    </div>
-    <div class="bg-white border border-gray-200 p-8 rounded-3xl">
-      <div class="text-2xl mb-4">💬</div>
-      <h3 class="text-ink_black text-sm mb-2 font-black uppercase tracking-widest">Anonymous Buyer Feedback</h3>
-      <p class="text-[12px] text-air_force_blue leading-relaxed font-normal">What buyers actually thought about the layout, price, and condition. Honest reactions they won't say to your face.</p>
-    </div>
-    <div class="bg-white border border-gray-200 p-8 rounded-3xl">
-      <div class="text-2xl mb-4">📊</div>
-      <h3 class="text-ink_black text-sm mb-2 font-black uppercase tracking-widest">Seller-Ready Reports</h3>
-      <p class="text-[12px] text-air_force_blue leading-relaxed font-normal">A clean report after every open house. Show your seller exactly who came, when, and what they thought. Not Zillow views. Verified presence.</p>
-    </div>
-    <div class="bg-white border border-gray-200 p-8 rounded-3xl">
-      <div class="text-2xl mb-4">⚡</div>
-      <h3 class="text-ink_black text-sm mb-2 font-black uppercase tracking-widest">Live Dashboard</h3>
-      <p class="text-[12px] text-air_force_blue leading-relaxed font-normal">Watch check-ins and feedback update in real time during the event. No curl required. No you needing to be present.</p>
-    </div>
-  </div>
-</section>
+                    <a href="https://ask.goflypost.com" target="_blank" rel="noopener noreferrer" class="glass-card p-10 rounded-[3rem] relative overflow-hidden group">
+                        <div class="text-[9px] font-black text-mint_leaf tracking-[0.3em] mb-12 uppercase">02 / Query</div>
+                        <h3 class="text-ink_black text-4xl font-black uppercase tracking-tighter mb-2 group-hover:text-mint_leaf transition-colors">ASK</h3>
+                        <p class="text-air_force_blue text-sm leading-relaxed mb-6 opacity-80">Interrogate the data. A conversational engine to query the global event registry in real-time.</p>
+                        <span class="text-[10px] font-bold text-mint_leaf uppercase tracking-widest">Query Engine →</span>
+                    </a>
 
-<!-- STATS -->
-<section>
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div class="bg-gray-50 border border-gray-200 p-8 rounded-3xl text-center">
-      <div class="text-5xl font-black text-mint_leaf mb-2">0</div>
-      <div class="text-[10px] text-air_force_blue uppercase tracking-widest font-normal">Apps for buyers to download</div>
-    </div>
-    <div class="bg-gray-50 border border-gray-200 p-8 rounded-3xl text-center">
-      <div class="text-5xl font-black text-mint_leaf mb-2">50m</div>
-      <div class="text-[10px] text-air_force_blue uppercase tracking-widest font-normal">GPS radius confirms physical presence</div>
-    </div>
-    <div class="bg-gray-50 border border-gray-200 p-8 rounded-3xl text-center">
-      <div class="text-5xl font-black text-mint_leaf mb-2">45%</div>
-      <div class="text-[10px] text-air_force_blue uppercase tracking-widest font-normal">Feedback conversion, first live event</div>
-    </div>
-  </div>
-</section>
+                    <a href="https://presence.goflypost.com" target="_blank" rel="noopener noreferrer" class="glass-card p-10 rounded-[3rem] relative overflow-hidden group">
+                        <div class="text-[9px] font-black text-lemon_lime tracking-[0.3em] mb-12 uppercase">03 / Verify</div>
+                        <h3 class="text-ink_black text-4xl font-black uppercase tracking-tighter mb-2 group-hover:text-lemon_lime transition-colors">PRESENCE</h3>
+                        <p class="text-air_force_blue text-sm leading-relaxed mb-6 opacity-80">The Proof Protocol. Deploy Flypost at your event to capture the truth of presence.</p>
+                        <span class="text-[10px] font-bold text-lemon_lime uppercase tracking-widest">Capture Truth →</span>
+                    </a>
+                </div>
+            </div>
 
-<!-- COMPARISON -->
-<section class="space-y-6">
-  <h2 class="text-mint_leaf text-sm tracking-widest font-black uppercase">04 / How Flypost Compares</h2>
-  <div class="bg-gray-50 border border-gray-200 rounded-3xl overflow-hidden">
-    <table class="w-full text-[12px]">
-      <thead>
-        <tr class="border-b border-black/10">
-          <th class="text-left p-5 text-[10px] uppercase tracking-widest text-air_force_blue font-black">Capability</th>
-          <th class="text-left p-5 text-[10px] uppercase tracking-widest text-air_force_blue font-black">Sign-in Sheet</th>
-          <th class="text-left p-5 text-[10px] uppercase tracking-widest text-air_force_blue font-black">Curb Hero / Spacio</th>
-          <th class="text-left p-5 text-[10px] uppercase tracking-widest text-mint_leaf font-black">Flypost</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr class="border-b border-black/5">
-          <td class="p-5 text-ink_black font-normal">Verified physical presence</td>
-          <td class="p-5 text-gray-300">—</td><td class="p-5 text-gray-300">—</td><td class="p-5 text-mint_leaf font-black">✓</td>
-        </tr>
-        <tr class="border-b border-black/5">
-          <td class="p-5 text-ink_black font-normal">Anonymous buyer feedback</td>
-          <td class="p-5 text-gray-300">—</td><td class="p-5 text-gray-300">—</td><td class="p-5 text-mint_leaf font-black">✓</td>
-        </tr>
-        <tr class="border-b border-black/5">
-          <td class="p-5 text-ink_black font-normal">No buyer app required</td>
-          <td class="p-5 text-mint_leaf font-black">✓</td><td class="p-5 text-gray-300">—</td><td class="p-5 text-mint_leaf font-black">✓</td>
-        </tr>
-        <tr class="border-b border-black/5">
-          <td class="p-5 text-ink_black font-normal">Live dashboard during event</td>
-          <td class="p-5 text-gray-300">—</td><td class="p-5 text-gray-300">—</td><td class="p-5 text-mint_leaf font-black">✓</td>
-        </tr>
-        <tr class="border-b border-black/5">
-          <td class="p-5 text-ink_black font-normal">Lead capture (name / email)</td>
-          <td class="p-5 text-mint_leaf font-black">✓</td><td class="p-5 text-mint_leaf font-black">✓</td><td class="p-5 text-gray-300">—</td>
-        </tr>
-        <tr>
-          <td class="p-5 text-ink_black font-normal">Seller-ready report</td>
-          <td class="p-5 text-gray-300">—</td><td class="p-5 text-mint_leaf font-black">✓</td><td class="p-5 text-mint_leaf font-black">✓</td>
-        </tr>
-      </tbody>
-    </table>
-    <p class="text-[10px] text-black/30 p-5 italic font-normal">Flypost does not replace the sign-in sheet. Two tools, two jobs, side by side.</p>
-  </div>
-</section>
+            <section class="w-full space-y-16 text-center flex flex-col items-center">
+                <div class="max-w-3xl">
+                    <h3 class="text-4xl md:text-5xl font-black tracking-tight leading-none uppercase text-ink_black">Built for <br><span class="text-air_force_blue opacity-40 italic">Inevitability.</span></h3>
+                </div>
 
-<!-- DEPLOY -->
-<section class="space-y-6">
-  <h2 class="text-mint_leaf text-sm tracking-widest font-black uppercase">05 / Deployed in One Open House</h2>
-  <div class="bg-gray-50 border border-gray-200 p-10 rounded-3xl space-y-8">
-    <div class="flex gap-6 items-start">
-      <div class="w-8 h-8 bg-hot_berry flex items-center justify-center text-[11px] font-black flex-shrink-0 rounded text-white">1</div>
-      <div>
-        <p class="text-ink_black text-sm font-black uppercase tracking-wide mb-1">Publish the event</p>
-        <p class="text-[12px] text-air_force_blue font-normal leading-relaxed">Agent types the open house in natural language at <code class="bg-gray-100 text-ink_black px-1 rounded text-xs">post.goflypost.com</code>. Takes 30 seconds. Magic link auth — no password.</p>
-      </div>
-    </div>
-    <div class="flex gap-6 items-start">
-      <div class="w-8 h-8 bg-hot_berry flex items-center justify-center text-[11px] font-black flex-shrink-0 rounded text-white">2</div>
-      <div>
-        <p class="text-ink_black text-sm font-black uppercase tracking-wide mb-1">Place the QR stand</p>
-        <p class="text-[12px] text-air_force_blue font-normal leading-relaxed">Printed QR stand sits next to the sign-in sheet. Permanent URL — never needs reprinting regardless of how many events are posted.</p>
-      </div>
-    </div>
-    <div class="flex gap-6 items-start">
-      <div class="w-8 h-8 bg-hot_berry flex items-center justify-center text-[11px] font-black flex-shrink-0 rounded text-white">3</div>
-      <div>
-        <p class="text-ink_black text-sm font-black uppercase tracking-wide mb-1">Watch it live</p>
-        <p class="text-[12px] text-air_force_blue font-normal leading-relaxed">Agent dashboard shows attendance and feedback updating in real time during the event.</p>
-      </div>
-    </div>
-    <div class="flex gap-6 items-start">
-      <div class="w-8 h-8 bg-hot_berry flex items-center justify-center text-[11px] font-black flex-shrink-0 rounded text-white">4</div>
-      <div>
-        <p class="text-ink_black text-sm font-black uppercase tracking-wide mb-1">Send the report</p>
-        <p class="text-[12px] text-air_force_blue font-normal leading-relaxed">Clean verified attendance report with anonymous buyer feedback. Share with your seller the same day.</p>
-      </div>
-    </div>
-  </div>
-</section>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12 text-left max-w-5xl w-full px-4">
+                    <div class="space-y-4">
+                        <h4 class="text-mint_leaf font-black uppercase text-[10px] tracking-widest">Phase 1 Architecture</h4>
+                        <p class="text-air_force_blue text-sm leading-relaxed">Weekly audits for Santa Monica open houses. High-fidelity intent data for sellers, verified and irreplaceable proof for agents.</p>
+                    </div>
+                    <div class="space-y-4">
+                        <h4 class="text-hot_berry font-black uppercase text-[10px] tracking-widest">Foundational Signal</h4>
+                        <p class="text-air_force_blue text-sm leading-relaxed">In an era of synthetic data, Presence is the only irreducible signal. We record what actually happened.</p>
+                    </div>
+                </div>
+            </section>
 
-<!-- CTA -->
-<footer class="pt-12 pb-12 border-t border-black/10">
-  <div class="flex flex-col md:flex-row justify-between items-start gap-8">
-    <div>
-      <p class="text-hot_berry text-[10px] font-black uppercase tracking-widest mb-3">Ready to deploy</p>
-      <h2 class="text-3xl font-black italic uppercase tracking-widest text-ink_black leading-tight">Start this weekend.</h2>
-      <p class="text-air_force_blue text-sm mt-3 font-normal">No contract. No setup fee. Works at the next open house.</p>
-    </div>
-    <div class="flex flex-col gap-3 items-end">
-      <a href="https://post.goflypost.com" class="inline-block bg-ink_black text-white text-[11px] font-black uppercase tracking-widest px-8 py-4 rounded-full hover:opacity-80 transition-opacity">
-        Get Started → post.goflypost.com
-      </a>
-      <a href="https://goflypost.com/docs" class="text-[10px] text-air_force_blue hover:text-mint_leaf transition-colors uppercase tracking-widest font-normal">Developer docs →</a>
-      <a href="mailto:support@goflypost.com" class="text-[10px] text-air_force_blue hover:text-mint_leaf transition-colors uppercase tracking-widest font-normal">Brokerage inquiries: support@goflypost.com</a>
-    </div>
-  </div>
-  <p class="text-[10px] font-black tracking-[0.5em] uppercase mt-16 text-black/20">© 2026 Flypost, Inc. // Santa Monica, CA</p>
-</footer>
+            <section class="max-w-4xl w-full py-16">
+                <h2 class="text-[10px] font-black uppercase tracking-[0.5em] text-air_force_blue/60 mb-16 text-center">Protocol FAQ</h2>
+                <div class="space-y-6">
+                    <div class="glass-card p-8 rounded-3xl">
+                        <h4 class="text-ink_black font-bold mb-3 uppercase text-[10px] tracking-widest">How do I "capture" truth at my event?</h4>
+                        <p class="text-air_force_blue text-sm leading-relaxed">You Deploy Flypost. By minting your open house into the Registry, you create a geofenced capture window. Visitors check in to convert physical proximity into an immutable data point.</p>
+                    </div>
+                    <div class="glass-card p-8 rounded-3xl">
+                        <h4 class="text-ink_black font-bold mb-3 uppercase text-[10px] tracking-widest">What happens if an event has zero check-ins?</h4>
+                        <p class="text-air_force_blue text-sm leading-relaxed">The Registry records a "Zero-Signal Event." In a post-truth market, a verified record of zero attendance is a powerful tool for price adjustments—it is ground truth, not guesswork.</p>
+                    </div>
+                </div>
+            </section>
 
+            <div class="pt-12">
+                <a href="mailto:hello@goflypost.com" class="bg-ink_black text-bright_snow px-12 py-5 rounded-full font-black text-xl hover:bg-hot_berry transition-all transform hover:scale-105 shadow-2xl inline-block uppercase">Request Integration</a>
+            </div>
+        </main>
+
+        <footer class="w-full max-w-4xl py-24 border-t border-black/5 flex flex-col items-center text-center gap-8 opacity-60">
+            <div class="text-air_force_blue text-[9px] font-black uppercase tracking-[0.6em]">
+                Flypost Event Infrastructure // 2026
+            </div>
+
+            <div class="flex flex-wrap justify-center gap-x-10 gap-y-4 text-ink_black text-[9px] font-black uppercase tracking-[0.2em]">
+                <a href="/privacy" class="hover:text-mint_leaf transition-colors duration-300">Privacy Protocol</a>
+                <a href="/llms" class="hover:text-mint_leaf transition-colors duration-300">LLMs</a>
+                <a href="/docs" class="hover:text-mint_leaf transition-colors duration-300">Documentation</a>
+                <a href="/tos" class="hover:text-mint_leaf transition-colors duration-300">Terms of Service</a>
+                <a href="mailto:hello@goflypost.com" class="hover:text-mint_leaf transition-colors duration-300">Contact</a>
+            </div>
+
+            <div class="text-[8px] text-air_force_blue/40 uppercase tracking-[0.4em]">
+                © 2026 Flypost // Santa Monica, California
+            </div>
+        </footer>
+    </div>
 </body>
 </html>
