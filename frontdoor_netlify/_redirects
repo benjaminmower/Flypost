@@ -1,12 +1,12 @@
 /robots.txt  /robots.txt  200
 /sitemap.xml /sitemap.xml 200
 
-/e/*       https://api.goflypost.com/e/:splat    200!
-/docs      /docs.html                             200!
-/privacy   /privacy.html                          200!
-/tos       /tos.html                              200!
-/product   /product.html                          200!
-/llms	   /llms.html				  200!
-/*         /index.html                            200!
+/e/* https://api.goflypost.com/e/:splat    200!
+/docs      /docs.html       200
+/privacy   /privacy.html    200
+/tos       /tos.html        200
+/product   /product.html    200
+/llms      /llms.html       200
 
-https://www.goflypost.com/*  https://goflypost.com/:splat  301!
+# Catch-all for SPA/Index
+/* /index.html      200
