@@ -126,7 +126,7 @@ Their business model structurally prevents them from serving it.
 - **Auth:** Firebase Auth (magic link) — session scoped per domain currently.
   Future: configure auth cookie on `.goflypost.com` root domain to share
   sessions across post.goflypost.com and dashboard.goflypost.com seamlessly.
-- **Marketing site:** Webflow (goflypost.com)
+- **Marketing site:** Static HTML on Netlify (goflypost.com) — lives in `frontdoor_netlify/`
 - **Schema standard:** schema.org Event / GeoCoordinates / PostalAddress
 - **Dev tools:** Claude Code, GitHub Copilot, ChatGPT, GitHub
 
@@ -134,15 +134,18 @@ Their business model structurally prevents them from serving it.
 
 ## Presence Verification
 
-**Radius:** 0.05 km (50 meters)
+**Radius:** 0.1 km (100 meters)
 
-- Tight enough to exclude neighbors
-- Loose enough for GPS drift inside a house
 - Configured via `PRESENCE_RADIUS_KM` env var
 - Geo-matching is 2D (lat/lng only — no elevation). Condos are handled by
   the time gate, not vertical geo. This is a known limitation.
 - When no eventId is passed, nearest event within radius wins automatically.
   Multiple nearby events on the same block resolve correctly by distance.
+
+**Coordinate verification workflow:** After an event is parsed and published via post.goflypost.com,
+verify the geo-coordinates by dropping a pin at the property address in Google Maps or reading
+coordinates from the iOS Compass app, then comparing against what got stored in Firestore.
+This catches parse errors where OpenAI misidentifies the address coordinates.
 
 **Failure codes (all log to console.error as greppable JSON):**
 
@@ -536,3 +539,32 @@ GMAIL_TOKEN_PATH=../../token.json
 - Outreach agent: `scripts/outreach/outreach.js`
 - Package: Node.js / Express, Firebase Admin, OpenAI SDK, date-fns-tz, AJV, express-rate-limit
 - License: Apache-2.0
+
+## Marketing Site (frontdoor_netlify/)
+
+Static HTML site served directly by Netlify at goflypost.com. Previously proxied to Webflow.
+
+**Pages:** `index.html`, `product.html`, `docs.html`, `privacy.html`, `tos.html`, `llms.html`
+
+**CSS:** Tailwind CDN (`cdn.tailwindcss.com`) with inline `tailwind.config` in each `<html>` file.
+Custom colors: `ink_black` (#060810), `hot_belly` (#d82e7e), `mint_leaf` (#40c9a2), `bright_snow` (#f7f7f7), `lemon_lime` (#e0e03e), `air_force_blue` (#628395).
+Also has `tailwind.config.js` + `flypost.css` (compiled via Tailwind CLI v3) but pages currently use CDN.
+
+**Routing:** `_redirects` is the canonical routing source. `netlify.toml` mirrors the same redirects. Publish directory is `frontdoor_netlify`.
+
+**Webflow re-export warning:** When pages are re-exported from Webflow, they arrive with a Webflow outer wrapper (duplicate DOCTYPE/html/head/body). Strip it with:
+```bash
+python3 - <<'EOF'
+files = ['index.html', 'docs.html', 'privacy.html', 'tos.html', 'llms.html']
+for f in files:
+    with open(f) as fp: content = fp.read()
+    first = content.find('<!DOCTYPE html>')
+    second = content.find('<!DOCTYPE html>', first + 1)
+    if second == -1: print(f"{f}: skip"); continue
+    inner = content[second:]
+    if inner.endswith('</body></html>'): inner = inner[:-len('</body></html>')]
+    with open(f, 'w') as fp: fp.write(inner)
+    print(f"{f}: stripped")
+EOF
+```
+Note: `docs.html` has been truncated by Webflow injection before — if its last line isn't `</html>`, restore from the last clean git commit and swap `flypost.css` → Tailwind CDN.

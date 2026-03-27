@@ -1,5 +1,15 @@
 User-agent: *
 Allow: /
 Allow: /llms
+Disallow: /api/
+
+# AI Agent Specifics
+User-agent: GPTBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-Web
+Allow: /llms
+Allow: /docs
+Allow: /.well-known/
 
 Sitemap: https://goflypost.com/sitemap.xml
