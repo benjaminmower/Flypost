@@ -139,21 +139,27 @@ function init() {
   // wouldBuy emoji toggle logic (3-way)
   buyYes?.addEventListener('click', () => {
     if (wouldBuyInput) wouldBuyInput.value = "yes"
-    document.getElementById('feedback-question-label').textContent = 'What did you like most?'
+    const ta = document.getElementById('feedback-different')
+    ta.placeholder = 'What did you like most?'
+    ta.classList.remove('hidden')
     buyYes.classList.add('thumb-active')
     buyMaybe.classList.remove('thumb-active')
     buyNo.classList.remove('thumb-active')
   })
   buyMaybe?.addEventListener('click', () => {
     if (wouldBuyInput) wouldBuyInput.value = "maybe"
-    document.getElementById('feedback-question-label').textContent = 'What would make this the one?'
+    const ta = document.getElementById('feedback-different')
+    ta.placeholder = 'What would make this the one?'
+    ta.classList.remove('hidden')
     buyYes.classList.remove('thumb-active')
     buyMaybe.classList.add('thumb-active')
     buyNo.classList.remove('thumb-active')
   })
   buyNo?.addEventListener('click', () => {
     if (wouldBuyInput) wouldBuyInput.value = "no"
-    document.getElementById('feedback-question-label').textContent = 'What would it take for you to write an offer?'
+    const ta = document.getElementById('feedback-different')
+    ta.placeholder = 'What would it take for you to write an offer?'
+    ta.classList.remove('hidden')
     buyYes.classList.remove('thumb-active')
     buyMaybe.classList.remove('thumb-active')
     buyNo.classList.add('thumb-active')
