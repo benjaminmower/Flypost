@@ -75,7 +75,7 @@ async function handleCheckIn() {
   btnCheckIn.disabled = true
   navigator.geolocation.getCurrentPosition(async (pos) => {
     try {
-      statusMsg.innerText = 'Checking in...'
+      statusMsg.innerText = 'Verifying location...'
       const response = await checkIn(pos.coords.latitude, pos.coords.longitude, getBuyerToken())
       if (response.success && response.attendance) {
         currentAttendanceId = response.attendance.attendanceId
@@ -101,7 +101,7 @@ async function handleFeedbackSubmit() {
   const different = document.getElementById('feedback-different')?.value || ''
   const wouldBuy = wouldBuyInput?.value || null
 
-  if (!currentAttendanceId) return showNotification('Check in first', 'error')
+  if (!currentAttendanceId) return showNotification('Verify your location first', 'error')
 
   try {
     const btn = document.getElementById('btn-submit-feedback')
