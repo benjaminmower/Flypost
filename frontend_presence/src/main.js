@@ -158,7 +158,7 @@ function init() {
   buyNo?.addEventListener('click', () => {
     if (wouldBuyInput) wouldBuyInput.value = "no"
     const ta = document.getElementById('feedback-different')
-    ta.placeholder = 'What would it take for you to write an offer?'
+    ta.placeholder = "What didn't work for you?"
     ta.classList.remove('hidden')
     buyYes.classList.remove('thumb-active')
     buyMaybe.classList.remove('thumb-active')
