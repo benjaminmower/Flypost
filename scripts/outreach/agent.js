@@ -47,7 +47,7 @@ const tools = [
       type: 'object',
       properties: {
         zipcode: { type: 'string', description: 'ZIP code to search, e.g. "90405"' },
-        minDOM:  { type: 'number', description: 'Minimum days on market (30 = 1mo filter)' },
+        minDOM:  { type: 'number', description: 'Minimum days on market (14 = 2wk filter)' },
       },
       required: ['zipcode', 'minDOM'],
     },

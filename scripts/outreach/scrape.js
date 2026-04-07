@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import { insertListing, getExistingUrls } from './db.js';
 
-const SEARCH_URL = 'https://www.redfin.com/zipcode/90405/filter/min-days-on-market=1mo';
+const SEARCH_URL = 'https://www.redfin.com/zipcode/90405/filter/min-days-on-market=2wk,open-house=anytime';
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 async function autoScroll(page) {

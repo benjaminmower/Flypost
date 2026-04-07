@@ -4,19 +4,20 @@ function buildDraft(row) {
   const { agent_name, address, dom } = row;
   const firstName = agent_name?.split(' ')[0] ?? 'there';
   const addr = address ?? 'your listing';
-  const days = dom ?? '30+';
+  const days = dom ?? '14+';
 
   const subject = `Why are buyers walking away from ${addr}?`;
 
   const body = `Hi ${firstName},
 
-${addr} has been on for ${days} days. Buyers are walking through and not telling you why they're leaving.
+${addr} has been on for 67 days. Buyers are walking through and not telling you why they're leaving.
+  Flypost captures anonymous buyer feedback at open houses — honest reactions they won't share to your face but will leave in a ballot box.
 
-Flypost captures anonymous buyer feedback at open houses — honest reactions they won't share to your face but will leave in a ballot box.
+  We just ran our first deployment with a Compass agent in West LA.
 
-Works next weekend.
+  Worth a conversation?
 
-Bronco @ Flypost`;
+  Bronco @ Flypost;
 
   return { subject, body };
 }
