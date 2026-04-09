@@ -26,11 +26,13 @@ You can't scrape it, synthesize it, or buy it from the MLS.
 **Core primitives:**
 
 - **POST** — Agents publish open house events in natural language via post.goflypost.com. OpenAI parses into structured Firestore records with geo coordinates, time windows, and schema.org Event format.
-- **PRESENCE** — Buyers check in on-site via geofenced QR code (50 meter radius). Time-gated to active event window. No app required.
+- **PRESENCE** — Buyers verify presence on-site via geofenced QR code (100 meter radius). Time-gated to active event window. No app required.
 - **ASK** — Conversational query engine for the event registry. Queryable by API.
 - **SHARE** — Agent-facing share page for each listing. Buyers can check in, add to calendar, get directions.
 
-**The physical artifact:** A 3D-printed QR code pointing to presence.goflypost.com. The URL never changes because events are time and geo gated. Sits next to the sign-in sheet at every open house. Permanent — works forever without reprinting.
+**The physical artifact:** A printed QR code stand pointing to presence.goflypost.com. The URL never changes because events are time and geo gated. Placed at the exit door of every open house. Permanent — works forever without reprinting.
+
+**The North Star:** M2M real world discovery for live events. Open houses are the wedge. The registry is the asset.
 
 ---
 
@@ -56,13 +58,12 @@ for agents during open houses and tell the truth when they're gone.
 Anonymous buyer feedback and verified attendance are a fundamentally
 different primitive than a digital sign-in sheet.
 
-**The wedge:** Agents with properties 28+ days on market are starting to feel
-pressure but are still actively holding open houses. This is the sweet spot.
-At 60+ DOM agents have typically stopped holding open houses entirely —
-they're no longer running events, so a presence tool is irrelevant to them.
-At 28 DOM the agent is proactive, not defensive, and open to trying something new.
-Flypost gives them verified data to have honest conversations with their seller:
-"Here's who came, when, and what they actually thought."
+**The wedge:** Agents with properties 14+ days on market are starting to feel
+pressure but are still actively holding open houses. Per Alexis Gallardo
+(Compass): if you haven't received an offer after 10 days, something is wrong.
+At 14 DOM the agent is proactive, not defensive. At 60+ DOM agents have
+typically stopped holding open houses entirely — no events means no use case.
+Target 14-45 DOM. Do not target 60+ DOM listings.
 
 The ballot box analogy works well in outreach:
 *"Honest reactions buyers won't share to an agent's face but would put in a ballot box."*
@@ -126,7 +127,7 @@ Their business model structurally prevents them from serving it.
 - **Auth:** Firebase Auth (magic link) — session scoped per domain currently.
   Future: configure auth cookie on `.goflypost.com` root domain to share
   sessions across post.goflypost.com and dashboard.goflypost.com seamlessly.
-- **Marketing site:** Static HTML on Netlify (goflypost.com) — lives in `frontdoor_netlify/`
+- **Marketing site:** Webflow (goflypost.com)
 - **Schema standard:** schema.org Event / GeoCoordinates / PostalAddress
 - **Dev tools:** Claude Code, GitHub Copilot, ChatGPT, GitHub
 
@@ -134,18 +135,14 @@ Their business model structurally prevents them from serving it.
 
 ## Presence Verification
 
-**Radius:** 0.1 km (100 meters)
+**Radius:** 0.1 km (100 meters) — configured via `PRESENCE_RADIUS_KM` env var
 
-- Configured via `PRESENCE_RADIUS_KM` env var
+- Tight enough to exclude neighbors
+- Loose enough for GPS drift inside concrete multi-story buildings
 - Geo-matching is 2D (lat/lng only — no elevation). Condos are handled by
   the time gate, not vertical geo. This is a known limitation.
 - When no eventId is passed, nearest event within radius wins automatically.
   Multiple nearby events on the same block resolve correctly by distance.
-
-**Coordinate verification workflow:** After an event is parsed and published via post.goflypost.com,
-verify the geo-coordinates by dropping a pin at the property address in Google Maps or reading
-coordinates from the iOS Compass app, then comparing against what got stored in Firestore.
-This catches parse errors where OpenAI misidentifies the address coordinates.
 
 **Failure codes (all log to console.error as greppable JSON):**
 
@@ -173,19 +170,27 @@ All failures grep with: `grep PRESENCE_CHECK_IN_FAILURE`
 - `flypost.heroImageUrl` — property hero image URL from MLS
 - `location.geo.latitude/longitude` — GeoCoordinates
 - `hash.value` — SHA-256 of canonical record (immutability/verification)
-- `flypost.agentEmail` — placeholder until agent claims via magic link
+- `flypost.agentEmail` — MUST be set to agent's actual email for dashboard to work
 - `occurrences[]` — array of time windows with startDate/endDate
+
+**Critical note on agentEmail:** Always set to the agent's actual email when
+posting an event. If set to bronco@goflypost.com, the agent cannot see their
+events in the dashboard. This was the root cause of the March 28th monitoring
+failure.
 
 ---
 
-## Presence Frontend Flow (as of 2026-03-17)
+## Presence Frontend Flow (as of April 2026)
 
-1. Buyer scans QR → presence.goflypost.com
-2. Taps "Check In Now" → iOS location permission prompt fires
-3. On allow: geo + time gate validated server-side
-4. Success screen: green checkmark animation + "CHECKED IN." + property address + hero image
-5. Auto-advances to feedback after 2 seconds — no tap required
-6. Feedback screen: "ANONYMOUS & PRIVATE" badge, wouldBuy (👍🤷👎), wantsSimilar (👍👎), free text liked/disliked
+1. Buyer scans QR at exit door → presence.goflypost.com
+2. Lands on: "Tell the seller" + [GO] button
+3. Taps GO → iOS location permission prompt fires
+4. On allow: geo + time gate validated server-side
+5. Success screen: "You're In." — auto-advances to feedback after 2 seconds
+6. Feedback screen: "ANONYMOUS & PRIVATE" badge, "Are you making an offer?" (👍🤷👎)
+   - 👍 → "What did you like most?"
+   - 🤷 → "What would make this the one?"
+   - 👎 → "What didn't work for you?"
 7. Submit → full-screen "THANK YOU." confirmation, no redirect
 
 **Error states:**
@@ -197,6 +202,17 @@ All failures grep with: `grep PRESENCE_CHECK_IN_FAILURE`
 - Anonymous badge shown before first question — unlocks honest responses
 - No exit links on success or thank you screens
 - Feedback is the product, not check-in
+- Exit door placement beats sign-in sheet placement
+- Verbal prompt from agent ("scan before you leave") is required activation mechanism
+
+**QR stand copy (physical artifact):**
+"Tell the seller.
+It's anonymous."
+
+**Activation finding (March 28/29 2026):**
+Passive QR placement produced 0 completions from ~25 buyers over 2 days.
+Alexis confirmed ~8 buyers scanned but old "Check In Now" language killed conversion.
+New copy deployed April 7th. First real test: April 18/19 open house.
 
 ---
 
@@ -223,7 +239,6 @@ Returns:
 **Key metric:** Feedback conversion rate = feedbackCount / attendanceCount
 - 50%+ = product is working
 - Below 30% = friction problem in feedback flow
-- First test (2026-03-17): 11 check-ins, 5 feedback = 45% with no real buyers and no hero image
 
 ---
 
@@ -235,10 +250,7 @@ and the post form when agent is authenticated via Firebase auth.
 **Behavior:**
 - Queries `GET /v1/agents/:email/events` — backend endpoint that fetches
   Firestore events where `flypost.agentEmail` == authenticated user's email
-- Returns last 30 days of events only — implemented as
-  `where('startDate', '>=', cutoff).orderBy('startDate', 'desc')`
-  where cutoff = now - 30 days as ISO string. No additional index needed
-  because the range filter and orderBy are on the same field (startDate).
+- Returns last 30 days of events only
 - All stats fetched in parallel via Promise.all from `/v1/events/:eventId/stats`
 - Auto-refreshes stats every 60 seconds for LIVE events only
 - Groups events: LIVE → UPCOMING (soonest first) → ENDED (most recent first)
@@ -253,33 +265,23 @@ and the post form when agent is authenticated via Firebase auth.
 **Architecture note:**
 - Frontend does NOT query Firestore directly — all data goes through backend API
 - Firestore composite index required: `flypost.agentEmail` ASC + `startDate` DESC
-  Named "agent dashboard" in Firebase Console
 
 **Future surface separation (post-MVP):**
-- post.goflypost.com → posting only, single purpose
-- dashboard.goflypost.com → agent home base, all listings and live stats
-- Requires Firebase auth cookie on `.goflypost.com` root domain for shared sessions
+- post.goflypost.com → posting only
+- dashboard.goflypost.com → agent home base
 - Do not build until 5+ agents are actively using both surfaces
 
-**March 28th monitoring plan:**
-- You post Alexis's event, set flypost.agentEmail to her email
-- Send Alexis magic link to post.goflypost.com
-- She authenticates once, sees her listings in YOUR LISTINGS section
-- Watches check-ins and feedback update live during the open house
-- No curl required, no you being present
+---
+
+## Poster Score (Do Not Build Yet)
 
 Proprietary 0-100 composite score per listing. Inputs:
 - Verified attendance count
 - Feedback conversion rate
-- wouldBuy distribution (yes/maybe/no ratio)
+- wouldBuy distribution (yes/maybe/no ratio — stored as makeOffer in future)
 - wantsSimilar rate (buyer intent signal)
 - Days on market at time of open house
 - Number of open houses held
-
-Answers: how engaged were your buyers?
-- High attendance + low wouldBuy = pricing or property problem
-- Low attendance + high wouldBuy = marketing problem
-- High attendance + high conversion + majority wouldBuy = offer incoming
 
 Requires 50+ real events before statistically meaningful. Do not build yet.
 This is the sentence that turns Flypost from a check-in tool into a listing
@@ -289,18 +291,27 @@ intelligence platform.
 
 ## Business Model
 
-- **$50 per open house** or **$150 per listing**
-- US: ~5M home sales/year × 3 open houses avg = 15M events TAM
-- At $50/event: $750M TAM at full penetration
-- 1% penetration = $7.5M ARR
-- Future layers: brokerage API access, ground-truth data licensing
+**Individual agents:**
+- $150/listing (covers all open houses) — lead with this
+- $50/open house — fallback
 
-**Pricing philosophy:**
-- Lead with $150/listing not $50/event — commits agent to the whole listing
-- Never mention price in cold outreach — forces a reply
-- At the moment an agent asks a seller to reduce by $25,000, $50 is not
-  a line item worth discussing. Frame around outcome, not cost.
-- The data asset is the long-term strategic leverage, not per-event revenue
+**Brokerage platform:**
+- $10-15/agent/month
+- Most expensive competing tool agents pay: ~$20/agent/month (per Rick Edler)
+- 400-agent brokerage at $10/month = $4,000/month
+- 2 brokerage contracts = $6-10k/month = founder goes full time
+
+**TAM (realistic):**
+- ~10,000 large brokerages in the US
+- 5% penetration at $10/agent/month, avg 40 agents = $2.4M ARR
+- 10% penetration = $4.8M ARR
+- SAM is not the pitch — the data asset compounding is the pitch
+
+**Pricing rules:**
+- Never mention price in cold outreach
+- Do not negotiate down from $150
+- At the moment an agent asks a seller to cut $25,000, $50 is not a conversation worth having
+- Frame around outcome, not cost
 
 ---
 
@@ -315,127 +326,66 @@ intelligence platform.
 | SurveyStance | iPad kiosk, emoji feedback | Hardware-dependent, no geofencing, unfunded |
 | Generic QR surveys | Anonymous buyer feedback | No presence verification, empirically produces zero responses |
 
-**Key insight:** Curb Hero's own docs call anonymous buyer feedback
-"the make or break moment" for stale listings — but their business model
-requires identity. Anonymous feedback and lead capture are in direct tension.
-Flypost chose the intelligence side.
-
 ---
 
 ## Sales Strategy
 
-**Primary target:** Agents with listings 28-55 days on market
+**Primary target:** Agents with listings 14-45 DOM
+- 14 DOM: agent feels first doubt, still holding open houses, proactive
+- 45 DOM: still active but getting defensive
+- 60+ DOM: stop holding open houses — no use case for Flypost
 
-**Why 28 DOM is the sweet spot:** Agent is feeling early pressure but still
-actively holding open houses. At 60+ DOM they've usually stopped holding events
-entirely — no open houses means no use case for Flypost. At 28 DOM they're
-proactive and open to new tools. Don't target 60+ DOM listings.
+**Distribution reality (confirmed April 2026):**
+Cold email to agents does not work. Empirically proven:
+- 20 emails pre-March 19: zero responses
+- 24 emails March 19: zero responses
+- 16 emails April 7: pending
 
-**Critical insight on cold outreach:** Cold email to agents does not work.
-Agents buy from other agents. The channel is warm referrals and in-person
-demos at brokerage meetings. 20 cold outreaches yielded zero conversions.
-Stop optimizing copy. Fix distribution.
+Agents buy from other agents. The only channel that works is warm referral.
+Stop optimizing cold email copy. Fix distribution.
 
 **What works:**
 - Warm intros from existing agent users (Alexis Gallardo model)
-- In-person demos at NAR chapter meetings and brokerage floor meetings
-- CEO-level entry at brokerages (Rick Edler) to get in front of whole teams at once
+- In-person demos at brokerage floor meetings
+- CEO-level entry at brokerages (Rick Edler model)
 
-**Cold email subject line that works:**
-"Why are buyers walking away from [address]?"
+**Cold email format (use only when warm intro not possible):**
 
-Do not include pricing in cold email. Forces a reply. Lead with the pain,
-not the product. Assume agents are smart — do not explain why feedback
-matters to sellers. They know.
+Subject: "Why are buyers leaving [address]?"
 
-**Cold email body (4-5 sentences max):**
-- First sentence: specific address and DOM count
-- One sentence on Flypost using "honest reactions they won't share to your
-  face but will leave in a ballot box"
-- "Works next weekend."
+Body:
+- Line 1: specific address and DOM count
+- Line 2: ballot box analogy
+- Line 3: "We just ran our first deployment with a Compass agent in West LA."
+- Line 4: "Worth a conversation?"
 - Sign off as Bronco
-- No bullet points, no bold, plain text, written like a human from their phone
+- Plain text, no bullets, no bold, no price
 
-**Sending timing:**
-- Draft Thursday or Friday
-- Send Sunday night or Monday morning — agents are debriefing weekend
-  open houses, pain is fresh
-- If listing has an open house THIS weekend → send immediately
-- "Works next weekend" loses punch if sent Monday afternoon
+Send Sunday night or Monday morning — agents debriefing weekend open houses,
+pain is fresh.
 
-**QR code placement pitch:**
-Don't replace the sign-in sheet. Sign-in sheet captures leads.
-QR code captures honest feedback. Two jobs, next to each other.
-
-**The seller-first pitch (use this, not the agent-first pitch):**
-"Your agent can show your seller exactly how many verified buyers walked
-through the home, when they came, and what they actually thought. Not Zillow
-views. Verified presence and honest reactions. That's what keeps sellers from
-firing their agent at 45 DOM."
-
-**The Zillow gap pitch:**
-"Zillow tells agents their listing got 10,000 views but nothing about
-who walked through the door or why they didn't make an offer."
+**Voss principles that apply:**
+- Label their pain in the subject line — they open because it's their listing
+- "Worth a conversation?" is a calibrated question — gives them control
+- Never ask how much it's worth to them — they'll anchor low
+- State the price ($150) and stop talking
 
 ---
 
 ## Outreach Agent (scripts/outreach/) — Built 2026-03-19
 
-A Node.js script that automates the full outreach pipeline. Lives entirely
-in `scripts/outreach/`. No changes to `backend/`.
-
-**What it does:**
-1. Scrapes Redfin for Santa Monica listings with 30+ DOM using Playwright
-2. Extracts agent name, email, brokerage, phone directly from Redfin listing pages
-3. Falls back to brokerage website scraping for missing emails
-4. Calls Anthropic API to generate personalized cold emails per listing
-5. Saves drafts to Gmail via Gmail API — Bronco reviews and sends manually
-
-**Key technical decisions:**
-- Two separate Playwright browser sessions — search page and listing pages
-  must be in different contexts or Redfin flags the session as a bot
-- `networkidle` wait strategy required — agent section is client-side rendered
-- Idempotent across runs — SQLite dedup by redfin_url, draft_created flag
-  prevents duplicate emails
-- Gmail drafts (not send) — human reviews every email before it goes out
-- OOB OAuth flow — prints auth URL to console, user pastes code back
-
-**Results from first run (2026-03-19):**
-- 41 listings scraped (Santa Monica, 30+ DOM)
-- 31 emails found directly on Redfin
-- 1 email found via brokerage site
-- 9 not found (flagged for manual lookup)
-- 32 drafts created in Gmail
-
-**SQLite schema:**
-```sql
-CREATE TABLE listings (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  redfin_url       TEXT UNIQUE NOT NULL,
-  address          TEXT,
-  dom              INTEGER,
-  list_price       TEXT,
-  agent_name       TEXT,
-  brokerage        TEXT,
-  agent_phone      TEXT,
-  agent_email      TEXT,
-  email_source     TEXT,  -- 'redfin' | 'brokerage_site' | 'not_found' | NULL
-  draft_created    INTEGER DEFAULT 0,
-  draft_created_at TEXT,
-  scraped_at       TEXT DEFAULT (datetime('now'))
-);
-```
-
-**To run:**
 ```bash
 cd scripts/outreach
-node outreach.js
+node outreach.js              # full run
+node outreach.js --reset-drafts  # regenerate drafts without re-scraping
 ```
 
-**To reset drafts (re-generate without re-scraping):**
-```bash
-node outreach.js --reset-drafts
-```
+- Scrapes Redfin for Santa Monica listings (update MIN_DOM from 30 to 14)
+- Extracts agent contact info, falls back to brokerage site
+- Generates personalized cold emails via Anthropic API
+- Saves to Gmail drafts — Bronco reviews and sends manually
+- SQLite dedup — idempotent across runs
+- Do not run more than once per day (Redfin rate limiting)
 
 **Environment:**
 ```
@@ -444,65 +394,42 @@ GMAIL_CREDENTIALS_PATH=../../credentials.json
 GMAIL_TOKEN_PATH=../../token.json
 ```
 
-**Redfin bot detection notes:**
-- Redfin blocks headless Playwright aggressively
-- Fix: two separate browser contexts (search URL in Session 1, listing pages in Session 2)
-- Add 3-5 second random delays between listing page visits
-- Do not run more than once per day — IP rate limiting is real
-- The search page visit is what triggers the flag; clean sessions for listing pages work
+---
 
-**CAN-SPAM compliance:**
-- Cold B2B email to professionals at business emails is legal
-- Add physical address or city/state to email footer
-- No opt-in required for B2B outreach in the US
+## Active Pipeline (as of April 7, 2026)
+
+- **Alexis Gallardo** (Compass) — Most important relationship. Committed beta
+  user. New listing coming in 90404, open house April 18/19. Meeting with
+  Compass Santa Monica experience manager Thursday April 10th — she is
+  facilitating the intro. Granville went under contract.
+- **Compass Experience Manager** (Santa Monica) — Alexis meeting Thursday.
+  This is the brokerage entry point. Need real buyer feedback data before
+  this conversation. April 18/19 is the proof of concept.
+- **Rick Edler** (Vista Sotheby's CEO) — Met Dec 2025. Gave exact product spec
+  verbatim. Do not contact until after April 18/19 open house. Send one-line
+  report, no ask, let him respond. Brokerage meetings: first Wednesday of month,
+  Cheesecake Factory. Target May first Wednesday.
+- **Andrew Pearce** (Sotheby's) — Warm contact, daughter's soccer team.
+  Outreach sent April 2026. Keep casual.
+- **Will Cooper** (BHHS Utah) — Family connection. Text sent.
+- **16 Santa Monica agents** — Cold emails sent April 7, 2026. Pending.
 
 ---
 
-## Active Pipeline (as of 2026-03-19)
+## April 18/19 Pre-Flight Checklist
 
-- **Alexis Gallardo** (Compass) — Open house March 28/29, confirmed deployment,
-  actively referring other agents. Most important relationship in the pipeline.
-- **Guy Reid** (Douglas Elliman) — Text sent re: 2530 Beverley Ave open house.
-  Guy's listing is in the outreach DB (raphael.barragan.re@gmail.com listed).
-- **Rick Edler** (Vista Sotheby's CEO) — Met Dec 2025. His verbatim feedback:
-  "It doesn't add value for the person selling the house. An app that shows
-  that X is a client of X brokerage and knows when you visit an open house
-  and asks you about the emotional connection to a property — what you don't
-  like almost more than what you do like. The MLS is not able to deal with
-  emotional connection which is what sells a house. Giving a brokerage a tool
-  that allows their client to visit ANY open house and give feedback on it —
-  3 questions: what you liked, what you didn't like, do you want houses similar
-  to this — is what he would pay for."
-  Flypost cannot handle PII so a full buyer identity app is not possible.
-  However the 3 questions Rick specified are exactly what Flypost built.
-  The March 29th report from Alexis's open house is the proof to send him.
-  Do not request a meeting — send the report with one line: "Rick — first
-  verified buyer feedback data from a Compass open house. Thought you'd want
-  to see it." Let him respond.
-  **Brokerage team meetings: first Wednesday of every month, Cheesecake Factory.**
-  Target April first Wednesday for in-person demo with Vista team.
-- **Will Cooper** (BHHS Utah) — Text sent, family connection
-- **Neyshia Go** (Sotheby's) — In outreach DB. Do not send cold email —
-  warmer conversation already in progress.
-- Megan's Marine St report sent — awaiting response
-- **32 Santa Monica agents** — drafts in Gmail as of 2026-03-19, ready to send
-  Sunday night / Monday morning
+1. Get new listing address from Alexis (~1 week out)
+2. Post event via post.goflypost.com with MLS URL
+3. Confirm heroImageUrl populated in Firestore
+4. Set flypost.agentEmail to Alexis's actual email
+5. Test geofence in person at property before open house
+6. Print new QR stands: "Tell the seller. It's anonymous."
+7. Place stand at exit door — not sign-in sheet
+8. Be present in person — verbal prompt to every buyer
+9. After event: pull stats, generate report
+10. Send Rick Edler one-line report — no ask
 
----
-
-## March 28th Pre-Flight Checklist
-
-1. Get Alexis's listing address — not on her Compass page yet as of 2026-03-17
-2. Post event via post.goflypost.com with real MLS listing URL
-3. Confirm heroImageUrl populated in Firestore after posting
-4. Go to the address in person — test geofence by hitting presence endpoint on phone
-5. Confirm event appears in YOUR LISTINGS on agent dashboard
-6. Send Alexis magic link to post.goflypost.com so she can watch live
-7. Have QR stands (in QC/shipping) or Compass-branded cardstock as backup
-8. After event: curl stats endpoint, generate report for Alexis
-9. March 29th: send Rick Edler the report with one line — no ask
-
-**Success metric:** 50%+ feedback conversion rate (feedbackCount / attendanceCount)
+**Success metric:** 50%+ feedback conversion rate
 
 ---
 
@@ -514,6 +441,7 @@ GMAIL_TOKEN_PATH=../../token.json
 - Managing construction in Palisades fire rebuild while building Flypost
 - Moving to Salt Lake City (family)
 - YC Spring 2026 — applied 2026-03-11, rejected 2026-03-13, no feedback given
+- Revenue target to go full time: $6-10k/month
 - Crunchbase: https://www.crunchbase.com/organization/flypost
 
 ---
@@ -522,11 +450,12 @@ GMAIL_TOKEN_PATH=../../token.json
 
 - Physical world data primitive (a16z 2026 thesis: "interest returning to physical world")
 - Vertical AI with proprietary data that compounds
-- Ground truth in an era of synthetic data
-- The data asset (attendance registry) grows with every check-in and cannot be replicated
-- Poster Score is the proprietary intelligence layer that justifies data licensing
+- Ground truth in an era of synthetic data — cannot be scraped, synthesized, or bought
+- The attendance registry grows with every check-in and cannot be replicated
 - Structurally advantaged: dominant players cannot enter without cannibalizing
   their core lead-capture revenue model
+- B2B brokerage revenue funds operation; M2M data layer is the exit story
+- "Zillow owns listings. Flypost owns presence."
 
 ---
 
@@ -539,32 +468,4 @@ GMAIL_TOKEN_PATH=../../token.json
 - Outreach agent: `scripts/outreach/outreach.js`
 - Package: Node.js / Express, Firebase Admin, OpenAI SDK, date-fns-tz, AJV, express-rate-limit
 - License: Apache-2.0
-
-## Marketing Site (frontdoor_netlify/)
-
-Static HTML site served directly by Netlify at goflypost.com. Previously proxied to Webflow.
-
-**Pages:** `index.html`, `product.html`, `docs.html`, `privacy.html`, `tos.html`, `llms.html`
-
-**CSS:** Tailwind CDN (`cdn.tailwindcss.com`) with inline `tailwind.config` in each `<html>` file.
-Custom colors: `ink_black` (#060810), `hot_belly` (#d82e7e), `mint_leaf` (#40c9a2), `bright_snow` (#f7f7f7), `lemon_lime` (#e0e03e), `air_force_blue` (#628395).
-Also has `tailwind.config.js` + `flypost.css` (compiled via Tailwind CLI v3) but pages currently use CDN.
-
-**Routing:** `_redirects` is the canonical routing source. `netlify.toml` mirrors the same redirects. Publish directory is `frontdoor_netlify`.
-
-**Webflow re-export warning:** When pages are re-exported from Webflow, they arrive with a Webflow outer wrapper (duplicate DOCTYPE/html/head/body). Strip it with:
-```bash
-python3 - <<'EOF'
-files = ['index.html', 'docs.html', 'privacy.html', 'tos.html', 'llms.html']
-for f in files:
-    with open(f) as fp: content = fp.read()
-    first = content.find('<!DOCTYPE html>')
-    second = content.find('<!DOCTYPE html>', first + 1)
-    if second == -1: print(f"{f}: skip"); continue
-    inner = content[second:]
-    if inner.endswith('</body></html>'): inner = inner[:-len('</body></html>')]
-    with open(f, 'w') as fp: fp.write(inner)
-    print(f"{f}: stripped")
-EOF
-```
-Note: `docs.html` has been truncated by Webflow injection before — if its last line isn't `</html>`, restore from the last clean git commit and swap `flypost.css` → Tailwind CDN.
+- Do NOT rename `wouldBuy` field — exists in 14+ files, defer to major refactor
