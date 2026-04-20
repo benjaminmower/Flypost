@@ -84,7 +84,8 @@ router.get('/near', applyTieredRateLimit, async (req, res) => {
     trackAndDetectAnomaly(clientIp)
 
     // Date filtering parameters (ISO 8601 date-time strings)
-    const startFilter = req.query.start ? new Date(req.query.start) : null
+    // Default startFilter to now so callers who omit ?start= still get future-only results.
+    const startFilter = req.query.start ? new Date(req.query.start) : new Date()
     const endFilter = req.query.end ? new Date(req.query.end) : null
 
     console.log(

@@ -268,10 +268,12 @@ export async function queryEventsByLocationAndTime(filters = {}) {
   
   let query = eventsCollection
 
-  // Apply time filters if provided
-  if (filters.startDate) {
-    query = query.where('startDate', '>=', filters.startDate)
-  }
+  // Always filter out stale events at the Firestore level.
+  // Default cutoff is now; callers can override by passing filters.startDate
+  // (e.g. to fetch events that end after a specific future date).
+  const startCutoff = filters.startDate ? new Date(filters.startDate) : new Date()
+  query = query.where('endDate', '>=', startCutoff)
+
   if (filters.endDate) {
     query = query.where('startDate', '<=', filters.endDate)
   }
