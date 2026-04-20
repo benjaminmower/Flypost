@@ -91,7 +91,41 @@ function checkTimeBudget() {
 
 // ── TOOL IMPLEMENTATIONS ─────────────────────────────────────────────────────
 
-async function fetchPage(url) {
+const REDDIT_KEYWORD_RE = /event|trivia|happy hour|weekend|tonight|thursday|friday|saturday|sunday|weekly|every/i
+
+async function fetchPage(url, sourceType) {
+  // Reddit JSON path — plain fetch only, structured post list returned
+  const isReddit = sourceType === 'reddit_json' ||
+    (url.includes('reddit.com') && url.endsWith('.json'))
+
+  if (isReddit) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Flypost/1.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const data = await res.json()
+      // Respectful 2s delay between Reddit API calls
+      await new Promise(r => setTimeout(r, 2000))
+      const posts = (data?.data?.children || []).map(child => {
+        const p = child.data
+        return {
+          id: p.id,
+          title: p.title,
+          selftext: p.selftext,
+          permalink: p.permalink,
+          url: p.url,
+          worthFetchingThread: REDDIT_KEYWORD_RE.test(p.title),
+        }
+      })
+      stats.sourcesProcessed++
+      return { posts, success: true }
+    } catch (err) {
+      stats.errors++
+      return { posts: [], success: false }
+    }
+  }
+
   // Plain fetch first — fast path for server-rendered pages
   try {
     const res = await fetch(url, {
@@ -125,6 +159,41 @@ async function fetchPage(url) {
   }
 }
 
+async function fetchRedditThread(postId, subreddit) {
+  try {
+    const url = `https://www.reddit.com/r/${subreddit}/comments/${postId}.json`
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Flypost/1.0' },
+      signal: AbortSignal.timeout(15000),
+    })
+    const data = await res.json()
+    // Respectful 2s delay between Reddit API calls
+    await new Promise(r => setTimeout(r, 2000))
+
+    // Reddit returns [post listing, comments listing]
+    const post = data[0]?.data?.children?.[0]?.data
+    const comments = data[1]?.data?.children || []
+
+    const postTitle = post?.title || ''
+    const postBody  = post?.selftext || ''
+
+    const commentBodies = comments
+      .map(c => c.data?.body || '')
+      .filter(body => body !== '[deleted]' && body !== '[removed]' && body.length >= 10)
+
+    const text = [
+      `POST: ${postTitle}`,
+      postBody ? `\n${postBody}` : '',
+      ...commentBodies.map(b => `\nCOMMENT: ${b}`),
+    ].join('\n').trim()
+
+    return { text, success: true }
+  } catch (err) {
+    stats.errors++
+    return { text: '', success: false }
+  }
+}
+
 async function extractEvents(html, sourceContext) {
   checkTokenBudget()
   try {
@@ -135,10 +204,17 @@ async function extractEvents(html, sourceContext) {
         role: 'user',
         content:
           `Source context: ${sourceContext}\n\n` +
-          `Extract all upcoming events from the following HTML. ` +
+          `Extract all upcoming events from the following content. ` +
           `Return a JSON array only, no preamble, no markdown. ` +
-          `Each event: name, address, startDate, startTime, endDate, endTime, description, sourceUrl. ` +
-          `Use null for any unknown fields.\n\nHTML:\n${html}`,
+          `Each event: name, address, startDate, startTime, endDate, endTime, description, sourceUrl, recurrence, recurringDay. ` +
+          `Use null for unknown fields. For recurrence use 'weekly', 'monthly', 'one-time', or null. ` +
+          `For recurringDay use the day name ('Monday' through 'Sunday') or null.\n\n` +
+          `Input may be a Reddit thread rather than a web page. The thread will contain a question or post ` +
+          `followed by community replies. Extract every concrete event mentioned anywhere in the thread — ` +
+          `post body or comments. Only extract events with at least a venue name or address AND a day or date. ` +
+          `Ignore vague mentions like 'there are some bars on Wilshire.' A comment saying ` +
+          `'Wednesdays at O'Brien's on Wilshire' is a valid recurring event — extract it with ` +
+          `recurrence: 'weekly' and recurringDay: 'Wednesday'. Return JSON array only.\n\nContent:\n${html}`,
       }],
     })
     tokenTracker.inputTokens  += res.usage.input_tokens
@@ -259,27 +335,47 @@ const TOOLS = [
   {
     name: 'fetchPage',
     description:
-      'Fetch the HTML of a URL. Tries plain fetch first; falls back to Playwright Chromium ' +
-      'for JS-rendered pages (fresh context, 2–3s delay). Truncates response to 50,000 chars. ' +
-      'Returns { html, success }.',
+      'Fetch the content of a URL. For reddit_json sources: fetches with Flypost/1.0 User-Agent, ' +
+      'parses JSON, flags posts with worthFetchingThread, returns { posts: [], success }. ' +
+      'For all other sources: plain fetch first, Playwright fallback for JS-rendered pages, ' +
+      'truncates to 50,000 chars, returns { html, success }. Pass sourceType for Reddit sources.',
     input_schema: {
       type: 'object',
       properties: {
-        url: { type: 'string', description: 'URL to fetch' },
+        url:        { type: 'string', description: 'URL to fetch' },
+        sourceType: { type: 'string', description: 'Pass "reddit_json" for Reddit API endpoints' },
       },
       required: ['url'],
     },
   },
   {
+    name: 'fetchRedditThread',
+    description:
+      'Fetch a full Reddit thread (post + all top-level comments) by post ID and subreddit. ' +
+      'Strips deleted/short comments. Returns { text, success } where text is the concatenated ' +
+      'readable thread content — pass this to extractEvents.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        postId:    { type: 'string', description: 'Reddit post ID (the short alphanumeric id)' },
+        subreddit: { type: 'string', description: 'Subreddit name without r/ prefix' },
+      },
+      required: ['postId', 'subreddit'],
+    },
+  },
+  {
     name: 'extractEvents',
     description:
-      'Call Claude to extract upcoming events from HTML. Returns a JSON array of events: ' +
-      'name, address, startDate, startTime, endDate, endTime, description, sourceUrl. ' +
+      'Call Claude to extract upcoming events from HTML or Reddit thread text. Returns events: ' +
+      'name, address, startDate, startTime, endDate, endTime, description, sourceUrl, recurrence, recurringDay. ' +
+      'recurrence: "weekly"|"monthly"|"one-time"|null. recurringDay: day name or null. ' +
+      'When building the eventText for publishEvent, append recurrence info to the sentence — e.g. ' +
+      '"Trivia night every Wednesday at O\'Brien\'s, 2941 Wilshire Blvd. Recurring weekly on Wednesdays." ' +
       'Never throws — returns { events: [] } on failure.',
     input_schema: {
       type: 'object',
       properties: {
-        html:          { type: 'string', description: 'Raw HTML to parse' },
+        html:          { type: 'string', description: 'Raw HTML or Reddit thread text to parse' },
         sourceContext: { type: 'string', description: 'Source name and location for context' },
       },
       required: ['html', 'sourceContext'],
@@ -374,7 +470,8 @@ const TOOLS = [
 
 async function executeTool(name, input) {
   switch (name) {
-    case 'fetchPage':       return await fetchPage(input.url)
+    case 'fetchPage':           return await fetchPage(input.url, input.sourceType)
+    case 'fetchRedditThread':   return await fetchRedditThread(input.postId, input.subreddit)
     case 'extractEvents':   return await extractEvents(input.html, input.sourceContext)
     case 'publishEvent':    return await publishEvent(input.eventText)
     case 'checkDuplicate':  return checkDuplicate(input.sourceUrl, input.startDate)
@@ -396,7 +493,12 @@ const SYSTEM_PROMPT =
   'that contains events, use queueSource to add any links to other local event sources you find on ' +
   'that page. Continue until MAX_SOURCES is reached. Prioritize sources with recurring weekly events. ' +
   'Log every significant decision. Skip events missing address or date. Never abort on a single ' +
-  'failure — log and continue.'
+  'failure — log and continue. ' +
+  'For reddit_json sources: call fetchPage with sourceType "reddit_json" to get the post list. ' +
+  'For each post where worthFetchingThread is true, call fetchRedditThread to get the full comment ' +
+  'thread. Pass the full thread text to extractEvents — the event details are often in the comments, ' +
+  'not the post title. A single thread may contain multiple distinct events mentioned by different ' +
+  'commenters — extract all of them.'
 
 // ── AGENT LOOP ───────────────────────────────────────────────────────────────
 

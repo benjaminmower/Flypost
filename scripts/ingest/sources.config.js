@@ -11,4 +11,11 @@ export const SOURCES = [
     location: 'Santa Monica, CA',
     active: true,
   },
+  {
+    name: 'r/santamonica',
+    url: 'https://www.reddit.com/r/santamonica/search.json?q=events+OR+trivia+OR+%22happy+hour%22+OR+%22this+weekend%22&sort=new&limit=25',
+    location: 'Santa Monica, CA',
+    type: 'reddit_json',
+    active: true,
+  },
 ]
