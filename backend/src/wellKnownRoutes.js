@@ -12,7 +12,8 @@ const OPENAPI_YAML = `openapi: 3.0.3
 info:
   title: Flypost Ask - Public Discovery API
   description: |
-    Read-only public API for discovering real estate events (open houses, garage sales, etc.)
+    Read-only public API for discovering local events (open houses, garage sales, apartments,
+    job postings, live events, community alerts, happy hours, missing pets, and related activity)
     using the Flypost Discovery Protocol V1.
 
     This API provides tiered access to event data:
@@ -47,7 +48,7 @@ paths:
       summary: Find events near a location
       description: |
         Retrieves events near a specified geographic location within a given radius.
-        Supports optional date range filtering for time-based queries.
+        Supports optional category and date range filtering for time-based queries.
       operationId: getEventsNear
       tags:
         - discovery
@@ -95,6 +96,13 @@ paths:
             maximum: 100
             default: 10
           example: 10
+        - name: category
+          in: query
+          description: Optional comma-separated Discovery categories. Common storage aliases such as open-houses and garage-sales are accepted.
+          required: false
+          schema:
+            type: string
+          example: "garage_sale,happy_hour"
         - name: start
           in: query
           description: Filter events starting on or after this date (ISO 8601 date-time)
@@ -265,6 +273,7 @@ components:
         - where
         - when
         - externalListingUrl
+        - shareUrl
       properties:
         eventId:
           type: string
@@ -284,7 +293,7 @@ components:
             type:
               type: string
               description: Event category
-              enum: [open_house, garage_sale, estate_sale, moving_sale, yard_sale, other]
+              enum: [open_house, garage_sale, estate_sale, moving_sale, yard_sale, apartment, job_posting, live_event, community_alert, happy_hour, missing_pet, other]
               example: "open_house"
             label:
               type: string
@@ -346,6 +355,10 @@ components:
               example: "https://www.zillow.com/homedetails/123-Main-St"
             - type: "null"
           description: External listing URL (required field, can be null)
+        shareUrl:
+          type: string
+          format: uri
+          description: Public Flypost share page URL
         source:
           type: object
           description: Optional source provenance information
@@ -399,7 +412,7 @@ components:
     post:
       summary: Natural-language event discovery (Web Concierge)
       description: |
-        Ask a natural-language question to discover real estate events. Returns a
+        Ask a natural-language question to discover local events. Returns a
         markdown-formatted response. Auth not required.
 
         Rate limit: 20 requests per 15 minutes per IP.
@@ -604,7 +617,7 @@ const OPENAPI_JSON = {
   openapi: '3.0.3',
   info: {
     title: 'Flypost Ask - Public Discovery API',
-    description: 'Read-only public API for discovering real estate events (open houses, garage sales, etc.)\nusing the Flypost Discovery Protocol V1.\n\nThis API provides tiered access to event data:\n- Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields only\n- Brokerage-scoped reads (with brokerageId or api_key): Full event details\n\nAll responses follow the Discovery Protocol V1 format with protocol/version/success/events/meta structure.\n',
+    description: 'Read-only public API for discovering local events (open houses, garage sales, apartments, job postings, live events, community alerts, happy hours, missing pets, and related activity)\nusing the Flypost Discovery Protocol V1.\n\nThis API provides tiered access to event data:\n- Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields only\n- Brokerage-scoped reads (with brokerageId or api_key): Full event details\n\nAll responses follow the Discovery Protocol V1 format with protocol/version/success/events/meta structure.\n',
     version: '1.0.0',
     contact: { name: 'Flypost Support', url: 'https://goflypost.com', email: 'support@goflypost.com' },
     license: { name: 'Apache 2.0', url: 'https://www.apache.org/licenses/LICENSE-2.0.html' }
@@ -618,7 +631,7 @@ const OPENAPI_JSON = {
     '/v1/events/near': {
       get: {
         summary: 'Find events near a location',
-        description: 'Retrieves events near a specified geographic location within a given radius.\nSupports optional date range filtering for time-based queries.\n',
+        description: 'Retrieves events near a specified geographic location within a given radius.\nSupports optional category and date range filtering for time-based queries.\n',
         operationId: 'getEventsNear',
         tags: ['discovery'],
         parameters: [
@@ -626,6 +639,7 @@ const OPENAPI_JSON = {
           { name: 'lng', in: 'query', description: 'Longitude of search center (optional; defaults to -118.4912 - Santa Monica, CA)', required: false, schema: { type: 'number', format: 'double', minimum: -180, maximum: 180, default: -118.4912 }, example: -118.4912 },
           { name: 'radius_mi', in: 'query', description: "Search radius in miles (preferred; 0.1 to 50 miles). If provided, 'radius' parameter is ignored.", required: false, schema: { type: 'number', format: 'double', minimum: 0.1, maximum: 50 }, example: 5 },
           { name: 'radius', in: 'query', description: "Search radius in kilometers (fallback; 0 to 100 km; default 10 km). Ignored if 'radius_mi' is provided.", required: false, schema: { type: 'number', format: 'double', minimum: 0, maximum: 100, default: 10 }, example: 10 },
+          { name: 'category', in: 'query', description: 'Optional comma-separated Discovery categories. Common aliases such as open-houses and garage-sales are accepted.', required: false, schema: { type: 'string' }, example: 'garage_sale,happy_hour' },
           { name: 'start', in: 'query', description: 'Filter events starting on or after this date (ISO 8601 date-time)', required: false, schema: { type: 'string', format: 'date-time' }, example: '2025-01-01T00:00:00Z' },
           { name: 'end', in: 'query', description: 'Filter events ending on or before this date (ISO 8601 date-time)', required: false, schema: { type: 'string', format: 'date-time' }, example: '2025-12-31T23:59:59Z' }
         ],
@@ -657,7 +671,7 @@ const OPENAPI_JSON = {
     '/api/chat': {
       post: {
         summary: 'Natural-language event discovery (Web Concierge)',
-        description: 'Ask a natural-language question to discover real estate events. Returns a markdown-formatted response. Auth not required.\n\nRate limit: 20 requests per 15 minutes per IP.\nConditional: only active when ENABLE_CONCIERGE=true on the backend.\n',
+        description: 'Ask a natural-language question to discover local events. Returns a markdown-formatted response. Auth not required.\n\nRate limit: 20 requests per 15 minutes per IP.\nConditional: only active when ENABLE_CONCIERGE=true on the backend.\n',
         operationId: 'chatConcierge',
         tags: ['concierge'],
         requestBody: {
@@ -707,14 +721,15 @@ const OPENAPI_JSON = {
       DiscoveryEvent: {
         type: 'object',
         description: 'Event in Discovery V1 format with strict what/where/when structure (M2M Oracle contract).',
-        required: ['eventId', 'dataHash', 'what', 'where', 'when', 'externalListingUrl'],
+        required: ['eventId', 'dataHash', 'what', 'where', 'when', 'externalListingUrl', 'shareUrl'],
         properties: {
           eventId: { type: 'string', description: 'Unique event identifier', example: 'evt_20250115_abc123' },
           dataHash: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'SHA-256 hash of canonical event data for integrity verification', example: 'a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890' },
-          what: { type: 'object', description: 'What is happening (event type and optional label)', required: ['type'], properties: { type: { type: 'string', description: 'Event category', enum: ['open_house', 'garage_sale', 'estate_sale', 'moving_sale', 'yard_sale', 'other'], example: 'open_house' }, label: { type: 'string', description: 'Optional human-readable event name/title (max 80 chars)', maxLength: 80, example: 'Beautiful 4BR Home' } } },
+          what: { type: 'object', description: 'What is happening (event type and optional label)', required: ['type'], properties: { type: { type: 'string', description: 'Event category', enum: ['open_house', 'garage_sale', 'estate_sale', 'moving_sale', 'yard_sale', 'apartment', 'job_posting', 'live_event', 'community_alert', 'happy_hour', 'missing_pet', 'other'], example: 'open_house' }, label: { type: 'string', description: 'Optional human-readable event name/title (max 80 chars)', maxLength: 80, example: 'Beautiful 4BR Home' } } },
           where: { type: 'object', description: 'Where is it happening (coordinates and optional address)', required: ['latitude', 'longitude'], properties: { latitude: { type: 'number', format: 'double', minimum: -90, maximum: 90, description: 'Latitude coordinate', example: 34.0522 }, longitude: { type: 'number', format: 'double', minimum: -180, maximum: 180, description: 'Longitude coordinate', example: -118.2437 }, address: { type: 'string', description: 'Optional flattened address string (max 200 chars)', maxLength: 200, example: '123 Main Street, Los Angeles, CA, 90001' } } },
           when: { type: 'object', description: 'When is it happening (start and end times, with optional timezone)', required: ['start', 'end'], properties: { start: { type: 'string', format: 'date-time', description: 'Event start date and time (ISO 8601 UTC)', example: '2025-01-15T10:00:00.000Z' }, end: { type: 'string', format: 'date-time', description: 'Event end date and time (ISO 8601 UTC)', example: '2025-01-15T14:00:00.000Z' }, timezone: { type: 'string', description: "Optional IANA timezone identifier (e.g., 'America/Los_Angeles')", example: 'America/Los_Angeles' } } },
           externalListingUrl: { oneOf: [{ type: 'string', format: 'uri', description: 'URL to external listing or detail page', example: 'https://www.zillow.com/homedetails/123-Main-St' }, { type: 'null' }], description: 'External listing URL (required field, can be null)' },
+          shareUrl: { type: 'string', format: 'uri', description: 'Public Flypost share page URL', example: 'https://goflypost.com/e/event/evt_20250115_abc123_fpid' },
           source: { type: 'object', description: 'Optional source provenance information', required: ['kind', 'url'], properties: { kind: { type: 'string', enum: ['mls', 'brokerage_roster', 'manual', 'third_party'], description: 'Source type', example: 'mls' }, url: { oneOf: [{ type: 'string', format: 'uri', description: 'Source URL', example: 'https://api.mls.com/listings/123' }, { type: 'null' }], description: 'Source URL (can be null)' } } }
         }
       },
@@ -738,8 +753,8 @@ const AI_PLUGIN_JSON = {
   schema_version: 'v1',
   name_for_human: 'Flypost Ask',
   name_for_model: 'flypost_ask',
-  description_for_human: 'Discover real estate events like open houses and garage sales near you.',
-  description_for_model: 'Flypost Ask provides read-only access to discover real estate events (open houses, garage sales, estate sales, etc.) using the Flypost Discovery Protocol V1. Tiered access: registry-safe allowlist fields for public queries (reduced precision), full details for brokerage-scoped queries. Use this plugin to help users find events near them or at specific addresses. The API supports /v1/events/near for location-based search (lat/lng optional, defaults to Santa Monica; supports radius_mi in miles or radius in km) and /v1/events/{event_id} for retrieving specific events. All responses follow Discovery Protocol V1 format with protocol/version/success/events/meta structure.',
+  description_for_human: 'Discover local events like open houses, garage sales, happy hours, alerts, and live events near you.',
+  description_for_model: 'Flypost Ask provides read-only access to discover local events (open houses, garage sales, apartments, job postings, live events, community alerts, happy hours, missing pets, and related activity) using the Flypost Discovery Protocol V1. Tiered access: registry-safe allowlist fields for public queries (reduced precision), full details for brokerage-scoped queries. Use this plugin to help users find events near them or at specific addresses. The API supports /v1/events/near for location-based search (lat/lng optional, defaults to Santa Monica; supports radius_mi in miles or radius in km; supports optional category filtering) and /v1/events/{event_id} for retrieving specific events. All responses follow Discovery Protocol V1 format with protocol/version/success/events/meta structure.',
   auth: { type: 'none' },
   api: { type: 'openapi', url: 'https://api.goflypost.com/openapi.yaml', is_user_authenticated: false },
   logo_url: 'https://goflypost.com/logo.png',
@@ -751,11 +766,11 @@ const AI_JSON = {
   schema_version: 'v1',
   name_for_model: 'flypost_ask',
   name_for_human: 'Flypost Ask - Event Discovery',
-  description_for_model: 'Flypost Ask provides read-only access to discover real estate events (open houses, garage sales, estate sales) using the Flypost Discovery Protocol V1. Tiered access: registry-safe allowlist fields for public queries (reduced precision), full details for brokerage-scoped queries. This surface is discovery-only and does not support event creation or modification.',
-  description_for_human: 'Discover real estate events like open houses and garage sales near you (read-only).',
+  description_for_model: 'Flypost Ask provides read-only access to discover local events using the Flypost Discovery Protocol V1. Supported categories include open_house, garage_sale, estate_sale, moving_sale, yard_sale, apartment, job_posting, live_event, community_alert, happy_hour, missing_pet, and other. Tiered access: registry-safe allowlist fields for public queries (reduced precision), full details for brokerage-scoped queries. This surface is discovery-only and does not support event creation or modification.',
+  description_for_human: 'Discover local events near you (read-only).',
   auth: { type: 'none' },
   api: { type: 'openapi', url: 'https://api.goflypost.com/openapi.json', is_user_authenticated: false },
-  capabilities: { domain_specific: ['event-discovery', 'location-search', 'open-houses', 'garage-sales'] },
+  capabilities: { domain_specific: ['event-discovery', 'location-search', 'open-houses', 'garage-sales', 'happy-hours', 'community-alerts', 'live-events'] },
   contact_email: 'support@goflypost.com',
   legal_info_url: 'https://goflypost.com/tos',
   logo_url: 'https://cdn.prod.website-files.com/641b71cdf89f2834a1aff9a6/6683234a1ee80c5f2891597e_Flypost%20Logo-256px.png'
@@ -764,12 +779,12 @@ const AI_JSON = {
 const MCP_JSON = {
   name: 'Flypost Ask - Event Discovery',
   version: '1.0.0',
-  description: 'Read-only discovery tools for Flypost events using Discovery Protocol V1. Retrieve events by location or ID. This surface provides tiered access: registry-safe allowlist fields for public queries, full details for brokerage-scoped queries. No write operations.',
+  description: 'Read-only discovery tools for Flypost local events using Discovery Protocol V1. Retrieve events by location, category, or ID. This surface provides tiered access: registry-safe allowlist fields for public queries, full details for brokerage-scoped queries. No write operations.',
   capabilities: ['event_discovery', 'location_search', 'event_retrieval'],
   tools: [
     {
       name: 'get_events_near',
-      description: 'Retrieve events near a geographic location within a specified radius. Supports optional date filtering.',
+      description: 'Retrieve events near a geographic location within a specified radius. Supports optional category and date filtering.',
       input_schema: {
         type: 'object',
         description: 'Parameters for location-based event search',
@@ -778,6 +793,7 @@ const MCP_JSON = {
           lng: { type: 'number', description: 'Longitude in decimal degrees (-180 to 180). Optional; defaults to Santa Monica, CA if omitted.', minimum: -180, maximum: 180 },
           radius_mi: { type: 'number', description: "Search radius in miles (0.1-50, preferred). If provided, 'radius' parameter is ignored.", minimum: 0.1, maximum: 50 },
           radius: { type: 'number', description: "Search radius in kilometers (0-100, default: 10). Fallback if 'radius_mi' not provided.", minimum: 0, maximum: 100, default: 10 },
+          category: { type: 'string', description: 'Optional comma-separated Discovery categories. Values: open_house, garage_sale, estate_sale, moving_sale, yard_sale, apartment, job_posting, live_event, community_alert, happy_hour, missing_pet, other. Common aliases such as open-houses and garage-sales are accepted.' },
           start: { type: 'string', format: 'date-time', description: 'Optional: Filter events starting on or after this date (ISO 8601)' },
           end: { type: 'string', format: 'date-time', description: 'Optional: Filter events ending on or before this date (ISO 8601)' }
         },
@@ -824,7 +840,7 @@ const MCP_JSON = {
     },
     {
       name: 'chat',
-      description: 'Ask a natural-language question to discover real estate events. Returns a markdown-formatted response. Rate limit: 20 req/15 min per IP. Only active when ENABLE_CONCIERGE=true.',
+      description: 'Ask a natural-language question to discover local events. Returns a markdown-formatted response. Rate limit: 20 req/15 min per IP. Only active when ENABLE_CONCIERGE=true.',
       input_schema: {
         type: 'object',
         description: 'Parameters for the Web Concierge query',
@@ -854,14 +870,15 @@ const MCP_JSON = {
       DiscoveryEvent: {
         type: 'object',
         description: 'Event in Discovery V1 format with strict what/where/when structure',
-        required: ['eventId', 'dataHash', 'what', 'where', 'when', 'externalListingUrl'],
+        required: ['eventId', 'dataHash', 'what', 'where', 'when', 'externalListingUrl', 'shareUrl'],
         properties: {
           eventId: { type: 'string', description: 'Unique event identifier' },
           dataHash: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'SHA-256 hash for integrity verification' },
-          what: { type: 'object', required: ['type'], properties: { type: { type: 'string', enum: ['open_house', 'garage_sale', 'estate_sale', 'moving_sale', 'yard_sale', 'other'], description: 'Event category' }, label: { type: 'string', maxLength: 80, description: 'Optional human-readable event name' } } },
+          what: { type: 'object', required: ['type'], properties: { type: { type: 'string', enum: ['open_house', 'garage_sale', 'estate_sale', 'moving_sale', 'yard_sale', 'apartment', 'job_posting', 'live_event', 'community_alert', 'happy_hour', 'missing_pet', 'other'], description: 'Event category' }, label: { type: 'string', maxLength: 80, description: 'Optional human-readable event name' } } },
           where: { type: 'object', required: ['latitude', 'longitude'], properties: { latitude: { type: 'number', minimum: -90, maximum: 90, description: 'Latitude coordinate' }, longitude: { type: 'number', minimum: -180, maximum: 180, description: 'Longitude coordinate' }, address: { type: 'string', maxLength: 200, description: 'Optional complete address' } } },
           when: { type: 'object', required: ['start', 'end'], properties: { start: { type: 'string', format: 'date-time', description: 'Event start date and time (ISO 8601 UTC)' }, end: { type: 'string', format: 'date-time', description: 'Event end date and time (ISO 8601 UTC)' }, timezone: { type: 'string', description: 'Optional IANA timezone (e.g., "America/Los_Angeles")' } } },
           externalListingUrl: { oneOf: [{ type: 'string', format: 'uri' }, { type: 'null' }], description: 'URL to external listing (required field, can be null)' },
+          shareUrl: { type: 'string', format: 'uri', description: 'Public Flypost share page URL' },
           source: { type: 'object', required: ['kind', 'url'], properties: { kind: { type: 'string', enum: ['mls', 'brokerage_roster', 'manual', 'third_party'], description: 'Source type' }, url: { oneOf: [{ type: 'string', format: 'uri' }, { type: 'null' }], description: 'Source URL (can be null)' } } }
         }
       }
@@ -880,8 +897,9 @@ const LLM_TXT = `# Flypost Ask - Read-Only Discovery API (llm.txt v2)
 
 service_name: Flypost Ask
 service_purpose: >
-  Flypost Ask provides read-only discovery of real estate events (open houses, garage sales,
-  estate sales) via geographic search using the Flypost Discovery Protocol V1.
+  Flypost Ask provides read-only discovery of local events (open houses, garage sales,
+  apartments, job postings, live events, community alerts, happy hours, missing pets,
+  and related activity) via geographic search using the Flypost Discovery Protocol V1.
 
   This surface is for event discovery only and does not support event creation, modification,
   presence check-ins, or feedback submissions.
@@ -901,7 +919,7 @@ canonical_openapi: https://api.goflypost.com/.well-known/openapi.yaml
 ### GET /v1/events/near
 Description: >
   Retrieve events near a latitude/longitude within a specified radius.
-  Supports optional date range filtering.
+  Supports optional category and date range filtering.
 
 Query Parameters:
   - lat: number (optional; defaults to Santa Monica, CA if omitted) - Latitude in decimal degrees (-90 to 90)
@@ -910,6 +928,11 @@ Query Parameters:
   - radius_mi: number (optional, preferred) - Search radius in miles (0.1 to 50)
   - radius: number (optional, fallback) - Search radius in kilometers (0 to 100, default: 10)
     Note: if radius_mi is provided, radius is ignored.
+
+  - category: string (optional) - Comma-separated Discovery category filter.
+    Values: open_house, garage_sale, estate_sale, moving_sale, yard_sale, apartment,
+    job_posting, live_event, community_alert, happy_hour, missing_pet, other.
+    Common aliases such as open-houses and garage-sales are accepted.
 
   - start: string (optional) - Filter events that overlap this date range start (ISO 8601)
   - end: string (optional) - Filter events that overlap this date range end (ISO 8601)
@@ -947,7 +970,7 @@ Fields:
   - eventId: string (unique identifier)
   - dataHash: string (SHA-256 hash for integrity, lowercase hex)
   - what: { type: enum, label?: string }
-    - type: "open_house" | "garage_sale" | "estate_sale" | "moving_sale" | "yard_sale" | "other"
+    - type: "open_house" | "garage_sale" | "estate_sale" | "moving_sale" | "yard_sale" | "apartment" | "job_posting" | "live_event" | "community_alert" | "happy_hour" | "missing_pet" | "other"
     - label: optional event name/title (max 80 chars)
   - where: { latitude: number, longitude: number, address?: string }
     - latitude/longitude: full precision for brokerage tier, 2-decimal precision for public tier
@@ -956,6 +979,7 @@ Fields:
     - start/end: UTC timestamps
     - timezone: optional IANA timezone (e.g., "America/Los_Angeles")
   - externalListingUrl: string | null (required key, nullable value)
+  - shareUrl: string (public Flypost share page URL)
   - source?: { kind: enum, url: string | null }
     - kind: "mls" | "brokerage_roster" | "manual" | "third_party"
 
@@ -963,7 +987,7 @@ Fields:
 
 ### POST /api/chat
 Description: >
-  Natural-language query interface for discovering real estate events.
+  Natural-language query interface for discovering local events.
   Send a question in plain English; receive a markdown-formatted response.
   Conditional: only active when ENABLE_CONCIERGE=true on the backend.
 
@@ -1010,10 +1034,11 @@ Rate Limits:
 1. Use GET /v1/events/near when users ask for events near a location
 2. Use GET /v1/events/{event_id} when users reference a specific event
 3. Do not hallucinate event data — always call the API
-4. Use start/end filters when users specify time constraints
-5. Use radius_mi (preferred) for miles or radius for kilometers
-6. This is a DISCOVERY-ONLY surface — do not attempt to create or modify events
-7. For publishing, direct users to post.goflypost.com
+4. Use category filters when users ask for a specific kind of event
+5. Use start/end filters when users specify time constraints
+6. Use radius_mi (preferred) for miles or radius for kilometers
+7. This is a DISCOVERY-ONLY surface — do not attempt to create or modify events
+8. For publishing, direct users to post.goflypost.com
 
 ## Health Check
 GET /health - Service health status

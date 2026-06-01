@@ -1,16 +1,26 @@
-# Flypost v4 - Minimal Core
+# Flypost v4 - LLM-Citeable Local Events Layer
 
 ## Overview
 
-Flypost v4 represents a minimal, machine-to-machine event ingestion and query system. This version focuses on the essential supply, normalize schema, and retrieval loop for LLM-driven use cases.
+Flypost is an open, machine-readable registry for hyperlocal events. The core product is not a consumer feed or another events app; it is the citeable data layer an LLM can call when a user asks, "what is happening near me?"
+
+The current system focuses on three primitives:
+
+- Ingest local event supply from natural language or structured JSON.
+- Normalize it into a stable Schema.org/Flypost event model with hashes, geo, time, and category metadata.
+- Expose public Discovery V1 endpoints and share pages that assistants, search engines, and crawlers can cite.
+
+The thesis is simple: if assistants can reliably discover and cite Flypost records, one good LLM recommendation can outperform a large consumer app download funnel.
 
 ## Architecture
 
-- **Backend**: Minimal Express.js server with 3 endpoints
-- **Frontend**: Simple HTML interface with textarea input
+- **Backend**: Express.js API for event ingestion, discovery, share pages, presence, feedback, and machine-readable specs
+- **Proxy**: Cloud Run proxy that fronts public discovery, write authentication, crawler files, and OpenAPI/LLM discovery documents
+- **Discovery Protocol**: Public `flypost-discovery` v1 response shape with strict `what`, `where`, `when`, `eventId`, `dataHash`, and share URL fields
 - **Storage**: Hybrid in-memory + Firestore persistence
 - **AI**: Enhanced OpenAI GPT-4 parser with improved prompts and validation
 - **Integrity**: SHA-256 hashing for event data verification and future DLT anchoring
+- **Public citation**: `/e/{slug}/{fpid}` share pages emit Open Graph/Twitter metadata and schema.org `Event` JSON-LD
 
 ### Enhanced Parsing Logic (v3)
 
@@ -27,30 +37,54 @@ See [`backend/ENHANCED_PARSING.md`](backend/ENHANCED_PARSING.md) for detailed do
 
 - `GET /health` - Health check
 - `POST /api/parse-and-publish` - Parse natural language and store event
-- `GET /v1/events/near` - Retrieve stored events (naive filter)
+- `POST /v1/events/upsert` - Publish or update a structured event object
+- `GET /v1/events/near` - Discover events near a coordinate, with optional radius, time, brokerage, and category filters
+- `GET /v1/events/{event_id}` - Retrieve one event in Discovery V1 format
+- `GET /e/{slug}/{fpid}` - Public citeable event share page with JSON-LD
+- `GET /openapi.json`, `GET /llms.txt`, `GET /.well-known/openapi.json` - Machine-readable discovery surfaces
+
+`GET /v1/events/near` supports `category` as a comma-separated filter. Public category values are:
+
+```text
+open_house, garage_sale, estate_sale, moving_sale, yard_sale,
+apartment, job_posting, live_event, community_alert, happy_hour,
+missing_pet, other
+```
+
+Common storage/input aliases such as `open-houses`, `garage-sales`, and `happy-hours` are accepted and normalized.
 
 ## Quick Start
 
 ```bash
 # Backend
-cd v4/backend
+cd backend
 npm install
 npm start
 
-# Frontend
-cd v4/frontend
+# Proxy
+cd proxy
 npm install
-npm run dev
+npm start
 ```
 
 ## Event Model
 
-Events follow a minimal JSON-LD schema based on Schema.org with Flypost extensions. Each event includes:
-- Schema.org Event structure with location, organizer, dates
-- Flypost metadata (eventId, category, timestamps)
-- SHA-256 hash for integrity verification and future DLT anchoring
+Events follow a JSON-LD schema based on Schema.org `Event` with Flypost extensions. Each stored event includes:
 
-See `docs/event-model.md` for complete details.
+- Schema.org Event structure with location, organizer, dates
+- Flypost metadata (`eventId`, category, crawl/query flags, timestamps)
+- SHA-256 hash for integrity verification and future DLT anchoring
+- Optional occurrences for multi-slot events
+- Optional category-specific fields such as listing price
+
+Storage categories use the Flypost v4 schema values:
+
+```text
+apartments, garage-sales, open-houses, job-postings,
+live-events, community-alerts, happy-hours, missing-pets
+```
+
+Discovery responses expose normalized public categories under `what.type`.
 
 ### Organizer Fields (v4.0.1)
 
@@ -72,6 +106,18 @@ Events are stored in a hybrid system:
 - **Firestore**: Persistent cloud storage (optional, configured via environment variables)
 
 To enable Firestore, set `GOOGLE_CLOUD_PROJECT` in your `.env` file. The backend will use Application Default Credentials (ADC) for authentication.
+
+## Discovery and Citability
+
+Discovery V1 is the public M2M contract. It intentionally returns a safe projection of stored events:
+
+- `what`: event category and optional human label
+- `where`: coordinates and optional address
+- `when`: start/end timestamps and optional timezone
+- `eventId`, `dataHash`, `externalListingUrl`, `shareUrl`
+- optional source and occurrences metadata
+
+Public share pages are designed to be citeable by search and assistant systems. They expose canonical URLs, social metadata, and schema.org `Event` JSON-LD. Root and `.well-known` OpenAPI/LLM documents describe the same read-only discovery surface.
 
 ## Web Concierge (Optional Feature)
 
@@ -100,4 +146,4 @@ See [`concierge/README.md`](concierge/README.md) for complete documentation, API
 
 ## Development Status
 
-This is an MVP implementation with Firestore persistence and cryptographic hashing, supporting the core parse → publish → query loop.
+This is an MVP implementation with Firestore persistence and cryptographic hashing, supporting the core ingest -> normalize -> discover -> cite loop. Consumer PWA surfaces, MCP server work, and richer distribution products are separate layers on top of this primitive.

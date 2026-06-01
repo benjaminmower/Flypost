@@ -3,7 +3,7 @@
   "info": {
     "title": "Flypost API",
     "version": "1.0.0",
-    "description": "Flypost is an open-house and local-event registry. Publish events from natural language, discover nearby open houses by location, verify buyer attendance, and collect post-visit feedback."
+    "description": "Flypost is an open, machine-readable registry of local events. Publish events from natural language, discover nearby events by location, verify attendance, and collect post-visit feedback."
   },
   "servers": [
     { "url": "https://api.goflypost.com", "description": "Production" }
@@ -81,11 +81,77 @@
             "type": "object",
             "properties": {
               "eventId": { "type": "string" },
+              "category": {
+                "type": "string",
+                "enum": ["apartments", "garage-sales", "open-houses", "job-postings", "live-events", "community-alerts", "happy-hours", "missing-pets"]
+              },
               "brokerageId": { "type": "string" },
               "listPrice": { "type": "number" },
               "listPriceDisplay": { "type": "string" },
               "updateCount": { "type": "integer" }
             }
+          }
+        }
+      },
+      "DiscoveryCategory": {
+        "type": "string",
+        "enum": ["open_house", "garage_sale", "estate_sale", "moving_sale", "yard_sale", "apartment", "job_posting", "live_event", "community_alert", "happy_hour", "missing_pet", "other"]
+      },
+      "DiscoveryEvent": {
+        "type": "object",
+        "required": ["eventId", "dataHash", "what", "where", "when", "externalListingUrl", "shareUrl"],
+        "properties": {
+          "eventId": { "type": "string" },
+          "dataHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "what": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": { "$ref": "#/components/schemas/DiscoveryCategory" },
+              "label": { "type": "string", "maxLength": 80 }
+            }
+          },
+          "where": {
+            "type": "object",
+            "required": ["latitude", "longitude"],
+            "properties": {
+              "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+              "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+              "address": { "type": "string", "maxLength": 200 }
+            }
+          },
+          "when": {
+            "type": "object",
+            "required": ["start", "end"],
+            "properties": {
+              "start": { "type": "string", "format": "date-time" },
+              "end": { "type": "string", "format": "date-time" },
+              "timezone": { "type": "string" }
+            }
+          },
+          "externalListingUrl": {
+            "oneOf": [
+              { "type": "string", "format": "uri" },
+              { "type": "null" }
+            ]
+          },
+          "shareUrl": { "type": "string", "format": "uri" },
+          "source": {
+            "type": "object",
+            "required": ["kind", "url"],
+            "properties": {
+              "kind": { "type": "string", "enum": ["mls", "brokerage_roster", "manual", "third_party"] },
+              "url": {
+                "oneOf": [
+                  { "type": "string", "format": "uri" },
+                  { "type": "null" }
+                ]
+              }
+            }
+          },
+          "occurrences": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Occurrence" }
           }
         }
       },
@@ -95,7 +161,7 @@
           "protocol": { "type": "string", "example": "flypost-discovery" },
           "version": { "type": "string", "example": "v1" },
           "success": { "type": "boolean" },
-          "events": { "type": "array", "items": { "$ref": "#/components/schemas/Event" } },
+          "events": { "type": "array", "items": { "$ref": "#/components/schemas/DiscoveryEvent" } },
           "meta": {
             "type": "object",
             "properties": {
@@ -123,6 +189,7 @@
           { "name": "lat", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Latitude (decimal degrees)." },
           { "name": "lng", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Longitude (decimal degrees)." },
           { "name": "radius_mi", "in": "query", "schema": { "type": "number", "minimum": 0.1, "maximum": 50, "default": 6.2 }, "description": "Search radius in miles." },
+          { "name": "category", "in": "query", "schema": { "type": "string" }, "description": "Optional comma-separated Discovery categories. Supported values: open_house, garage_sale, estate_sale, moving_sale, yard_sale, apartment, job_posting, live_event, community_alert, happy_hour, missing_pet, other. Common aliases such as open-houses and garage-sales are accepted." },
           { "name": "start", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "Filter: events starting after this ISO timestamp." },
           { "name": "end", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "Filter: events starting before this ISO timestamp." },
           { "name": "brokerageId", "in": "query", "schema": { "type": "string" }, "description": "Filter by brokerage tenant." },

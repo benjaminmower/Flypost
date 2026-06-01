@@ -51,12 +51,34 @@ app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known'
 app.use((req, res, next) => {
   const path = (req.path || '').toLowerCase();
 
-  // robots.txt: block crawlers from API routes but allow discovery files
+  // robots.txt: allow public discovery/share/spec surfaces; keep write/truth surfaces out of crawler scope.
   if (req.method === 'GET' && path === '/robots.txt') {
     res.set('Content-Type', 'text/plain; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=86400');
     return res.status(200).send(
-      ['User-agent: *', 'Disallow: /', 'Allow: /llms.txt', 'Allow: /openapi.json', 'Allow: /.well-known/', ''].join('\n'),
+      [
+        'User-agent: GPTBot',
+        'User-agent: ClaudeBot',
+        'User-agent: Claude-Web',
+        'User-agent: PerplexityBot',
+        'User-agent: CCBot',
+        'User-agent: Bingbot',
+        'User-agent: Googlebot',
+        'User-agent: Google-Extended',
+        'User-agent: *',
+        'Allow: /v1/events/near',
+        'Allow: /v1/events/',
+        'Allow: /e/',
+        'Allow: /llms.txt',
+        'Allow: /openapi.json',
+        'Allow: /.well-known/',
+        'Disallow: /api/',
+        'Disallow: /v1/events/upsert',
+        'Disallow: /v1/presence/',
+        'Disallow: /v1/feedback/',
+        'Disallow: /v1/tokens/',
+        ''
+      ].join('\n'),
     );
   }
 
@@ -68,15 +90,17 @@ app.use((req, res, next) => {
       [
         '# Flypost API',
         '',
-        '> Flypost is an open-house and local-event registry. Use this API to discover nearby open houses by location, publish events from natural language, verify buyer attendance, and collect post-visit feedback.',
+        '> Flypost is an open, machine-readable registry of local events. Use this API to discover nearby open houses, garage sales, apartments, job postings, live events, community alerts, happy hours, missing pets, and related local activity by location and time.',
         '',
         'Base URL: https://api.goflypost.com',
         'OpenAPI spec: https://api.goflypost.com/openapi.json',
+        'Canonical well-known spec: https://api.goflypost.com/.well-known/openapi.json',
         '',
         '## Public endpoints (no auth required)',
         '',
-        '- GET /v1/events/near?lat=&lng=&radius_mi=: Discover open houses and events near a coordinate. Returns name, dates, address, organizer, and listing URL.',
-        '- GET /v1/events/:event_id: Fetch a single event by its Flypost ID.',
+        '- GET /v1/events/near?lat=&lng=&radius_mi=&category=: Discover events near a coordinate. Optional category accepts comma-separated public category values.',
+        '- Public categories: open_house, garage_sale, estate_sale, moving_sale, yard_sale, apartment, job_posting, live_event, community_alert, happy_hour, missing_pet, other.',
+        '- GET /v1/events/:event_id: Fetch a single event by its Flypost ID in Discovery Protocol V1 format.',
         '- Events may contain an occurrences[] array for multi-slot events with fields: occurrenceId, startDate, endDate, label, local.date, local.startTime, local.endTime.',
         '- POST /api/chat: Web Concierge — ask a natural-language question about nearby events. Pass { message, lat, lng, conversationHistory? }. Returns { success, message (markdown), timestamp }. Conditional on ENABLE_CONCIERGE=true.',
         '- POST /api/chat/stream: SSE streaming version of Web Concierge. Same request body. Returns text/event-stream with events: {"type":"connected"}, {"type":"token","content":"..."}, {"type":"done","duration":ms}, {"type":"error","message":"..."}. Conditional on ENABLE_CONCIERGE=true.',
@@ -86,7 +110,7 @@ app.use((req, res, next) => {
         '',
         '## Authenticated endpoints',
         '',
-        'Pass your write token in the x-flypost-write-token header, or a Firebase ID token as Bearer.',
+        'Pass your write token in the x-flypost-write-token header, or a Firebase ID token as Bearer. These endpoints are not anonymous crawler surfaces.',
         '',
         '- POST /api/parse-and-publish: Publish an event from free-text (Instagram caption, MLS note, etc.). Pass { naturalLanguageInput }.',
         '- POST /v1/events/upsert: Publish or update a structured event object.',
@@ -202,6 +226,7 @@ app.get('/v1/events/:event_id', forward);
 app.get('/e/:slug/:fpid/calendar.ics', forward); // Calendar download (public, no auth)
 app.get('/e/:slug/:fpid', forward);
 app.post('/api/parse-and-publish', forward);
+app.post('/v1/events/upsert', forward);
 app.use('/api', forward);
 
 // Forward explicit endpoints

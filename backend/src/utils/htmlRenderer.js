@@ -1,4 +1,5 @@
 import { generateShareUrl, validateExternalUrl } from './shareUrl.js'
+import { normalizeCategory } from './discoveryMapper.js'
 
 /**
  * Escape HTML to prevent XSS
@@ -13,6 +14,34 @@ export function escapeHtml(text) {
     .replace(/'/g, '&#039;')
 }
 
+function escapeJsonLdScript(json) {
+  return json
+    .replace(/</g, '\\u003C')
+    .replace(/>/g, '\\u003E')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+}
+
+function getCategoryLabel(category) {
+  const labels = {
+    open_house: 'Open house',
+    garage_sale: 'Garage sale',
+    estate_sale: 'Estate sale',
+    moving_sale: 'Moving sale',
+    yard_sale: 'Yard sale',
+    apartment: 'Apartment listing',
+    job_posting: 'Job posting',
+    live_event: 'Live event',
+    community_alert: 'Community alert',
+    happy_hour: 'Happy hour',
+    missing_pet: 'Missing pet',
+    other: 'Event'
+  }
+
+  return labels[category] || 'Event'
+}
+
 /**
  * Render share page HTML with Open Graph tags
  */
@@ -21,6 +50,8 @@ export function renderSharePageHtml(event) {
   const eventName = event.name || 'Event'
   const eventId = event.flypost?.eventId || event.id || 'unknown'
   const shareUrl = generateShareUrl(event) || `https://goflypost.com`
+  const normalizedCategory = normalizeCategory(event.flypost?.category)
+  const categoryLabel = getCategoryLabel(normalizedCategory)
 
   // Extract and validate external listing URL
   let externalUrl = event.url || event.flypost?.externalUrl || event.flypost?.url
@@ -82,12 +113,14 @@ export function renderSharePageHtml(event) {
   // Extract address
   const address = event.location?.address
   let formattedAddress = ''
-  if (address) {
+  if (address && typeof address === 'object') {
     const parts = []
     if (address.streetAddress) parts.push(address.streetAddress)
     if (address.addressLocality) parts.push(address.addressLocality)
     if (address.addressRegion) parts.push(address.addressRegion)
     formattedAddress = parts.join(', ')
+  } else if (typeof address === 'string') {
+    formattedAddress = address.trim()
   }
 
   // Generate concise description for OG tags (optimized for social media)
@@ -95,10 +128,10 @@ export function renderSharePageHtml(event) {
   if (ogSlot) {
     ogDescription = ogSlot
     if (formattedAddress) {
-      ogDescription += ` • Open house at ${formattedAddress}. Explore this beautiful property in person.`
+      ogDescription += ` • ${categoryLabel} at ${formattedAddress}.`
     }
   } else if (formattedAddress) {
-    ogDescription = `Open house at ${formattedAddress}`
+    ogDescription = `${categoryLabel} at ${formattedAddress}`
   }
 
   // Get image URL (if available)
@@ -112,6 +145,53 @@ export function renderSharePageHtml(event) {
   const safeImageUrl = escapeHtml(imageUrl)
   const safeAddress = escapeHtml(formattedAddress)
   const safeSlots = slotStrings.map(s => escapeHtml(s))
+
+  const jsonLdLocation = {
+    '@type': 'Place'
+  }
+
+  if (event.location?.name) {
+    jsonLdLocation.name = event.location.name
+  } else if (formattedAddress) {
+    jsonLdLocation.name = formattedAddress
+  }
+
+  if (event.location?.geo?.latitude !== undefined && event.location?.geo?.longitude !== undefined) {
+    jsonLdLocation.geo = {
+      '@type': 'GeoCoordinates',
+      latitude: event.location.geo.latitude,
+      longitude: event.location.geo.longitude
+    }
+  }
+
+  if (address && typeof address === 'object') {
+    jsonLdLocation.address = {
+      '@type': 'PostalAddress',
+      ...(address.streetAddress ? { streetAddress: address.streetAddress } : {}),
+      ...(address.addressLocality ? { addressLocality: address.addressLocality } : {}),
+      ...(address.addressRegion ? { addressRegion: address.addressRegion } : {}),
+      ...(address.postalCode ? { postalCode: address.postalCode } : {}),
+      ...(address.addressCountry ? { addressCountry: address.addressCountry } : {})
+    }
+  } else if (typeof address === 'string' && address.trim()) {
+    jsonLdLocation.address = address.trim()
+  }
+
+  const jsonLdEvent = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: eventName,
+    description: description || ogDescription || 'View event details',
+    url: shareUrl,
+    eventStatus: 'https://schema.org/EventScheduled',
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    ...(event.startDate ? { startDate: event.startDate } : {}),
+    ...(event.endDate ? { endDate: event.endDate } : {}),
+    ...(imageUrl ? { image: [imageUrl] } : {}),
+    ...(Object.keys(jsonLdLocation).length > 1 ? { location: jsonLdLocation } : {})
+  }
+
+  const safeJsonLd = escapeJsonLdScript(JSON.stringify(jsonLdEvent))
 
   // Generate calendar download URL
   const slug = shareUrl.split('/').slice(-2, -1)[0] || 'event'
@@ -191,6 +271,8 @@ export function renderSharePageHtml(event) {
   <meta name="twitter:title" content="${safeTitle}">
   <meta name="twitter:description" content="${safeOgDescription}">
   <meta name="twitter:image" content="${safeImageUrl}">
+
+  <script type="application/ld+json">${safeJsonLd}</script>
 
   <style>
     * {

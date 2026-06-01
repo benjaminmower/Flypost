@@ -1,7 +1,13 @@
 import express from 'express'
 import { getEventsNear, getEventByIdAny } from '../storage.js'
 import { isFirestoreEnabled } from '../firestoreClient.js'
-import { toDiscoveryEventsV1, toDiscoveryEventV1 } from '../utils/discoveryMapper.js'
+import {
+  normalizeCategory,
+  normalizeCategoryForFilter,
+  toDiscoveryEventsV1,
+  toDiscoveryEventV1,
+  VALID_DISCOVERY_CATEGORIES
+} from '../utils/discoveryMapper.js'
 import { sanitizeDiscoveryResponse } from '../utils/sanitizer.js'
 import {
   getAccessTier,
@@ -88,8 +94,45 @@ router.get('/near', applyTieredRateLimit, async (req, res) => {
     const startFilter = req.query.start ? new Date(req.query.start) : new Date()
     const endFilter = req.query.end ? new Date(req.query.end) : null
 
+    const rawCategoryParam = req.query.category
+    let categoryFilters = null
+    if (rawCategoryParam != null && rawCategoryParam !== '') {
+      const rawCategories = (Array.isArray(rawCategoryParam)
+        ? rawCategoryParam
+        : [rawCategoryParam]
+      )
+        .flatMap(value => String(value).split(','))
+        .map(value => value.trim())
+        .filter(Boolean)
+
+      if (rawCategories.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid category: category must include at least one value',
+          allowedCategories: VALID_DISCOVERY_CATEGORIES
+        })
+      }
+
+      const invalidCategories = []
+      const normalizedCategories = rawCategories.map(value => {
+        const normalized = normalizeCategoryForFilter(value)
+        if (!normalized) invalidCategories.push(value)
+        return normalized
+      })
+
+      if (invalidCategories.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid category: ${invalidCategories.join(', ')}`,
+          allowedCategories: VALID_DISCOVERY_CATEGORIES
+        })
+      }
+
+      categoryFilters = new Set(normalizedCategories)
+    }
+
     console.log(
-      `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${req.path} lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radiusKm.toFixed(4)}km (brokerageId=${brokerageId || 'ALL'}, tier=${accessTier}, dateRange=${startFilter ? startFilter.toISOString() : 'none'} to ${endFilter ? endFilter.toISOString() : 'none'})`
+      `📋 Discovery V1: GET ${req.protocol}://${req.get('host')}${req.path} lat=${latitude.toFixed(4)} lng=${longitude.toFixed(4)} radius=${radiusKm.toFixed(4)}km (brokerageId=${brokerageId || 'ALL'}, tier=${accessTier}, categories=${categoryFilters ? Array.from(categoryFilters).join(',') : 'ALL'}, dateRange=${startFilter ? startFilter.toISOString() : 'none'} to ${endFilter ? endFilter.toISOString() : 'none'})`
     )
 
     const events = await getEventsNear(latitude, longitude, radiusKm, useFirestore)
@@ -102,6 +145,13 @@ router.get('/near', applyTieredRateLimit, async (req, res) => {
           ev?.brokerageId === brokerageId ||
           ev?.flypost?.brokerageId === brokerageId
       )
+    }
+
+    if (categoryFilters) {
+      filteredEvents = filteredEvents.filter(ev => {
+        const category = normalizeCategory(ev?.flypost?.category)
+        return categoryFilters.has(category)
+      })
     }
 
     // Date range filtering

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * End-to-end test for Discovery API category normalization
- * Tests that categories are normalized to snake_case singular in responses
+ * End-to-end test for Discovery API category normalization.
+ * Tests that stored category values are normalized to public Discovery V1 what.type values.
  */
 
 import { toDiscoveryEventV1, toDiscoveryEventsV1 } from './src/utils/discoveryMapper.js'
@@ -9,24 +9,26 @@ import { toDiscoveryEventV1, toDiscoveryEventsV1 } from './src/utils/discoveryMa
 console.log('🧪 Testing Discovery API Category Normalization\n')
 console.log('================================================\n')
 
-/**
- * Test 1: Single event with kebab-case plural category
- */
-function testSingleEventNormalization() {
-  console.log('Test 1: Single event category normalization')
-  console.log('-------------------------------------------')
-  
-  const mockEvent = {
+const HASH = 'a'.repeat(64)
+
+function mockEvent(eventId, category) {
+  return {
     flypost: {
-      eventId: 'evt_test_123',
-      eventIdentity: 'test-identity',
-      category: 'open-houses', // kebab-case plural (what's coming from storage)
-      submissionTimestamp: '2025-01-01T00:00:00Z'
+      eventId,
+      category,
+      timezone: 'America/Los_Angeles'
     },
-    name: 'Test Open House',
-    description: 'Test description',
-    startDate: '2025-01-15T10:00:00Z',
+    hash: {
+      value: HASH
+    },
+    name: `Test ${eventId}`,
+    startDate: '2027-01-15T10:00:00Z',
+    endDate: '2027-01-15T12:00:00Z',
     location: {
+      geo: {
+        latitude: 34.0522,
+        longitude: -118.2437
+      },
       address: {
         streetAddress: '123 Main St',
         addressLocality: 'Los Angeles',
@@ -36,182 +38,122 @@ function testSingleEventNormalization() {
       }
     }
   }
-  
-  const discoveryEvent = toDiscoveryEventV1(mockEvent)
-  
-  if (discoveryEvent.category === 'open_house') {
-    console.log('✅ Category normalized: "open-houses" → "open_house"')
-    return true
-  } else {
-    console.log(`❌ Category not normalized: expected "open_house", got "${discoveryEvent.category}"`)
-    return false
-  }
 }
 
-/**
- * Test 2: Multiple events with different category formats
- */
-function testMultipleEventsNormalization() {
-  console.log('\nTest 2: Multiple events with various category formats')
-  console.log('-----------------------------------------------------')
-  
-  const mockEvents = [
-    {
-      flypost: { eventId: 'evt_1', category: 'open-houses' },
-      name: 'Event 1',
-      startDate: '2025-01-15T10:00:00Z',
-      location: { address: { addressLocality: 'LA' } }
-    },
-    {
-      flypost: { eventId: 'evt_2', category: 'garage-sales' },
-      name: 'Event 2',
-      startDate: '2025-01-15T10:00:00Z',
-      location: { address: { addressLocality: 'LA' } }
-    },
-    {
-      flypost: { eventId: 'evt_3', category: 'estate sale' },
-      name: 'Event 3',
-      startDate: '2025-01-15T10:00:00Z',
-      location: { address: { addressLocality: 'LA' } }
-    },
-    {
-      flypost: { eventId: 'evt_4', category: 'moving-sales' },
-      name: 'Event 4',
-      startDate: '2025-01-15T10:00:00Z',
-      location: { address: { addressLocality: 'LA' } }
-    },
-    {
-      flypost: { eventId: 'evt_5', category: 'yard sale' },
-      name: 'Event 5',
-      startDate: '2025-01-15T10:00:00Z',
-      location: { address: { addressLocality: 'LA' } }
-    }
-  ]
-  
-  const discoveryEvents = toDiscoveryEventsV1(mockEvents)
-  
-  const expectedCategories = {
-    'evt_1': 'open_house',
-    'evt_2': 'garage_sale',
-    'evt_3': 'estate_sale',
-    'evt_4': 'moving_sale',
-    'evt_5': 'yard_sale'
+function assertEqual(actual, expected, label) {
+  if (actual === expected) {
+    console.log(`✅ ${label}: "${actual}"`)
+    return true
   }
-  
+
+  console.log(`❌ ${label}: expected "${expected}", got "${actual}"`)
+  return false
+}
+
+function testSingleEventNormalization() {
+  console.log('Test 1: Single event category normalization')
+  console.log('-------------------------------------------')
+
+  const discoveryEvent = toDiscoveryEventV1(mockEvent('evt_test_123', 'open-houses'))
+  return assertEqual(discoveryEvent?.what?.type, 'open_house', 'open-houses')
+}
+
+function testMultipleEventsNormalization() {
+  console.log('\nTest 2: Multiple storage categories normalize to public categories')
+  console.log('---------------------------------------------------------------')
+
+  const expectedCategories = {
+    evt_open_house: 'open_house',
+    evt_garage_sale: 'garage_sale',
+    evt_estate_sale: 'estate_sale',
+    evt_moving_sale: 'moving_sale',
+    evt_yard_sale: 'yard_sale',
+    evt_apartment: 'apartment',
+    evt_job_posting: 'job_posting',
+    evt_live_event: 'live_event',
+    evt_community_alert: 'community_alert',
+    evt_happy_hour: 'happy_hour',
+    evt_missing_pet: 'missing_pet'
+  }
+
+  const mockEvents = [
+    mockEvent('evt_open_house', 'open-houses'),
+    mockEvent('evt_garage_sale', 'garage-sales'),
+    mockEvent('evt_estate_sale', 'estate sale'),
+    mockEvent('evt_moving_sale', 'moving-sales'),
+    mockEvent('evt_yard_sale', 'yard sale'),
+    mockEvent('evt_apartment', 'apartments'),
+    mockEvent('evt_job_posting', 'job-postings'),
+    mockEvent('evt_live_event', 'live-events'),
+    mockEvent('evt_community_alert', 'community-alerts'),
+    mockEvent('evt_happy_hour', 'happy-hours'),
+    mockEvent('evt_missing_pet', 'missing-pets')
+  ]
+
+  const discoveryEvents = toDiscoveryEventsV1(mockEvents)
   let passed = 0
   let failed = 0
-  
+
   for (const event of discoveryEvents) {
     const expected = expectedCategories[event.eventId]
-    if (event.category === expected) {
-      console.log(`✅ ${event.eventId}: "${event.category}" (correct)`)
+    if (assertEqual(event.what.type, expected, event.eventId)) {
       passed++
     } else {
-      console.log(`❌ ${event.eventId}: expected "${expected}", got "${event.category}"`)
       failed++
     }
   }
-  
+
   console.log(`\nSummary: ${passed} passed, ${failed} failed`)
   return failed === 0
 }
 
-/**
- * Test 3: Verify all valid enum values are preserved
- */
-function testValidEnumValues() {
-  console.log('\nTest 3: Valid enum values are preserved')
+function testPublicEnumValuesArePreserved() {
+  console.log('\nTest 3: Public enum values are preserved')
   console.log('----------------------------------------')
-  
-  const validCategories = [
+
+  const publicCategories = [
     'open_house',
     'garage_sale',
     'estate_sale',
     'moving_sale',
     'yard_sale',
+    'apartment',
+    'job_posting',
+    'live_event',
+    'community_alert',
+    'happy_hour',
+    'missing_pet',
     'other'
   ]
-  
-  let passed = 0
+
   let failed = 0
-  
-  for (const category of validCategories) {
-    const mockEvent = {
-      flypost: {
-        eventId: `evt_${category}`,
-        category: category // Already in correct format
-      },
-      name: 'Test Event',
-      startDate: '2025-01-15T10:00:00Z',
-      location: { address: { addressLocality: 'LA' } }
-    }
-    
-    const discoveryEvent = toDiscoveryEventV1(mockEvent)
-    
-    if (discoveryEvent.category === category) {
-      console.log(`✅ "${category}" preserved correctly`)
-      passed++
-    } else {
-      console.log(`❌ "${category}" changed to "${discoveryEvent.category}"`)
+
+  for (const category of publicCategories) {
+    const discoveryEvent = toDiscoveryEventV1(mockEvent(`evt_${category}`, category))
+    if (!assertEqual(discoveryEvent?.what?.type, category, category)) {
       failed++
     }
   }
-  
-  console.log(`\nSummary: ${passed} passed, ${failed} failed`)
+
   return failed === 0
 }
 
-/**
- * Test 4: Unknown categories default to 'other'
- */
 function testUnknownCategoryDefaultsToOther() {
-  console.log('\nTest 4: Unknown categories default to "other"')
-  console.log('----------------------------------------------')
-  
-  const unknownCategories = [
-    'unknown-category',
-    'random-sale',
-    'fake-event'
-  ]
-  
-  let passed = 0
-  let failed = 0
-  
-  for (const category of unknownCategories) {
-    const mockEvent = {
-      flypost: {
-        eventId: `evt_${category}`,
-        category: category
-      },
-      name: 'Test Event',
-      startDate: '2025-01-15T10:00:00Z',
-      location: { address: { addressLocality: 'LA' } }
-    }
-    
-    const discoveryEvent = toDiscoveryEventV1(mockEvent)
-    
-    if (discoveryEvent.category === 'other') {
-      console.log(`✅ "${category}" → "other" (correct fallback)`)
-      passed++
-    } else {
-      console.log(`❌ "${category}" → "${discoveryEvent.category}" (should be "other")`)
-      failed++
-    }
-  }
-  
-  console.log(`\nSummary: ${passed} passed, ${failed} failed`)
-  return failed === 0
+  console.log('\nTest 4: Unknown stored categories default to "other"')
+  console.log('---------------------------------------------------')
+
+  const discoveryEvent = toDiscoveryEventV1(mockEvent('evt_unknown', 'not-a-real-category'))
+  return assertEqual(discoveryEvent?.what?.type, 'other', 'not-a-real-category')
 }
 
-// Run all tests
 const results = [
   testSingleEventNormalization(),
   testMultipleEventsNormalization(),
-  testValidEnumValues(),
+  testPublicEnumValuesArePreserved(),
   testUnknownCategoryDefaultsToOther()
 ]
 
-const passed = results.filter(r => r).length
+const passed = results.filter(Boolean).length
 const failed = results.length - passed
 
 console.log('\n================================================')

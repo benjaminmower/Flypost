@@ -4,7 +4,11 @@
  * Validates that category values are normalized to snake_case singular enum values
  */
 
-import { normalizeCategory } from './src/utils/discoveryMapper.js'
+import {
+  normalizeCategory,
+  normalizeCategoryForFilter,
+  VALID_DISCOVERY_CATEGORIES
+} from './src/utils/discoveryMapper.js'
 
 console.log('🧪 Testing Category Normalization\n')
 console.log('=================================\n')
@@ -44,6 +48,20 @@ const testCases = [
   { input: 'moving-sales', expected: 'moving_sale', description: 'kebab-case plural' },
   { input: 'moving-sale', expected: 'moving_sale', description: 'kebab-case singular' },
   { input: 'moving sale', expected: 'moving_sale', description: 'space-separated' },
+
+  // General local event variants
+  { input: 'apartments', expected: 'apartment', description: 'storage plural apartment category' },
+  { input: 'apartment', expected: 'apartment', description: 'public apartment category' },
+  { input: 'job-postings', expected: 'job_posting', description: 'storage job postings category' },
+  { input: 'job_posting', expected: 'job_posting', description: 'public job posting category' },
+  { input: 'live-events', expected: 'live_event', description: 'storage live events category' },
+  { input: 'live_event', expected: 'live_event', description: 'public live event category' },
+  { input: 'community-alerts', expected: 'community_alert', description: 'storage community alerts category' },
+  { input: 'community_alert', expected: 'community_alert', description: 'public community alert category' },
+  { input: 'happy-hours', expected: 'happy_hour', description: 'storage happy hours category' },
+  { input: 'happy_hour', expected: 'happy_hour', description: 'public happy hour category' },
+  { input: 'missing-pets', expected: 'missing_pet', description: 'storage missing pets category' },
+  { input: 'missing_pet', expected: 'missing_pet', description: 'public missing pet category' },
   
   // Other
   { input: 'other', expected: 'other', description: 'other category' },
@@ -75,6 +93,19 @@ for (const testCase of testCases) {
 
 console.log(`\n=================================`)
 console.log(`Summary: ${passed} passed, ${failed} failed out of ${testCases.length} tests`)
+
+for (const category of VALID_DISCOVERY_CATEGORIES) {
+  const filterResult = normalizeCategoryForFilter(category)
+  if (filterResult !== category) {
+    console.log(`❌ filter "${category}" → "${filterResult}" (expected "${category}")`)
+    failed++
+  }
+}
+
+if (normalizeCategoryForFilter('unknown-category') !== null) {
+  console.log('❌ invalid filter category should return null')
+  failed++
+}
 
 if (failed > 0) {
   process.exit(1)

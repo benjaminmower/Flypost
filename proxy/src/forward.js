@@ -122,7 +122,10 @@ module.exports = function createForward() {
       originalPath = req.originalUrl.split('?')[0].split('#')[0]
     }
     const isApiPost = req.method === 'POST' &&
-      (originalPath.startsWith('/api/') || originalPath.startsWith('/v1/tokens/'))
+      (originalPath.startsWith('/api/') ||
+        originalPath.startsWith('/v1/tokens/') ||
+        originalPath === '/v1/events/upsert' ||
+        originalPath.startsWith('/v1/events/upsert/'))
     const isParseAndPublish =
       req.method === 'POST' && originalPath === '/api/parse-and-publish'
 

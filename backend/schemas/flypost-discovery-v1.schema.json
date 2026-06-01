@@ -34,7 +34,7 @@
       "description": "A single discovered event.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["eventId", "dataHash", "what", "where", "when", "externalListingUrl"],
+      "required": ["eventId", "dataHash", "what", "where", "when", "externalListingUrl", "shareUrl"],
       "properties": {
         "eventId": { "type": "string", "minLength": 1 },
 
@@ -58,6 +58,12 @@
                 "estate_sale",
                 "moving_sale",
                 "yard_sale",
+                "apartment",
+                "job_posting",
+                "live_event",
+                "community_alert",
+                "happy_hour",
+                "missing_pet",
                 "other"
               ]
             },
@@ -84,7 +90,8 @@
           "required": ["start", "end"],
           "properties": {
             "start": { "type": "string", "format": "date-time" },
-            "end": { "type": "string", "format": "date-time" }
+            "end": { "type": "string", "format": "date-time" },
+            "timezone": { "type": "string" }
           }
         },
 
@@ -110,6 +117,35 @@
                 { "type": "string", "format": "uri" },
                 { "type": "null" }
               ]
+            }
+          }
+        },
+
+        "shareUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+
+        "occurrences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["occurrenceId", "startDate", "endDate"],
+            "properties": {
+              "occurrenceId": { "type": "string" },
+              "startDate": { "type": "string", "format": "date-time" },
+              "endDate": { "type": "string", "format": "date-time" },
+              "label": { "type": "string" },
+              "local": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "date": { "type": "string" },
+                  "startTime": { "type": "string" },
+                  "endTime": { "type": "string" }
+                }
+              }
             }
           }
         }

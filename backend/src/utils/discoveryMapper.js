@@ -18,12 +18,18 @@ import { generateShareUrl } from './shareUrl.js'
 /**
  * Valid Discovery API category enum values (snake_case singular)
  */
-const VALID_CATEGORIES = [
+export const VALID_DISCOVERY_CATEGORIES = [
   'open_house',
   'garage_sale',
   'estate_sale',
   'moving_sale',
   'yard_sale',
+  'apartment',
+  'job_posting',
+  'live_event',
+  'community_alert',
+  'happy_hour',
+  'missing_pet',
   'other'
 ]
 
@@ -77,8 +83,84 @@ const CATEGORY_MAPPINGS = {
   'movingsales': 'moving_sale',
   'moving_sale': 'moving_sale',
 
+  // Apartment variants
+  apartments: 'apartment',
+  apartment: 'apartment',
+  'apartment-rentals': 'apartment',
+  'apartment-rental': 'apartment',
+  'apartment rentals': 'apartment',
+  'apartment rental': 'apartment',
+
+  // Job posting variants
+  'job-postings': 'job_posting',
+  'job-posting': 'job_posting',
+  'job postings': 'job_posting',
+  'job posting': 'job_posting',
+  jobs: 'job_posting',
+  job: 'job_posting',
+  'job_postings': 'job_posting',
+  'job_posting': 'job_posting',
+
+  // Live event variants
+  'live-events': 'live_event',
+  'live-event': 'live_event',
+  'live events': 'live_event',
+  'live event': 'live_event',
+  events: 'live_event',
+  event: 'live_event',
+  'live_events': 'live_event',
+  'live_event': 'live_event',
+
+  // Community alert variants
+  'community-alerts': 'community_alert',
+  'community-alert': 'community_alert',
+  'community alerts': 'community_alert',
+  'community alert': 'community_alert',
+  alerts: 'community_alert',
+  alert: 'community_alert',
+  'community_alerts': 'community_alert',
+  'community_alert': 'community_alert',
+
+  // Happy hour variants
+  'happy-hours': 'happy_hour',
+  'happy-hour': 'happy_hour',
+  'happy hours': 'happy_hour',
+  'happy hour': 'happy_hour',
+  'happy_hours': 'happy_hour',
+  'happy_hour': 'happy_hour',
+
+  // Missing pet variants
+  'missing-pets': 'missing_pet',
+  'missing-pet': 'missing_pet',
+  'missing pets': 'missing_pet',
+  'missing pet': 'missing_pet',
+  'lost pets': 'missing_pet',
+  'lost pet': 'missing_pet',
+  'missing_pets': 'missing_pet',
+  'missing_pet': 'missing_pet',
+
   // Other
   other: 'other'
+}
+
+function normalizeCategoryInternal(input) {
+  if (!input || typeof input !== 'string') {
+    return null
+  }
+
+  const normalized = input.toLowerCase().trim()
+  if (!normalized) return null
+
+  if (VALID_DISCOVERY_CATEGORIES.includes(normalized)) return normalized
+  if (CATEGORY_MAPPINGS[normalized]) return CATEGORY_MAPPINGS[normalized]
+
+  const underscored = normalized.replace(/[\s-]+/g, '_')
+  if (VALID_DISCOVERY_CATEGORIES.includes(underscored)) return underscored
+
+  const singular = underscored.replace(/s$/, '')
+  if (VALID_DISCOVERY_CATEGORIES.includes(singular)) return singular
+
+  return null
 }
 
 /**
@@ -87,23 +169,22 @@ const CATEGORY_MAPPINGS = {
  * @returns {string} - Normalized category value
  */
 export function normalizeCategory(input) {
-  if (!input || typeof input !== 'string') {
-    return 'other'
-  }
-
-  const normalized = input.toLowerCase().trim()
-
-  if (VALID_CATEGORIES.includes(normalized)) return normalized
-  if (CATEGORY_MAPPINGS[normalized]) return CATEGORY_MAPPINGS[normalized]
-
-  const underscored = normalized.replace(/[\s-]+/g, '_')
-  if (VALID_CATEGORIES.includes(underscored)) return underscored
-
-  const singular = underscored.replace(/s$/, '')
-  if (VALID_CATEGORIES.includes(singular)) return singular
+  const category = normalizeCategoryInternal(input)
+  if (category) return category
 
   console.log(`⚠️  Unknown category "${input}", defaulting to "other"`)
   return 'other'
+}
+
+/**
+ * Normalize a category used as an API filter.
+ * Unlike normalizeCategory(), this returns null for unknown values so routes can
+ * reject invalid caller input instead of silently broadening it to "other".
+ * @param {string} input - Raw category input
+ * @returns {string|null} Normalized category or null when unsupported
+ */
+export function normalizeCategoryForFilter(input) {
+  return normalizeCategoryInternal(input)
 }
 
 /**
