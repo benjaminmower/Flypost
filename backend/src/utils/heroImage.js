@@ -41,6 +41,7 @@ export async function setHeroImageUrl(eventId, heroImageUrl) {
 export function triggerHeroImageScrape(storedEvent) {
   const eventId = storedEvent.flypost?.eventId
   const url = storedEvent.url
+  if (storedEvent.flypost?.heroImageUrl) return
   if (!eventId || !url) return
   scrapeHeroImageUrl(url)
     .then(heroImageUrl => setHeroImageUrl(eventId, heroImageUrl))

@@ -74,6 +74,33 @@ function detectMultipleTimeSlots(text) {
   return false
 }
 
+function safeHttpsUrl(value) {
+  if (!value || typeof value !== 'string') return null
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' ? value : null
+  } catch {
+    return null
+  }
+}
+
+function getPwaFlyerContext(userContext) {
+  if (!userContext || typeof userContext !== 'object' || Array.isArray(userContext)) {
+    return {}
+  }
+
+  const flyer =
+    userContext.flyer && typeof userContext.flyer === 'object' && !Array.isArray(userContext.flyer)
+      ? userContext.flyer
+      : {}
+
+  return {
+    heroImageUrl: safeHttpsUrl(flyer.heroImageUrl || userContext.heroImageUrl),
+    heroImageStoragePath: flyer.heroImageStoragePath || userContext.heroImageStoragePath || null,
+    category: flyer.category || userContext.category || null
+  }
+}
+
 router.post('/', writeLimiter, async (req, res) => {
   try {
     const body = req.body || {}
@@ -147,6 +174,20 @@ router.post('/', writeLimiter, async (req, res) => {
     // 1) Parse with LLM
     let parsedEvent = await parseEventWithLLM(naturalLanguageInput, userContext)
     console.log(`✅ LLM parsed event: ${parsedEvent.name}`)
+
+    const pwaFlyerContext = getPwaFlyerContext(userContext)
+    if (pwaFlyerContext.heroImageUrl) {
+      parsedEvent.flypost = parsedEvent.flypost || {}
+      parsedEvent.flypost.heroImageUrl = pwaFlyerContext.heroImageUrl
+      if (pwaFlyerContext.heroImageStoragePath) {
+        parsedEvent.flypost.heroImageStoragePath = String(pwaFlyerContext.heroImageStoragePath)
+      }
+      console.log('🖼️  Applied PWA flyer image context')
+    }
+    if (pwaFlyerContext.category) {
+      parsedEvent.flypost = parsedEvent.flypost || {}
+      parsedEvent.flypost.category = pwaFlyerContext.category
+    }
 
     // 1.05) STRIP CLIENT-SUPPLIED EVENTID (defense in depth)
     if (parsedEvent.flypost?.eventId) {
@@ -388,6 +429,8 @@ router.post('/', writeLimiter, async (req, res) => {
 
     // Store submitter identity on every event
     enrichedEvent.flypost.createdBy = uid
+    enrichedEvent.flypost.createdByUid = uid
+    enrichedEvent.flypost.createdByEmail = agentEmail
     enrichedEvent.flypost.agentEmail = agentEmail
 
     // Legacy: Also compute old canonical key for backward compatibility during migration

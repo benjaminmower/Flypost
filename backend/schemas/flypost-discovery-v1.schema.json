@@ -126,6 +126,12 @@
           "format": "uri"
         },
 
+        "imageUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Optional public HTTPS image URL for image-first consumer surfaces."
+        },
+
         "occurrences": {
           "type": "array",
           "items": {

@@ -122,4 +122,68 @@ test('Discovery Mapper - sourceUrl in flypost.sources maps to externalListingUrl
   )
 })
 
+test('Discovery Mapper - safe heroImageUrl maps to imageUrl', () => {
+  const event = {
+    '@type': 'Event',
+    name: 'Test Garage Sale',
+    startDate: '2026-01-06T11:00:00-08:00',
+    endDate: '2026-01-06T14:00:00-08:00',
+    location: {
+      '@type': 'Place',
+      geo: {
+        '@type': 'GeoCoordinates',
+        latitude: 34.0195,
+        longitude: -118.4912
+      }
+    },
+    flypost: {
+      eventId: 'evt_test_image',
+      category: 'garage-sales',
+      heroImageUrl: 'https://firebasestorage.googleapis.com/v0/b/project/o/flyers%2Ftest.jpg?alt=media'
+    },
+    hash: {
+      value: 'abc123def456'
+    }
+  }
+
+  const discoveryEvent = toDiscoveryEventV1(event)
+
+  assert.ok(discoveryEvent, 'Should map to discovery event')
+  assert.strictEqual(
+    discoveryEvent.imageUrl,
+    'https://firebasestorage.googleapis.com/v0/b/project/o/flyers%2Ftest.jpg?alt=media',
+    'valid HTTPS heroImageUrl should map to imageUrl'
+  )
+})
+
+test('Discovery Mapper - non-HTTPS heroImageUrl is omitted', () => {
+  const event = {
+    '@type': 'Event',
+    name: 'Test Garage Sale',
+    startDate: '2026-01-06T11:00:00-08:00',
+    endDate: '2026-01-06T14:00:00-08:00',
+    location: {
+      '@type': 'Place',
+      geo: {
+        '@type': 'GeoCoordinates',
+        latitude: 34.0195,
+        longitude: -118.4912
+      }
+    },
+    flypost: {
+      eventId: 'evt_test_bad_image',
+      category: 'garage-sales',
+      heroImageUrl: 'javascript:alert(1)'
+    },
+    hash: {
+      value: 'abc123def456'
+    }
+  }
+
+  const discoveryEvent = toDiscoveryEventV1(event)
+
+  assert.ok(discoveryEvent, 'Should map to discovery event')
+  assert.strictEqual(discoveryEvent.imageUrl, undefined, 'unsafe image URL should be omitted')
+})
+
 console.log('✅ All discovery mapper URL tests passed')

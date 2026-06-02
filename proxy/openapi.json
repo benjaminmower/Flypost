@@ -136,6 +136,11 @@
             ]
           },
           "shareUrl": { "type": "string", "format": "uri" },
+          "imageUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional public HTTPS image URL for image-first consumer surfaces."
+          },
           "source": {
             "type": "object",
             "required": ["kind", "url"],

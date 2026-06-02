@@ -13,7 +13,7 @@ const allowedOrigins = {
   'https://post.goflypost.com': ['GET', 'POST'], // Allow GET and POST for post
   'https://presence.goflypost.com': ['GET', 'POST'],
   'https://flypost.netlify.app': ['GET'],
-  'https://app.goflypost.com': ['GET'],
+  'https://app.goflypost.com': ['GET', 'POST'],
   'http://localhost:5173': ['GET', 'POST'],
   'https://www.goflypost.com': ['GET', 'POST'],
   'https://api.goflypost.com': ['GET', 'POST'],

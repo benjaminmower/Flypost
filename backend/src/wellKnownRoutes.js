@@ -359,6 +359,10 @@ components:
           type: string
           format: uri
           description: Public Flypost share page URL
+        imageUrl:
+          type: string
+          format: uri
+          description: Optional public HTTPS flyer image URL for consumer surfaces
         source:
           type: object
           description: Optional source provenance information
@@ -730,6 +734,7 @@ const OPENAPI_JSON = {
           when: { type: 'object', description: 'When is it happening (start and end times, with optional timezone)', required: ['start', 'end'], properties: { start: { type: 'string', format: 'date-time', description: 'Event start date and time (ISO 8601 UTC)', example: '2025-01-15T10:00:00.000Z' }, end: { type: 'string', format: 'date-time', description: 'Event end date and time (ISO 8601 UTC)', example: '2025-01-15T14:00:00.000Z' }, timezone: { type: 'string', description: "Optional IANA timezone identifier (e.g., 'America/Los_Angeles')", example: 'America/Los_Angeles' } } },
           externalListingUrl: { oneOf: [{ type: 'string', format: 'uri', description: 'URL to external listing or detail page', example: 'https://www.zillow.com/homedetails/123-Main-St' }, { type: 'null' }], description: 'External listing URL (required field, can be null)' },
           shareUrl: { type: 'string', format: 'uri', description: 'Public Flypost share page URL', example: 'https://goflypost.com/e/event/evt_20250115_abc123_fpid' },
+          imageUrl: { type: 'string', format: 'uri', description: 'Optional public HTTPS flyer image URL for consumer surfaces' },
           source: { type: 'object', description: 'Optional source provenance information', required: ['kind', 'url'], properties: { kind: { type: 'string', enum: ['mls', 'brokerage_roster', 'manual', 'third_party'], description: 'Source type', example: 'mls' }, url: { oneOf: [{ type: 'string', format: 'uri', description: 'Source URL', example: 'https://api.mls.com/listings/123' }, { type: 'null' }], description: 'Source URL (can be null)' } } }
         }
       },
@@ -879,6 +884,7 @@ const MCP_JSON = {
           when: { type: 'object', required: ['start', 'end'], properties: { start: { type: 'string', format: 'date-time', description: 'Event start date and time (ISO 8601 UTC)' }, end: { type: 'string', format: 'date-time', description: 'Event end date and time (ISO 8601 UTC)' }, timezone: { type: 'string', description: 'Optional IANA timezone (e.g., "America/Los_Angeles")' } } },
           externalListingUrl: { oneOf: [{ type: 'string', format: 'uri' }, { type: 'null' }], description: 'URL to external listing (required field, can be null)' },
           shareUrl: { type: 'string', format: 'uri', description: 'Public Flypost share page URL' },
+          imageUrl: { type: 'string', format: 'uri', description: 'Optional public HTTPS flyer image URL' },
           source: { type: 'object', required: ['kind', 'url'], properties: { kind: { type: 'string', enum: ['mls', 'brokerage_roster', 'manual', 'third_party'], description: 'Source type' }, url: { oneOf: [{ type: 'string', format: 'uri' }, { type: 'null' }], description: 'Source URL (can be null)' } } }
         }
       }
@@ -980,6 +986,7 @@ Fields:
     - timezone: optional IANA timezone (e.g., "America/Los_Angeles")
   - externalListingUrl: string | null (required key, nullable value)
   - shareUrl: string (public Flypost share page URL)
+  - imageUrl?: string (optional public HTTPS flyer image URL)
   - source?: { kind: enum, url: string | null }
     - kind: "mls" | "brokerage_roster" | "manual" | "third_party"
 

@@ -203,6 +203,16 @@ function normalizeToUTC(dateStr) {
   }
 }
 
+function isSafeHttpsUrl(value) {
+  if (!value || typeof value !== 'string') return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 /**
  * Maps a stored event object to DiscoveryEventV1 format (Protocol-Grade Schema)
  * Enforces strict what/where/when structure without consumer UI concerns
@@ -324,6 +334,10 @@ export function toDiscoveryEventV1(event, options = {}) {
   const shareUrl = generateShareUrl(event)
 
   const discoveryEvent = { eventId, dataHash, what, where, when, externalListingUrl, shareUrl }
+
+  if (isSafeHttpsUrl(event.flypost?.heroImageUrl)) {
+    discoveryEvent.imageUrl = event.flypost.heroImageUrl
+  }
 
   // Add source only if kind is known (url may be null; schema allows null)
   if (sourceKind !== null) {

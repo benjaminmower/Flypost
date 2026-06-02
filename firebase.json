@@ -6,6 +6,9 @@
   "firestore": {
     "indexes": "firestore.indexes.json"
   },
+  "storage": {
+    "rules": "firebase/storage.rules"
+  },
   "hosting": {
     "public": "public",
     "ignore": [

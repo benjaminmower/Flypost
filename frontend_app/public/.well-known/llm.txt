@@ -1,0 +1,11 @@
+# Flypost App
+
+Flypost App is the installable consumer PWA for discovering nearby flyers.
+
+Primary URL: https://app.goflypost.com
+API base: https://api.goflypost.com
+
+Capabilities:
+- Swipe nearby flyers from GET /v1/events/near
+- Save flyers locally in the browser
+- Publish authenticated flyer posts through POST /api/parse-and-publish
