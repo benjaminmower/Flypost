@@ -2,4 +2,5 @@
 *.sqlite
 node_modules/
 decisions.log
+proofs.log
 manual_lookup.txt

@@ -233,7 +233,6 @@ async function renderHome() {
     })
     const dismissed = new Set(storageGet('flypost.dismissed'))
     const events = (data.events || [])
-      .filter(event => event.imageUrl)
       .filter(event => !dismissed.has(event.eventId))
 
     renderDeck(events, coords)
@@ -251,7 +250,7 @@ function renderDeck(events, coords) {
     status.textContent = ''
     deck.innerHTML = `
       <div class="empty-state">
-        <h2>No image-backed flyers nearby.</h2>
+        <h2>No events nearby.</h2>
         <p>Try another category, expand your area later, or post the first flyer.</p>
         <a class="primary-link" href="/post">Post flyer</a>
       </div>
@@ -259,7 +258,7 @@ function renderDeck(events, coords) {
     return
   }
 
-  status.textContent = `${events.length} image-backed flyer${events.length === 1 ? '' : 's'} nearby`
+  status.textContent = `${events.length} nearby event${events.length === 1 ? '' : 's'}`
   deck.innerHTML = events.slice(0, 3).map((event, index) => cardTemplate(event, coords, index)).join('')
   setupTopCard(events, coords)
 }
@@ -276,15 +275,22 @@ function cardTemplate(event, coords, index) {
   const relative = formatRelativeTime(event.when?.start)
   const offset = index * 10
   const rotation = index === 0 ? 0 : index % 2 ? -2 : 2
+  const title = event.what?.label || categoryLabel(event.what?.type)
+  const category = categoryLabel(event.what?.type)
+  const address = event.where?.address || ''
+  const time = formatDateTime(event.when?.start)
+  const hasImage = Boolean(event.imageUrl)
+  const fallbackInitial = category.slice(0, 1).toUpperCase()
   return `
-    <article class="flyer-card" data-event-id="${escapeHtml(event.eventId)}" data-share-url="${escapeHtml(event.shareUrl || '')}" style="--offset:${offset}px; --rotation:${rotation}deg; z-index:${10 - index}">
-      <img src="${escapeHtml(event.imageUrl)}" alt="" draggable="false">
-      <div class="card-scrim"></div>
+    <article class="flyer-card ${hasImage ? '' : 'text-card'}" data-event-id="${escapeHtml(event.eventId)}" data-share-url="${escapeHtml(event.shareUrl || '')}" style="--offset:${offset}px; --rotation:${rotation}deg; z-index:${10 - index}">
+      ${hasImage
+        ? `<img src="${escapeHtml(event.imageUrl)}" alt="" draggable="false"><div class="card-scrim"></div>`
+        : `<div class="card-fallback-art" aria-hidden="true"><span>${escapeHtml(fallbackInitial)}</span><strong>${escapeHtml(category)}</strong></div><div class="card-scrim text"></div>`}
       <div class="card-chip left">${escapeHtml([distance, relative].filter(Boolean).join(' · '))}</div>
-      <div class="card-chip right">${escapeHtml(categoryLabel(event.what?.type))}</div>
+      <div class="card-chip right">${escapeHtml(category)}</div>
       <div class="card-copy">
-        <h2>${escapeHtml(event.what?.label || categoryLabel(event.what?.type))}</h2>
-        <p>${escapeHtml(event.where?.address || formatDateTime(event.when?.start))}</p>
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml([address, time].filter(Boolean).join(' · '))}</p>
       </div>
     </article>
   `

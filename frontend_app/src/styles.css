@@ -230,10 +230,47 @@ h1 {
   width: 100%;
 }
 
+.card-fallback-art {
+  align-items: center;
+  background:
+    linear-gradient(145deg, rgba(216, 46, 126, 0.22), rgba(64, 201, 162, 0.14) 48%, rgba(98, 131, 149, 0.26)),
+    var(--ink);
+  display: grid;
+  gap: 14px;
+  inset: 0;
+  justify-items: center;
+  padding: 56px 28px 140px;
+  position: absolute;
+  text-align: center;
+}
+
+.card-fallback-art span {
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: var(--lemon);
+  display: flex;
+  font-size: 64px;
+  font-weight: 950;
+  height: 116px;
+  justify-content: center;
+  width: 116px;
+}
+
+.card-fallback-art strong {
+  color: var(--paper);
+  font-size: 18px;
+  font-weight: 800;
+}
+
 .card-scrim {
   background: linear-gradient(to top, rgba(6, 8, 16, 0.9), rgba(6, 8, 16, 0.15), rgba(6, 8, 16, 0.34));
   inset: 0;
   position: absolute;
+}
+
+.card-scrim.text {
+  background: linear-gradient(to top, rgba(6, 8, 16, 0.9), rgba(6, 8, 16, 0.24), rgba(6, 8, 16, 0.42));
 }
 
 .card-chip {
@@ -266,6 +303,10 @@ h1 {
   font-size: clamp(30px, 8vw, 48px);
   letter-spacing: 0;
   line-height: 0.98;
+}
+
+.text-card .card-copy h2 {
+  font-size: clamp(28px, 7vw, 42px);
 }
 
 .card-copy p {

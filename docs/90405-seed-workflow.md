@@ -37,6 +37,20 @@ Seed across these Discovery categories:
 
 ## Ingestion Options
 
+Agent service loop:
+
+```bash
+cd scripts/ingest
+FLYPOST_API_BASE=https://api.goflypost.com \
+FLYPOST_WRITE_TOKEN=$FLYPOST_WRITE_TOKEN \
+ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+MAX_SOURCES=10 \
+npm start
+```
+
+The agent publishes events and records proof URLs in `scripts/ingest/proofs.log`.
+See [Agent As A Service](agent-as-a-service.md).
+
 Natural-language publish:
 
 ```bash

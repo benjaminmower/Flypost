@@ -17,6 +17,7 @@ Canonical docs:
 
 - [Flypost Discovery Protocol](docs/flypost-discovery-protocol.md)
 - [90405 Seed Workflow](docs/90405-seed-workflow.md)
+- [Agent As A Service](docs/agent-as-a-service.md)
 - [MCP Server Quick Start](mcp/readme.md)
 
 ## Architecture

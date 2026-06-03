@@ -9,6 +9,7 @@ import { SOURCES } from './sources.config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DECISIONS_LOG = resolve(__dirname, 'decisions.log')
+const PROOFS_LOG = resolve(__dirname, 'proofs.log')
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
 const anthropic = new Anthropic()
@@ -23,6 +24,8 @@ const MAX_TOKENS_PER_RUN = parseInt(process.env.MAX_TOKENS_PER_RUN || '500000')
 const MAX_RUN_MS        = parseInt(process.env.MAX_RUN_MS        || '900000')
 const FLYPOST_API_BASE  = process.env.FLYPOST_API_BASE  || ''
 const FLYPOST_WRITE_TOKEN = process.env.FLYPOST_WRITE_TOKEN || ''
+const VERIFY_AFTER_PUBLISH = process.env.VERIFY_AFTER_PUBLISH !== 'false'
+const VERIFY_RADIUS_MI = Number(process.env.VERIFY_RADIUS_MI || '1.25')
 
 // ── RUN STATS ────────────────────────────────────────────────────────────────
 
@@ -31,6 +34,7 @@ const stats = {
   eventsFound:      0,
   duplicatesSkipped: 0,
   eventsPublished:  0,
+  eventsVerified:   0,
   errors:           0,
 }
 
@@ -54,6 +58,7 @@ function printSummary() {
   console.log(`Events found       : ${stats.eventsFound}`)
   console.log(`Duplicates skipped : ${stats.duplicatesSkipped}`)
   console.log(`Events published   : ${stats.eventsPublished}`)
+  console.log(`Events verified    : ${stats.eventsVerified}`)
   console.log(`Input tokens       : ${tokenTracker.inputTokens}`)
   console.log(`Output tokens      : ${tokenTracker.outputTokens}`)
   console.log(`Estimated cost     : $${estimatedCost}`)
@@ -237,7 +242,7 @@ async function publishEvent(eventText) {
   if (DRY_RUN) {
     console.log(`  [dry-run] Would publish: ${eventText}`)
     stats.eventsPublished++
-    return { success: true, eventId: `dry-run-${Date.now()}` }
+    return { success: true, eventId: `dry-run-${Date.now()}`, verified: false }
   }
   try {
     const res = await fetch(`${FLYPOST_API_BASE}/api/parse-and-publish`, {
@@ -252,13 +257,105 @@ async function publishEvent(eventText) {
     const data = await res.json()
     if (res.ok) {
       stats.eventsPublished++
-      return { success: true, eventId: data.eventId || data.id || null }
+      const eventId = data.data?.eventId || data.eventId || data.id || null
+      const event = data.data?.event || null
+      const proof = VERIFY_AFTER_PUBLISH
+        ? await verifyPublishedEvent(eventId, event)
+        : { verified: false, skipped: true }
+      return {
+        success: true,
+        eventId,
+        shareUrl: event?.shareUrl || proof.shareUrl || null,
+        ...proof,
+      }
     }
-    return { success: false, eventId: null }
+    return { success: false, eventId: null, error: data.error || data.message || `HTTP ${res.status}` }
   } catch (err) {
     stats.errors++
-    return { success: false, eventId: null }
+    return { success: false, eventId: null, error: err.message }
   }
+}
+
+function getPublishedEventGeo(event) {
+  const geo = event?.location?.geo
+  if (geo?.latitude == null || geo?.longitude == null) return null
+  const lat = Number(geo.latitude)
+  const lng = Number(geo.longitude)
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null
+}
+
+function buildUrl(path, params = {}) {
+  const base = FLYPOST_API_BASE.replace(/\/+$/, '')
+  const url = new URL(`${base}${path}`)
+  for (const [key, value] of Object.entries(params)) {
+    if (value != null && value !== '') url.searchParams.set(key, String(value))
+  }
+  return url.toString()
+}
+
+function logProof(proof) {
+  appendFileSync(PROOFS_LOG, `${JSON.stringify({ timestamp: new Date().toISOString(), ...proof })}\n`, 'utf8')
+}
+
+async function verifyPublishedEvent(eventId, publishedEvent) {
+  if (!eventId || !FLYPOST_API_BASE) {
+    return { verified: false, reason: 'missing eventId or FLYPOST_API_BASE' }
+  }
+
+  const proofEventUrl = buildUrl(`/v1/events/${encodeURIComponent(eventId)}`)
+  const proof = {
+    eventId,
+    proofEventUrl,
+    proofNearUrl: null,
+    shareUrl: publishedEvent?.shareUrl || null,
+    byIdOk: false,
+    nearOk: false,
+    verified: false,
+    verifiedAt: null,
+  }
+
+  try {
+    const byIdRes = await fetch(proofEventUrl, { signal: AbortSignal.timeout(15000) })
+    const byIdData = await byIdRes.json().catch(() => ({}))
+    const discoveryEvent = byIdData.events?.[0] || null
+    proof.byIdOk = byIdRes.ok && discoveryEvent?.eventId === eventId
+    proof.shareUrl = proof.shareUrl || discoveryEvent?.shareUrl || null
+
+    const geo = discoveryEvent?.where
+      ? { lat: Number(discoveryEvent.where.latitude), lng: Number(discoveryEvent.where.longitude) }
+      : getPublishedEventGeo(publishedEvent)
+
+    if (Number.isFinite(geo?.lat) && Number.isFinite(geo?.lng)) {
+      proof.proofNearUrl = buildUrl('/v1/events/near', {
+        lat: geo.lat,
+        lng: geo.lng,
+        radius_mi: VERIFY_RADIUS_MI,
+      })
+      const nearRes = await fetch(proof.proofNearUrl, { signal: AbortSignal.timeout(15000) })
+      const nearData = await nearRes.json().catch(() => ({}))
+      const found = (nearData.events || []).find(event => event.eventId === eventId)
+      proof.nearOk = nearRes.ok && Boolean(found)
+      if (found?.distance_mi != null) proof.distance_mi = found.distance_mi
+    }
+
+    proof.verified = proof.byIdOk && proof.nearOk
+    if (proof.verified) {
+      proof.verifiedAt = new Date().toISOString()
+      stats.eventsVerified++
+    }
+  } catch (error) {
+    proof.error = error.message
+    stats.errors++
+  }
+
+  logProof(proof)
+  if (proof.verified) {
+    console.log(`  [proof] verified ${eventId}`)
+    console.log(`          ${proof.proofNearUrl}`)
+  } else {
+    console.log(`  [proof] verification incomplete for ${eventId}: byId=${proof.byIdOk} near=${proof.nearOk}`)
+  }
+  return proof
 }
 
 function checkDuplicate(sourceUrl, startDate) {
@@ -271,9 +368,9 @@ function checkDuplicate(sourceUrl, startDate) {
   }
 }
 
-function markIngested(sourceUrl, startDate, eventId, sourceName, eventName) {
+function markIngested(sourceUrl, startDate, eventId, sourceName, eventName, proof = {}) {
   try {
-    dbMarkIngested(sourceUrl, startDate, eventId, sourceName, eventName)
+    dbMarkIngested(sourceUrl, startDate, eventId, sourceName, eventName, proof)
     return { marked: true }
   } catch (err) {
     return { marked: false, error: err.message }
@@ -386,7 +483,7 @@ const TOOLS = [
     description:
       'POST a natural-language event description to Flypost. Skips (prints instead) when ' +
       '--dry-run flag is set. eventText must be a complete sentence: name, address, date, time, ' +
-      'description. Returns { success, eventId }.',
+      'description. Returns { success, eventId, shareUrl, proofEventUrl, proofNearUrl, verified }.',
     input_schema: {
       type: 'object',
       properties: {
@@ -418,6 +515,10 @@ const TOOLS = [
         eventId:    { type: 'string', description: 'Flypost event ID from publishEvent' },
         sourceName: { type: 'string', description: 'Human-readable source name' },
         eventName:  { type: 'string', description: 'Event title' },
+        proof: {
+          type: 'object',
+          description: 'Optional proof object returned by publishEvent, including shareUrl, proofEventUrl, proofNearUrl, and verifiedAt',
+        },
       },
       required: ['sourceUrl', 'startDate', 'eventId', 'sourceName', 'eventName'],
     },
@@ -475,7 +576,7 @@ async function executeTool(name, input) {
     case 'extractEvents':   return await extractEvents(input.html, input.sourceContext)
     case 'publishEvent':    return await publishEvent(input.eventText)
     case 'checkDuplicate':  return checkDuplicate(input.sourceUrl, input.startDate)
-    case 'markIngested':    return markIngested(input.sourceUrl, input.startDate, input.eventId, input.sourceName, input.eventName)
+    case 'markIngested':    return markIngested(input.sourceUrl, input.startDate, input.eventId, input.sourceName, input.eventName, input.proof)
     case 'logDecision':     return logDecision(input.reasoning, input.action, input.result)
     case 'discoverSources': return await discoverSources(input.location)
     case 'queueSource':     return queueSource(input.url, input.location)
@@ -492,6 +593,7 @@ const SYSTEM_PROMPT =
   'call discoverSources for each active location. Process returned URLs. For each discovered page ' +
   'that contains events, use queueSource to add any links to other local event sources you find on ' +
   'that page. Continue until MAX_SOURCES is reached. Prioritize sources with recurring weekly events. ' +
+  'After each successful publishEvent call, preserve its proof fields and pass them to markIngested. ' +
   'Log every significant decision. Skip events missing address or date. Never abort on a single ' +
   'failure — log and continue. ' +
   'For reddit_json sources: call fetchPage with sourceType "reddit_json" to get the post list. ' +

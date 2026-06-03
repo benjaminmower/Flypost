@@ -19,10 +19,29 @@ export function initDb() {
       event_name       TEXT,
       start_date       TEXT,
       flypost_event_id TEXT,
+      share_url        TEXT,
+      proof_event_url  TEXT,
+      proof_near_url   TEXT,
+      verified_at      TEXT,
       published_at     TEXT    DEFAULT (datetime('now')),
       UNIQUE(source_url, start_date)
     )
   `)
+
+  for (const statement of [
+    'ALTER TABLE ingested_events ADD COLUMN share_url TEXT',
+    'ALTER TABLE ingested_events ADD COLUMN proof_event_url TEXT',
+    'ALTER TABLE ingested_events ADD COLUMN proof_near_url TEXT',
+    'ALTER TABLE ingested_events ADD COLUMN verified_at TEXT',
+  ]) {
+    try {
+      db.exec(statement)
+    } catch (error) {
+      if (!String(error.message || '').includes('duplicate column name')) {
+        throw error
+      }
+    }
+  }
 
   return db
 }
@@ -34,11 +53,31 @@ export function checkDuplicate(sourceUrl, startDate) {
   return { isDuplicate: !!row }
 }
 
-export function markIngested(sourceUrl, startDate, eventId, sourceName, eventName) {
+export function markIngested(sourceUrl, startDate, eventId, sourceName, eventName, proof = {}) {
   db
     .prepare(`
-      INSERT OR IGNORE INTO ingested_events (source_url, source_name, event_name, start_date, flypost_event_id)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO ingested_events (
+        source_url,
+        source_name,
+        event_name,
+        start_date,
+        flypost_event_id,
+        share_url,
+        proof_event_url,
+        proof_near_url,
+        verified_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    .run(sourceUrl, sourceName, eventName, startDate, eventId)
+    .run(
+      sourceUrl,
+      sourceName,
+      eventName,
+      startDate,
+      eventId,
+      proof.shareUrl || null,
+      proof.proofEventUrl || null,
+      proof.proofNearUrl || null,
+      proof.verifiedAt || null
+    )
 }
