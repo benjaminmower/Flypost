@@ -17,10 +17,25 @@ const DISCOVERY_CATEGORIES = [
   { value: 'open_house', storage: 'open-houses', label: 'Open houses' }
 ]
 
+const INSTALL_DISMISSED_KEY = 'flypost.install.v2.dismissed'
+
 let currentUser = null
+let deferredInstallPrompt = null
 let authReadyResolve
 const authReady = new Promise(resolve => {
   authReadyResolve = resolve
+})
+
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault()
+  deferredInstallPrompt = event
+  setupInstallBanner()
+})
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null
+  localStorage.setItem(INSTALL_DISMISSED_KEY, '1')
+  document.getElementById('install-banner')?.classList.add('hidden')
 })
 
 subscribeToAuth(user => {
@@ -106,8 +121,8 @@ function shell(content, options = {}) {
       </header>
       <main class="${options.mainClass || ''}">${content}</main>
       <div id="install-banner" class="install-banner hidden">
-        <span>Add Flypost to your home screen.</span>
-        <button type="button" id="dismiss-install">Dismiss</button>
+        <span id="install-copy">Install Flypost on this device.</span>
+        <button type="button" id="install-action">Install</button>
       </div>
     </div>
   `
@@ -136,12 +151,42 @@ function setupInstallBanner() {
   const banner = document.getElementById('install-banner')
   if (!banner) return
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
-  const isIosSafari = /iphone|ipad|ipod/i.test(navigator.userAgent) && /safari/i.test(navigator.userAgent)
-  if (isStandalone || !isIosSafari || localStorage.getItem('flypost.install.dismissed')) return
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const isSafari = /safari/i.test(navigator.userAgent) && !/crios|fxios|edgios/i.test(navigator.userAgent)
+  const isIosSafari = isIos && isSafari
+  if (isStandalone || localStorage.getItem(INSTALL_DISMISSED_KEY)) return
+  if (!deferredInstallPrompt && !isIosSafari) return
+
+  const copy = document.getElementById('install-copy')
+  const action = document.getElementById('install-action')
+  if (!copy || !action) return
+
+  copy.textContent = isIosSafari
+    ? 'Add Flypost to your home screen.'
+    : 'Install Flypost on this device.'
+  action.textContent = isIosSafari ? 'Add' : 'Install'
+
   banner.classList.remove('hidden')
-  document.getElementById('dismiss-install')?.addEventListener('click', () => {
-    localStorage.setItem('flypost.install.dismissed', '1')
-    banner.classList.add('hidden')
+
+  action.addEventListener('click', async () => {
+    if (deferredInstallPrompt) {
+      const prompt = deferredInstallPrompt
+      deferredInstallPrompt = null
+      await prompt.prompt()
+      const choice = await prompt.userChoice.catch(() => null)
+      if (choice?.outcome) {
+        localStorage.setItem(INSTALL_DISMISSED_KEY, '1')
+        banner.classList.add('hidden')
+      }
+      return
+    }
+
+    copy.textContent = 'Tap Share, then Add to Home Screen.'
+    action.textContent = 'Got it'
+    action.addEventListener('click', () => {
+      localStorage.setItem(INSTALL_DISMISSED_KEY, '1')
+      banner.classList.add('hidden')
+    }, { once: true })
   })
 }
 
