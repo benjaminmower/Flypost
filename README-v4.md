@@ -9,6 +9,7 @@ The current system focuses on three primitives:
 - Ingest local event supply from natural language or structured JSON.
 - Normalize it into a stable Schema.org/Flypost event model with hashes, geo, time, and category metadata.
 - Expose public Discovery V1 endpoints and share pages that assistants, search engines, and crawlers can cite.
+- Provide an installable consumer PWA that turns the same registry into an image-first swipe deck of nearby flyers.
 
 The thesis is simple: if assistants can reliably discover and cite Flypost records, one good LLM recommendation can outperform a large consumer app download funnel.
 
@@ -21,6 +22,14 @@ The thesis is simple: if assistants can reliably discover and cite Flypost recor
 - **AI**: Enhanced OpenAI GPT-4 parser with improved prompts and validation
 - **Integrity**: SHA-256 hashing for event data verification and future DLT anchoring
 - **Public citation**: `/e/{slug}/{fpid}` share pages emit Open Graph/Twitter metadata and schema.org `Event` JSON-LD
+- **Consumer app**: `frontend_app/` is the PWA for `app.goflypost.com`, using Discovery V1 for reads and authenticated Firebase-backed posting
+
+## Surfaces
+
+- `app.goflypost.com` / `frontend_app/` - installable PWA for swiping nearby flyers, saving locally, and posting authenticated image-backed flyers.
+- `ask.goflypost.com` / `frontend_ask/` - read-only discovery and concierge surface.
+- `post.goflypost.com` / `frontend_post/` - authenticated publisher surface for parse-and-publish workflows.
+- `presence.goflypost.com` / `frontend_presence/` - truth-writing surface for attendance and feedback.
 
 ### Enhanced Parsing Logic (v3)
 
@@ -65,6 +74,12 @@ npm start
 cd proxy
 npm install
 npm start
+
+# Consumer PWA
+cd frontend_app
+npm install
+npm run dev
+npm run build
 ```
 
 ## Event Model
@@ -115,9 +130,39 @@ Discovery V1 is the public M2M contract. It intentionally returns a safe project
 - `where`: coordinates and optional address
 - `when`: start/end timestamps and optional timezone
 - `eventId`, `dataHash`, `externalListingUrl`, `shareUrl`
+- optional `imageUrl` for image-first consumer surfaces when a stored event has a safe HTTPS `flypost.heroImageUrl`
 - optional source and occurrences metadata
 
 Public share pages are designed to be citeable by search and assistant systems. They expose canonical URLs, social metadata, and schema.org `Event` JSON-LD. Root and `.well-known` OpenAPI/LLM documents describe the same read-only discovery surface.
+
+## Consumer PWA
+
+`frontend_app/` is the installable Flypost app deployed at `app.goflypost.com`.
+
+Core behavior:
+- Reads `GET /v1/events/near` and `GET /v1/events/{event_id}` using the Discovery V1 shape.
+- Renders only image-backed events in an image-first swipe deck.
+- Saves and dismisses flyers locally in browser storage.
+- Uses Firebase magic-link auth for posting.
+- Uploads flyer images directly to Firebase Storage under `flyers/{uid}/...`.
+- Publishes through `POST /api/parse-and-publish` with structured PWA flyer context.
+
+Required frontend environment variables:
+
+```bash
+VITE_API_BASE_URL=https://api.goflypost.com
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_APP_ID=...
+```
+
+Firebase Storage rules live in `firebase/storage.rules` and are referenced from `firebase.json`. Deploy them manually with:
+
+```bash
+firebase deploy --only storage
+```
 
 ## Web Concierge (Optional Feature)
 
@@ -146,4 +191,4 @@ See [`concierge/README.md`](concierge/README.md) for complete documentation, API
 
 ## Development Status
 
-This is an MVP implementation with Firestore persistence and cryptographic hashing, supporting the core ingest -> normalize -> discover -> cite loop. Consumer PWA surfaces, MCP server work, and richer distribution products are separate layers on top of this primitive.
+This is an MVP implementation with Firestore persistence and cryptographic hashing, supporting the core ingest -> normalize -> discover -> cite loop. The consumer PWA now sits on top of that primitive; MCP server work, moderation/admin tooling, push notifications, and richer distribution products remain separate layers.

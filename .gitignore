@@ -29,3 +29,12 @@ flypost-qr.svg
 credentials.json
 token.json
 /xcode/
+react-native-dating-app/
+
+# Local Claude Code harness config (machine-specific permissions)
+settings.json
+
+# SQLite databases and write-ahead-log artifacts (ingest agent)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
