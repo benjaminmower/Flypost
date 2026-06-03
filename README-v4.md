@@ -13,6 +13,12 @@ The current system focuses on three primitives:
 
 The thesis is simple: if assistants can reliably discover and cite Flypost records, one good LLM recommendation can outperform a large consumer app download funnel.
 
+Canonical docs:
+
+- [Flypost Discovery Protocol](docs/flypost-discovery-protocol.md)
+- [90405 Seed Workflow](docs/90405-seed-workflow.md)
+- [MCP Server Quick Start](mcp/readme.md)
+
 ## Architecture
 
 - **Backend**: Express.js API for event ingestion, discovery, share pages, presence, feedback, and machine-readable specs
@@ -47,7 +53,7 @@ See [`backend/ENHANCED_PARSING.md`](backend/ENHANCED_PARSING.md) for detailed do
 - `GET /health` - Health check
 - `POST /api/parse-and-publish` - Parse natural language and store event
 - `POST /v1/events/upsert` - Publish or update a structured event object
-- `GET /v1/events/near` - Discover events near a coordinate, with optional radius, time, brokerage, and category filters
+- `GET /v1/events/near` - Discover events near a coordinate, filtered by radius, sorted nearest-first, with optional time, brokerage, and category filters
 - `GET /v1/events/{event_id}` - Retrieve one event in Discovery V1 format
 - `GET /e/{slug}/{fpid}` - Public citeable event share page with JSON-LD
 - `GET /openapi.json`, `GET /llms.txt`, `GET /.well-known/openapi.json` - Machine-readable discovery surfaces
@@ -131,6 +137,7 @@ Discovery V1 is the public M2M contract. It intentionally returns a safe project
 - `when`: start/end timestamps and optional timezone
 - `eventId`, `dataHash`, `externalListingUrl`, `shareUrl`
 - optional `imageUrl` for image-first consumer surfaces when a stored event has a safe HTTPS `flypost.heroImageUrl`
+- optional `distance_mi` on near-query responses, computed from full-precision source coordinates before public coordinate rounding
 - optional source and occurrences metadata
 
 Public share pages are designed to be citeable by search and assistant systems. They expose canonical URLs, social metadata, and schema.org `Event` JSON-LD. Root and `.well-known` OpenAPI/LLM documents describe the same read-only discovery surface.

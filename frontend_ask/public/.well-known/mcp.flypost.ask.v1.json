@@ -1,7 +1,7 @@
 {
-  "name": "Flypost Ask - Event Discovery",
+  "name": "Flypost Ask - Local Event Discovery",
   "version": "1.0.0",
-  "description": "Read-only discovery tools for Flypost events using Discovery Protocol V1. Retrieve events by location or ID. This surface provides tiered access: registry-safe allowlist fields for public queries, full details for brokerage-scoped queries. No write operations.",
+  "description": "Read-only discovery tools for Flypost events using Discovery Protocol V1. Retrieve local events by location or ID. Near queries are radius-filtered and nearest-first with distance_mi when available. No write operations.",
   "capabilities": [
     "event_discovery",
     "location_search",
@@ -10,7 +10,7 @@
   "tools": [
     {
       "name": "get_events_near",
-      "description": "Retrieve events near a geographic location within a specified radius. Supports optional date filtering.",
+      "description": "Retrieve events near a geographic location within a specified radius. Results are nearest-first and include distance_mi when available. Supports optional date filtering.",
       "input_schema": {
         "type": "object",
         "description": "Parameters for location-based event search",
@@ -168,7 +168,7 @@
       "DiscoveryEvent": {
         "type": "object",
         "description": "Event in Discovery V1 format with strict what/where/when structure",
-        "required": ["eventId", "dataHash", "what", "where", "when", "externalListingUrl"],
+        "required": ["eventId", "dataHash", "what", "where", "when", "externalListingUrl", "shareUrl"],
         "properties": {
           "eventId": {
             "type": "string",
@@ -185,7 +185,7 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["open_house", "garage_sale", "estate_sale", "moving_sale", "yard_sale", "other"],
+                "enum": ["open_house", "garage_sale", "estate_sale", "moving_sale", "yard_sale", "apartment", "job_posting", "live_event", "community_alert", "happy_hour", "missing_pet", "other"],
                 "description": "Event category"
               },
               "label": {
@@ -249,6 +249,21 @@
               }
             ],
             "description": "URL to external listing (required field, can be null)"
+          },
+          "shareUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Public Flypost share page URL"
+          },
+          "distance_mi": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Optional distance in miles from the query coordinate, present only on near-query responses."
+          },
+          "imageUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional public HTTPS flyer image URL"
           },
           "source": {
             "type": "object",

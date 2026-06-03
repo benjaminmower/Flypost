@@ -2,19 +2,30 @@
 
 ## Overview
 
-This document explains how AI/LLM manifests (ai.json, llm.txt, MCP manifests, OpenAPI specs) are organized by surface and how to maintain them safely.
+This document explains how AI/LLM manifests (ai.json, llm.txt, MCP manifests,
+OpenAPI specs) are organized and how to maintain them safely.
+
+Flypost's canonical agent-facing API surface is `https://api.goflypost.com`.
+The API domain serves its current OpenAPI, MCP, and LLM guidance from
+`backend/src/wellKnownRoutes.js`. Frontend manifest files are deployment
+artifacts for specific web surfaces and must not be treated as the source of
+truth for the API domain.
+
+For the protocol narrative and core contract, start with
+`docs/flypost-discovery-protocol.md`.
 
 ## Surface Separation
 
 Flypost has three frontend surfaces, each with different capabilities:
 
-### 1. **Ask** (ask.goflypost.com) - Read-Only Discovery
+### 1. **API / Ask** (api.goflypost.com, ask.goflypost.com) - Read-Only Discovery
 - **Purpose**: Anonymous event discovery via geographic search using Discovery Protocol V1
 - **Capabilities**: Read-only access to events with tiered access (public vs brokerage-scoped)
-- **Manifests Location**: `frontend_ask/public/.well-known/`
-- **OpenAPI Spec**: `frontend_ask/public/openapi.yaml` (source), `openapi.json` (generated)
+- **Canonical Manifests Location**: `backend/src/wellKnownRoutes.js` for `api.goflypost.com`
+- **Legacy/Surface Manifests Location**: `frontend_ask/public/.well-known/` for ask-specific deployments
+- **Schema**: `backend/schemas/flypost-discovery-v1.schema.json`
 - **Advertised APIs**: 
-  - `GET /v1/events/near` - Location-based search (lat/lng optional, defaults to Santa Monica; radius_mi preferred)
+  - `GET /v1/events/near` - Location-based search (lat/lng optional, defaults to Santa Monica; radius_mi preferred; returns nearest-first results with `distance_mi` when applicable)
   - `GET /v1/events/{event_id}` - Retrieve single event
 - **Protocol**: Flypost Discovery Protocol V1 (protocol/version/success/events/meta structure)
 - **Access Tiers**:
@@ -50,15 +61,20 @@ Flypost has three frontend surfaces, each with different capabilities:
 
 ### OpenAPI Specifications
 
-**Ask Surface (Discovery Protocol V1)**:
-- **Source of Truth**: `frontend_ask/public/openapi.yaml` (human-editable YAML)
-- **Generated**: `frontend_ask/public/openapi.json` (machine-canonical, auto-generated)
-- **Regeneration**: `cd frontend_ask && npm run generate:openapi`
-- **Deployed URLs**: 
-  - https://ask.goflypost.com/.well-known/openapi.yaml
-  - https://ask.goflypost.com/.well-known/openapi.json (generated)
-  - https://ask.goflypost.com/openapi.yaml (root alias)
-  - https://ask.goflypost.com/openapi.json (root alias)
+**API Domain (Discovery Protocol V1)**:
+- **Source of Truth**: `backend/src/wellKnownRoutes.js` for served OpenAPI/LLM/MCP docs
+- **Schema**: `backend/schemas/flypost-discovery-v1.schema.json`
+- **Protocol Doc**: `docs/flypost-discovery-protocol.md`
+- **Deployed URLs**:
+  - https://api.goflypost.com/.well-known/openapi.yaml
+  - https://api.goflypost.com/.well-known/openapi.json
+  - https://api.goflypost.com/.well-known/llm.txt
+  - https://api.goflypost.com/.well-known/mcp.flypost.ask.v1.json
+
+**Ask Surface Files (if ask.goflypost.com is deployed separately)**:
+- **Location**: `frontend_ask/public/.well-known/`
+- **Rule**: keep aligned with the API-domain contract, but do not treat these files as canonical for `api.goflypost.com`.
+- **Regeneration**: `cd frontend_ask && npm run generate:openapi` if editing ask-specific YAML/JSON.
 
 **Backend API Contract**:
 - **Implementation**: `backend/src/server.js` (actual endpoint behavior)
@@ -71,11 +87,12 @@ Flypost has three frontend surfaces, each with different capabilities:
 
 ### Important Rules:
 
-1. **OpenAPI YAML is source of truth for Ask surface** - Edit `openapi.yaml`, regenerate `openapi.json`
-2. **Backend implementation is ground truth** - OpenAPI specs must match actual backend behavior
-3. **Surface manifests must align** - ai.json, llm.txt, MCP manifests reference OpenAPI and match backend
-4. **Never manually edit openapi.json** - Always regenerate from YAML
-5. **Validate alignment** - When backend changes, update OpenAPI YAML and regenerate JSON in same PR
+1. **Backend implementation is ground truth** - OpenAPI specs must match actual backend behavior.
+2. **API well-known routes are canonical for agents** - update `backend/src/wellKnownRoutes.js` when API behavior changes.
+3. **JSON schema must match emitted responses** - update `backend/schemas/flypost-discovery-v1.schema.json` for response-shape changes.
+4. **Surface manifests must align** - ai.json, llm.txt, MCP manifests reference the API-domain OpenAPI and match backend.
+5. **Generated frontend OpenAPI JSON stays generated** - if editing `frontend_ask/public/openapi.yaml`, regenerate `frontend_ask/public/openapi.json`.
+6. **Validate alignment** - When backend changes affect the protocol, update backend well-known docs, schema, MCP docs, and any active surface manifests in the same PR.
 
 ### Regenerating OpenAPI JSON from YAML
 

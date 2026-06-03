@@ -10,15 +10,23 @@ const router = Router()
 
 const OPENAPI_YAML = `openapi: 3.0.3
 info:
-  title: Flypost Ask - Public Discovery API
+  title: Flypost Discovery Protocol API
   description: |
-    Read-only public API for discovering local events (open houses, garage sales, apartments,
-    job postings, live events, community alerts, happy hours, missing pets, and related activity)
-    using the Flypost Discovery Protocol V1.
+    Agent-readable local event discovery protocol.
+
+    Flypost lets agents publish messy real-world event data and consume canonical
+    what/where/when event records by place and time.
+
+    This read surface discovers local events (open houses, garage sales, apartments,
+    job postings, live events, community alerts, happy hours, missing pets, and related
+    activity) using the Flypost Discovery Protocol V1.
 
     This API provides tiered access to event data:
     - Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields only
     - Brokerage-scoped reads (with brokerageId or api_key): Full event details
+
+    GET /v1/events/near returns events within the requested radius, sorted nearest-first,
+    with distance_mi when a query coordinate is provided.
 
     All responses follow the Discovery Protocol V1 format with protocol/version/success/events/meta structure.
   version: 1.0.0
@@ -48,6 +56,8 @@ paths:
       summary: Find events near a location
       description: |
         Retrieves events near a specified geographic location within a given radius.
+        Results are filtered by radius, exclude events without coordinates, and are sorted
+        nearest-first. Near-query responses include distance_mi rounded to 2 decimals.
         Supports optional category and date range filtering for time-based queries.
       operationId: getEventsNear
       tags:
@@ -625,8 +635,8 @@ security: []
 const OPENAPI_JSON = {
   openapi: '3.0.3',
   info: {
-    title: 'Flypost Ask - Public Discovery API',
-    description: 'Read-only public API for discovering local events (open houses, garage sales, apartments, job postings, live events, community alerts, happy hours, missing pets, and related activity)\nusing the Flypost Discovery Protocol V1.\n\nThis API provides tiered access to event data:\n- Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields only\n- Brokerage-scoped reads (with brokerageId or api_key): Full event details\n\nAll responses follow the Discovery Protocol V1 format with protocol/version/success/events/meta structure.\n',
+    title: 'Flypost Discovery Protocol API',
+    description: 'Agent-readable local event discovery protocol.\n\nFlypost lets agents publish messy real-world event data and consume canonical what/where/when event records by place and time.\n\nThis read surface discovers local events (open houses, garage sales, apartments, job postings, live events, community alerts, happy hours, missing pets, and related activity) using the Flypost Discovery Protocol V1.\n\nThis API provides tiered access to event data:\n- Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields only\n- Brokerage-scoped reads (with brokerageId or api_key): Full event details\n\nGET /v1/events/near returns events within the requested radius, sorted nearest-first, with distance_mi when a query coordinate is provided.\n\nAll responses follow the Discovery Protocol V1 format with protocol/version/success/events/meta structure.\n',
     version: '1.0.0',
     contact: { name: 'Flypost Support', url: 'https://goflypost.com', email: 'support@goflypost.com' },
     license: { name: 'Apache 2.0', url: 'https://www.apache.org/licenses/LICENSE-2.0.html' }
@@ -640,7 +650,7 @@ const OPENAPI_JSON = {
     '/v1/events/near': {
       get: {
         summary: 'Find events near a location',
-        description: 'Retrieves events near a specified geographic location within a given radius.\nSupports optional category and date range filtering for time-based queries.\n',
+        description: 'Retrieves events near a specified geographic location within a given radius.\nResults are filtered by radius, exclude events without coordinates, and are sorted nearest-first. Near-query responses include distance_mi rounded to 2 decimals.\nSupports optional category and date range filtering for time-based queries.\n',
         operationId: 'getEventsNear',
         tags: ['discovery'],
         parameters: [
@@ -906,13 +916,17 @@ const MCP_JSON = {
   metrics: { performance_tracking: true, latency_ms: 5000, enable_error_logging: true }
 }
 
-const LLM_TXT = `# Flypost Ask - Read-Only Discovery API (llm.txt v2)
+const LLM_TXT = `# Flypost Discovery Protocol - Agent Read Surface (llm.txt v2)
 
-service_name: Flypost Ask
+service_name: Flypost Discovery Protocol
 service_purpose: >
-  Flypost Ask provides read-only discovery of local events (open houses, garage sales,
-  apartments, job postings, live events, community alerts, happy hours, missing pets,
-  and related activity) via geographic search using the Flypost Discovery Protocol V1.
+  Flypost is an agent-readable local event discovery protocol. Agents publish messy
+  real-world event data; Flypost exposes canonical what/where/when records that other
+  agents can discover by place and time.
+
+  This API domain provides read-only discovery of local events (open houses, garage
+  sales, apartments, job postings, live events, community alerts, happy hours, missing
+  pets, and related activity) via geographic search using Discovery Protocol V1.
 
   This surface is for event discovery only and does not support event creation, modification,
   presence check-ins, or feedback submissions.
@@ -932,6 +946,8 @@ canonical_openapi: https://api.goflypost.com/.well-known/openapi.yaml
 ### GET /v1/events/near
 Description: >
   Retrieve events near a latitude/longitude within a specified radius.
+  Results are filtered by radius, exclude events without coordinates, and are sorted
+  nearest-first. Near-query responses include distance_mi rounded to 2 decimals.
   Supports optional category and date range filtering.
 
 Query Parameters:
@@ -1052,8 +1068,10 @@ Rate Limits:
 4. Use category filters when users ask for a specific kind of event
 5. Use start/end filters when users specify time constraints
 6. Use radius_mi (preferred) for miles or radius for kilometers
-7. This is a DISCOVERY-ONLY surface — do not attempt to create or modify events
-8. For publishing, direct users to post.goflypost.com
+7. Preserve API order for near-query results unless the user asks for another sort; /near is nearest-first
+8. Prefer event.distance_mi for distance display; it is computed from full-precision source geo
+9. This is a DISCOVERY-ONLY read surface — do not attempt to create or modify events here
+10. For publishing, use POST /api/parse-and-publish with valid write auth or direct users to app.goflypost.com/post
 
 ## Health Check
 GET /health - Service health status

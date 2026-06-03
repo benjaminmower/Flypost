@@ -1,23 +1,25 @@
 {
   "schema_version": "v1",
   "name_for_model": "flypost_ask",
-  "name_for_human": "Flypost Ask - Event Discovery",
-  "description_for_model": "Flypost Ask provides read-only access to discover real estate events (open houses, garage sales, estate sales) using the Flypost Discovery Protocol V1. Tiered access: registry-safe allowlist fields for public queries (reduced precision), full details for brokerage-scoped queries. This surface is discovery-only and does not support event creation or modification.",
-  "description_for_human": "Discover real estate events like open houses and garage sales near you (read-only).",
+  "name_for_human": "Flypost Ask - Local Event Discovery",
+  "description_for_model": "Flypost Ask provides read-only access to discover local events using the Flypost Discovery Protocol V1. Use GET /v1/events/near for radius-filtered, nearest-first local events with distance_mi when available, and GET /v1/events/{event_id} for a specific event. This surface is discovery-only and does not support event creation or modification.",
+  "description_for_human": "Discover nearby local events through the Flypost Discovery Protocol.",
   "auth": {
     "type": "none"
   },
   "api": {
     "type": "openapi",
-    "url": "https://ask.goflypost.com/openapi.json",
+    "url": "https://api.goflypost.com/.well-known/openapi.json",
     "is_user_authenticated": false
   },
   "capabilities": {
     "domain_specific": [
       "event-discovery",
       "location-search",
+      "nearest-first",
+      "garage-sales",
       "open-houses",
-      "garage-sales"
+      "local-events"
     ]
   },
   "contact_email": "support@goflypost.com",

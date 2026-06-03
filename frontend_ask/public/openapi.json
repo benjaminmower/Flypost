@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Flypost Ask - Public Discovery API",
-    "description": "Read-only public API for discovering real estate events (open houses, garage sales, etc.)\nusing the Flypost Discovery Protocol V1.\n\nThis API provides tiered access to event data:\n- Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields only\n- Brokerage-scoped reads (with brokerageId or api_key): Full event details\n\nAll responses follow the Discovery Protocol V1 format with protocol/version/success/events/meta structure.\n",
+    "description": "Read-only public API for discovering local events (open houses, garage sales,\napartments, jobs, live events, alerts, happy hours, missing pets, and related activity)\nusing the Flypost Discovery Protocol V1.\n\nThis API provides tiered access to event data:\n- Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields only\n- Brokerage-scoped reads (with brokerageId or api_key): Full event details\n\nAll responses follow the Discovery Protocol V1 format with protocol/version/success/events/meta structure.\n",
     "version": "1.0.0",
     "contact": {
       "name": "Flypost Support",
@@ -38,7 +38,7 @@
     "/v1/events/near": {
       "get": {
         "summary": "Find events near a location",
-        "description": "Retrieves events near a specified geographic location within a given radius.\nSupports optional date range filtering for time-based queries.\n",
+        "description": "Retrieves events near a specified geographic location within a given radius.\nResults are radius-filtered, exclude no-geo events, and are sorted nearest-first\nwith distance_mi when available. Supports optional date range filtering.\n",
         "operationId": "getEventsNear",
         "tags": [
           "discovery"
@@ -616,7 +616,8 @@
           "what",
           "where",
           "when",
-          "externalListingUrl"
+          "externalListingUrl",
+          "shareUrl"
         ],
         "properties": {
           "eventId": {
@@ -646,6 +647,12 @@
                   "estate_sale",
                   "moving_sale",
                   "yard_sale",
+                  "apartment",
+                  "job_posting",
+                  "live_event",
+                  "community_alert",
+                  "happy_hour",
+                  "missing_pet",
                   "other"
                 ],
                 "example": "open_house"
@@ -730,6 +737,23 @@
               }
             ],
             "description": "External listing URL (required field, can be null)"
+          },
+          "shareUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Public Flypost share page URL",
+            "example": "https://goflypost.com/e/event/evt_20250115_abc123_fpid"
+          },
+          "imageUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional public HTTPS flyer image URL for consumer surfaces"
+          },
+          "distance_mi": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Optional distance in miles from the query coordinate, present only on near-query responses. Computed from full-precision source geo before where.* rounding, rounded to 2 decimals.",
+            "example": 0.42
           },
           "source": {
             "type": "object",

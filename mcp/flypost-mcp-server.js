@@ -33,11 +33,11 @@ async function apiFetch(path, options = {}) {
 // --- search_events_near ---
 server.tool(
   "search_events_near",
-  "Search for Flypost events near a geographic location.",
+  "Search for Flypost events near a geographic location. Results are nearest-first when lat/lng are provided.",
   {
     lat: z.number().describe("Latitude of the search center"),
     lng: z.number().describe("Longitude of the search center"),
-    radius_mi: z.number().optional().describe("Search radius in miles (default: 10)"),
+    radius_mi: z.number().optional().describe("Search radius in miles. Use 1.25 for a hyperlocal ~2km query; if omitted the API fallback radius is 10km."),
     start: z.string().optional().describe("ISO 8601 start date filter"),
     end: z.string().optional().describe("ISO 8601 end date filter"),
     brokerageId: z.string().optional().describe("Filter by brokerage ID"),
@@ -53,13 +53,18 @@ server.tool(
     const events = Array.isArray(data) ? data : (data.events ?? [])
 
     const summary = events.map((e) => ({
-      eventId: e.eventId ?? e.id,
-      name: e.name ?? e.title,
-      address: e.address,
-      date: e.startTime ?? e.date,
-      price: e.price,
-      organizer: e.organizerName ?? e.organizer,
+      eventId: e.eventId,
+      type: e.what?.type,
+      label: e.what?.label,
+      address: e.where?.address,
+      latitude: e.where?.latitude,
+      longitude: e.where?.longitude,
+      start: e.when?.start,
+      end: e.when?.end,
+      timezone: e.when?.timezone,
+      distance_mi: e.distance_mi,
       shareUrl: e.shareUrl,
+      imageUrl: e.imageUrl,
     }))
 
     return {

@@ -2,7 +2,8 @@ openapi: 3.0.3
 info:
   title: Flypost Ask - Public Discovery API
   description: |
-    Read-only public API for discovering real estate events (open houses, garage sales, etc.)
+    Read-only public API for discovering local events (open houses, garage sales,
+    apartments, jobs, live events, alerts, happy hours, missing pets, and related activity)
     using the Flypost Discovery Protocol V1.
     
     This API provides tiered access to event data:
@@ -37,7 +38,8 @@ paths:
       summary: Find events near a location
       description: |
         Retrieves events near a specified geographic location within a given radius.
-        Supports optional date range filtering for time-based queries.
+        Results are radius-filtered, exclude no-geo events, and are sorted nearest-first
+        with distance_mi when available. Supports optional date range filtering.
       operationId: getEventsNear
       tags:
         - discovery
@@ -457,6 +459,7 @@ components:
         - where
         - when
         - externalListingUrl
+        - shareUrl
       properties:
         eventId:
           type: string
@@ -476,7 +479,7 @@ components:
             type:
               type: string
               description: Event category
-              enum: [open_house, garage_sale, estate_sale, moving_sale, yard_sale, other]
+              enum: [open_house, garage_sale, estate_sale, moving_sale, yard_sale, apartment, job_posting, live_event, community_alert, happy_hour, missing_pet, other]
               example: "open_house"
             label:
               type: string
@@ -538,6 +541,20 @@ components:
               example: "https://www.zillow.com/homedetails/123-Main-St"
             - type: "null"
           description: External listing URL (required field, can be null)
+        shareUrl:
+          type: string
+          format: uri
+          description: Public Flypost share page URL
+          example: "https://goflypost.com/e/event/evt_20250115_abc123_fpid"
+        imageUrl:
+          type: string
+          format: uri
+          description: Optional public HTTPS flyer image URL for consumer surfaces
+        distance_mi:
+          type: number
+          minimum: 0
+          description: Optional distance in miles from the query coordinate, present only on near-query responses. Computed from full-precision source geo before where.* rounding, rounded to 2 decimals.
+          example: 0.42
         source:
           type: object
           description: Optional source provenance information

@@ -1,149 +1,81 @@
-# Flypost Ask - Read-Only Discovery API (llm.txt v2)
+# Flypost Ask - Discovery Protocol Read Surface
 
 service_name: Flypost Ask
 service_purpose: >
-  Flypost Ask provides read-only discovery of real estate events (open houses, garage sales,
-  estate sales) via geographic search using the Flypost Discovery Protocol V1.
-  
-  This surface is for event discovery only and does not support event creation, modification,
-  presence check-ins, or feedback submissions.
-  
-  Access is tiered:
-  - Public anonymous reads (no brokerageId/api_key): Registry-safe allowlist fields with reduced geo precision
-  - Brokerage-scoped reads (with brokerageId or api_key): Full-fidelity event details
+  Flypost Ask is the read-only discovery surface for the Flypost Discovery
+  Protocol. Agents use it to discover local events by place and time.
 
-primary_audience: machine-agents (LLMs, AI assistants)
-human_audience: developers building event discovery applications
+  Canonical API contract:
+  https://api.goflypost.com/.well-known/openapi.yaml
+
+  Canonical protocol doc:
+  docs/flypost-discovery-protocol.md
 
 base_url: https://api.goflypost.com
 canonical_openapi: https://api.goflypost.com/.well-known/openapi.yaml
 
-## Core Discovery Endpoints (Protocol Contract)
+## Core Endpoints
 
 ### GET /v1/events/near
-Description: >
-  Retrieve events near a latitude/longitude within a specified radius.
-  Supports optional date range filtering.
 
-Query Parameters:
-  - lat: number (optional; defaults to Santa Monica, CA if omitted) - Latitude in decimal degrees (-90 to 90)
-  - lng: number (optional; defaults to Santa Monica, CA if omitted) - Longitude in decimal degrees (-180 to 180)
+Retrieve local events near a latitude/longitude.
 
-  - radius_mi: number (optional, preferred) - Search radius in miles (0.1 to 50)
-  - radius: number (optional, fallback) - Search radius in kilometers (0 to 100, default: 10)
-    Note: if radius_mi is provided, radius is ignored.
+Results are:
 
-  - start: string (optional) - Filter events that overlap this date range start (ISO 8601)
-  - end: string (optional) - Filter events that overlap this date range end (ISO 8601)
+- filtered by requested radius
+- limited to events with coordinates
+- sorted nearest-first
+- returned as Discovery Protocol V1
+- annotated with distance_mi when available
 
-Response Shape (Discovery Protocol V1):
-  protocol: string ("flypost-discovery")
-  version: string ("v1")
-  success: boolean
-  events: array of DiscoveryEventV1 objects
-  meta:
-    count: integer
+Use `radius_mi=1.25` for a hyperlocal 90405-style query.
 
 ### GET /v1/events/{event_id}
-Description: >
-  Retrieve a single event by its unique event identifier.
-  Returns a Discovery Protocol V1 response with events array containing exactly one item.
 
-Path Parameters:
-  - event_id: string (required) - Unique event identifier
+Retrieve one event by ID. Response uses the same Discovery Protocol V1 envelope
+with an events array containing one item.
 
-Response Shape (Discovery Protocol V1):
-  protocol: string ("flypost-discovery")
-  version: string ("v1")
-  success: boolean
-  events: array with exactly 1 DiscoveryEventV1 object
-  meta:
-    count: integer (1)
+## DiscoveryEventV1
 
-## DiscoveryEventV1 (allowlisted fields only)
-This is a registry-safe allowlist projection of stored events.
-It includes what/where/when and selected metadata, but excludes any intelligence/truth-writing fields
-(attendance, buyerToken, presenceProof, feedback, insights, brokerageAffiliation, etc.).
+Registry-safe event projection:
 
-Fields:
-  - eventId: string (unique identifier)
-  - dataHash: string (SHA-256 hash for integrity, lowercase hex)
-  - what: { type: enum, label?: string }
-    - type: "open_house" | "garage_sale" | "estate_sale" | "moving_sale" | "yard_sale" | "other"
-    - label: optional event name/title (max 80 chars)
-  - where: { latitude: number, longitude: number, address?: string }
-    - latitude/longitude: full precision for brokerage tier, 2-decimal precision for public tier
-    - address: optional flattened address string (max 200 chars)
-  - when: { start: ISO8601, end: ISO8601, timezone?: string }
-    - start/end: UTC timestamps
-    - timezone: optional IANA timezone (e.g., "America/Los_Angeles")
-  - externalListingUrl: string | null (required key, nullable value)
-  - source?: { kind: enum, url: string | null }
-    - kind: "mls" | "brokerage_roster" | "manual" | "third_party"
+- eventId
+- dataHash
+- what: type, label
+- where: latitude, longitude, address
+- when: start, end, timezone
+- externalListingUrl
+- shareUrl
+- imageUrl
+- distance_mi on near-query responses
+- source
 
-## Web Concierge Endpoint
+Public anonymous responses may use reduced coordinate precision. `distance_mi`
+is computed from full-precision source coordinates before public rounding.
 
-### POST /api/chat
-Description: >
-  Natural-language query interface for discovering real estate events.
-  Send a question in plain English; receive a markdown-formatted response.
-  Conditional: only active when ENABLE_CONCIERGE=true on the backend.
+## Categories
 
-Request Body (application/json):
-  - message: string (required, non-empty) - Natural-language question
-  - lat: number (optional) - Latitude for location context (-90 to 90, default: 34.0195 Santa Monica)
-  - lng: number (optional) - Longitude for location context (-180 to 180, default: -118.4912 Santa Monica)
-  - conversationHistory: array (optional) - Prior messages for multi-turn follow-up queries
-    Each item: { role: "user" | "assistant", content: string }
+open_house, garage_sale, estate_sale, moving_sale, yard_sale, apartment,
+job_posting, live_event, community_alert, happy_hour, missing_pet, other.
 
-Response Shape (200):
-  success: boolean
-  message: string (markdown-formatted response)
-  timestamp: string (ISO 8601)
+## Rules For Agents
 
-### POST /api/chat/stream
-Description: >
-  SSE streaming version of the Web Concierge. Same request body as /api/chat.
-  Returns text/event-stream; tokens stream as they are generated.
+1. Use the API; do not invent event data.
+2. Preserve `/v1/events/near` order unless the user asks for another sort.
+3. Display `distance_mi` when present.
+4. Use `shareUrl` as the public handoff URL.
+5. Do not publish through this read surface. Use authenticated write endpoints
+   on `https://api.goflypost.com` or the PWA post flow.
 
-SSE Event Types:
-  - {"type":"connected"} — stream opened
-  - {"type":"token","content":"..."} — partial response token
-  - {"type":"done","duration":ms} — stream complete
-  - {"type":"error","message":"..."} — error occurred
+## Publishing
 
-### GET /api/chat/health
-Description: Health check for the Web Concierge service.
-Response: { status: "ok" }
+Publishing is separate from read-only discovery:
 
-Concierge Rate Limit: 20 requests per 15 minutes per IP (applies to both /api/chat and /api/chat/stream).
-Auth: None required (public endpoint).
-Conditional: Only active when ENABLE_CONCIERGE=true environment variable is set.
+- `POST /api/parse-and-publish` with Firebase bearer auth or write token
+- `POST /v1/events/upsert` with write token
 
-## Authentication
-Authentication: Not required for GET discovery endpoints or POST /api/chat.
+Human PWA posting:
 
-Rate Limits:
-  - Public anonymous reads (no brokerageId / no api_key): 100 requests per 15 minutes per IP
-  - Brokerage-scoped reads (brokerageId or api_key present): 500 requests per 15 minutes per IP
-  Note: actual limits are enforced by the backend and may change; handle 429 responses gracefully.
-
-## LLM Usage Recommendations
-1. Use GET /v1/events/near when users ask for events near a location
-2. Use GET /v1/events/{event_id} when users reference a specific event
-3. Do not hallucinate event data — always call the API
-4. Use start/end filters when users specify time constraints
-5. Use radius_mi (preferred) for miles or radius for kilometers
-6. This is a DISCOVERY-ONLY surface — do not attempt to create or modify events
-7. For publishing, direct users to post.goflypost.com
-
-## Health Check
-GET /health - Service health status
-
-## Versioning
-API Protocol: flypost-discovery v1
-Stability: stable
-
-## Support
-Technical Support: support@goflypost.com
-Security Issues: support@goflypost.com
+```text
+https://app.goflypost.com/post
+```
