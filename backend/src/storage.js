@@ -13,6 +13,7 @@ import {
   getEventByIdFromFirestore, // Get event by document ID
   eventHasAttendance // Check if event has attendance records
 } from './firestoreClient.js'
+import { distanceKm, getEventGeo } from './utils/geo.js'
 import { hasValidListPrice } from './utils/priceExtractor.js'
 
 // In-memory event store
@@ -277,8 +278,43 @@ export async function getEventByIdAny(eventId, useFirestore = false) {
  * @param {boolean} useFirestore - Whether to query Firestore
  * @returns {Promise<array>} - Array of events
  */
+/**
+ * Filter events to those within `radiusKm` of (lat, lng), attach an internal
+ * `_distanceKm` field, and sort ascending (nearest first). Events without
+ * resolvable coordinates are excluded — they cannot be placed or ordered.
+ *
+ * `_distanceKm` is internal-only and must never be serialized to a client; the
+ * discovery mapper reads it to emit the public `distance_mi` field.
+ */
+export function filterAndSortByDistance(events, latitude, longitude, radiusKm) {
+  const withDistance = []
+  let noGeoCount = 0
+
+  for (const event of events) {
+    const geo = getEventGeo(event)
+    if (!geo) {
+      noGeoCount++
+      continue
+    }
+    const d = distanceKm(latitude, longitude, geo.lat, geo.lng)
+    if (d > radiusKm) continue
+    // Shallow-copy so we never mutate the shared in-memory store reference;
+    // _distanceKm is query-contextual and must not persist on the stored object.
+    withDistance.push({ ...event, _distanceKm: d })
+  }
+
+  withDistance.sort((a, b) => a._distanceKm - b._distanceKm)
+
+  if (noGeoCount > 0) {
+    console.log(`📍 Excluded ${noGeoCount} event(s) with no geo from near query`)
+  }
+  return withDistance
+}
+
 export async function getEventsNear(latitude, longitude, radius = 10, useFirestore = false) {
-  // If Firestore is enabled and requested, use Firestore geospatial query
+  // If Firestore is enabled and requested, use Firestore geospatial query.
+  // An empty result is a valid answer (no geo events, or none in radius) — we
+  // only fall back to the memory store when the Firestore query throws.
   if (useFirestore && isFirestoreEnabled()) {
     try {
       const { queryEventsByLocationAndTime } = await import('./firestoreClient.js')
@@ -288,22 +324,18 @@ export async function getEventsNear(latitude, longitude, radius = 10, useFiresto
         radiusKm: radius
       })
       console.log(`📍 Firestore near query (${latitude}, ${longitude}) returned ${events.length} events`)
-      // Fallback to memory if Firestore returns 0 (e.g., writes failing or no geo on events)
-      if (events.length > 0) {
-        return events
-      }
-      console.log('📍 Firestore near query returned 0; falling back to memory store')
+      return events
     } catch (error) {
       console.error('⚠️  Firestore near query failed, falling back to memory:', error.message)
-      // Fall through to memory retrieval
+      // Fall through to memory retrieval only on a thrown error.
     }
   }
 
-  // Default: naive implementation - return all events from memory
+  // Memory path: filter by radius, exclude no-geo, sort nearest-first.
   const events = await getEvents()
-  
-  console.log(`📍 Near query (${latitude}, ${longitude}) returned ${events.length} events (memory fallback)`)
-  return events
+  const near = filterAndSortByDistance(events, latitude, longitude, radius)
+  console.log(`📍 Near query (${latitude}, ${longitude}) returned ${near.length} of ${events.length} events (memory)`)
+  return near
 }
 
 /**

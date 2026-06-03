@@ -335,6 +335,13 @@ export function toDiscoveryEventV1(event, options = {}) {
 
   const discoveryEvent = { eventId, dataHash, what, where, when, externalListingUrl, shareUrl }
 
+  // Optional: distance_mi — emitted from the internal _distanceKm set by the
+  // near-query filter. Computed from full-precision source geo before `where`
+  // coordinates are rounded, so the public 2-decimal rounding never affects it.
+  if (Number.isFinite(event._distanceKm)) {
+    discoveryEvent.distance_mi = parseFloat((event._distanceKm / 1.60934).toFixed(2))
+  }
+
   if (isSafeHttpsUrl(event.flypost?.heroImageUrl)) {
     discoveryEvent.imageUrl = event.flypost.heroImageUrl
   }

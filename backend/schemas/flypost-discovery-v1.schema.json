@@ -132,6 +132,12 @@
           "description": "Optional public HTTPS image URL for image-first consumer surfaces."
         },
 
+        "distance_mi": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Optional distance in miles from the query coordinate to the event, present only on near-query responses. Computed from full-precision source geo (before where.* rounding) and rounded to 2 decimals."
+        },
+
         "occurrences": {
           "type": "array",
           "items": {

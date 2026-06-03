@@ -265,8 +265,14 @@ function renderDeck(events, coords) {
 }
 
 function cardTemplate(event, coords, index) {
+  // Prefer the backend-computed distance_mi (derived from full-precision geo
+  // before the public 2-decimal rounding); fall back to a client-side estimate
+  // from the rounded `where` coordinates only when it is absent.
   const eventCoords = { lat: event.where?.latitude, lng: event.where?.longitude }
-  const distance = formatDistance(distanceMiles(coords, eventCoords))
+  const distanceMi = Number.isFinite(event.distance_mi)
+    ? event.distance_mi
+    : distanceMiles(coords, eventCoords)
+  const distance = formatDistance(distanceMi)
   const relative = formatRelativeTime(event.when?.start)
   const offset = index * 10
   const rotation = index === 0 ? 0 : index % 2 ? -2 : 2

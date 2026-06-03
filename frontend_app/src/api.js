@@ -16,7 +16,7 @@ async function parseResponse(response) {
   return result
 }
 
-export async function getEventsNear({ lat, lng, radiusMi = 10, categories = [], start = new Date() }) {
+export async function getEventsNear({ lat, lng, radiusMi = 1.25, categories = [], start = new Date() }) {
   const params = new URLSearchParams()
   if (lat != null) params.set('lat', String(lat))
   if (lng != null) params.set('lng', String(lng))

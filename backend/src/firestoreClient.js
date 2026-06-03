@@ -4,6 +4,7 @@
  */
 
 import { Firestore } from '@google-cloud/firestore'
+import { getEventGeo } from './utils/geo.js'
 
 let firestoreInstance = null
 
@@ -294,7 +295,9 @@ export async function queryEventsByLocationAndTime(filters = {}) {
     })
 
     // If location filters are provided, apply in-memory geospatial filtering.
-    // Only filter if at least one event has coordinates; otherwise return all events.
+    // Events without resolvable coordinates are excluded (they cannot be placed
+    // or ordered). An empty result is a valid answer — we do NOT fall back to
+    // returning all events when none have geo.
     const hasGeoFilters = (
       filters.latitude !== undefined &&
       filters.longitude !== undefined &&
@@ -302,23 +305,24 @@ export async function queryEventsByLocationAndTime(filters = {}) {
     )
 
     if (hasGeoFilters) {
-      const withGeo = events.filter(e =>
-        (e?.location?.geo?.latitude && e?.location?.geo?.longitude) ||
-        (e?.flypost?.geo?.latitude && e?.flypost?.geo?.longitude)
-      )
-      if (withGeo.length > 0) {
-        const filtered = withGeo.filter(event => {
-          const lat = event.location?.geo?.latitude ?? event.flypost?.geo?.latitude
-          const lng = event.location?.geo?.longitude ?? event.flypost?.geo?.longitude
-          const distance = calculateDistance(filters.latitude, filters.longitude, lat, lng)
-          return distance <= filters.radiusKm
-        })
-        console.log(`🔥 Firestore query (geo-filtered) returned ${filtered.length} of ${withGeo.length} geo-tagged events (from ${events.length} total)`)
-        return filtered
-      } else {
-        console.log('🔥 Firestore query: 0 events have geo; skipping distance filter and returning all events')
-        return events
+      const near = []
+      let noGeoCount = 0
+      for (const event of events) {
+        const geo = getEventGeo(event)
+        if (!geo) {
+          noGeoCount++
+          continue
+        }
+        const distance = calculateDistance(filters.latitude, filters.longitude, geo.lat, geo.lng)
+        if (distance > filters.radiusKm) continue
+        // Shallow-copy + attach internal _distanceKm (read by the discovery
+        // mapper to emit public distance_mi). Never mutate the source object —
+        // _distanceKm is query-contextual and must not persist.
+        near.push({ ...event, _distanceKm: distance })
       }
+      near.sort((a, b) => a._distanceKm - b._distanceKm)
+      console.log(`🔥 Firestore query (geo-filtered) returned ${near.length} within ${filters.radiusKm}km (excluded ${noGeoCount} no-geo, from ${events.length} total)`)
+      return near
     } else {
       console.log(`🔥 Firestore query (no geo filter) returned ${events.length} events`)
       return events

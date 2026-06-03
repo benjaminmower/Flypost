@@ -363,6 +363,11 @@ components:
           type: string
           format: uri
           description: Optional public HTTPS flyer image URL for consumer surfaces
+        distance_mi:
+          type: number
+          minimum: 0
+          description: Optional distance in miles from the query coordinate, present only on near-query responses. Computed from full-precision geo before where.* rounding, rounded to 2 decimals.
+          example: 0.42
         source:
           type: object
           description: Optional source provenance information
@@ -735,6 +740,7 @@ const OPENAPI_JSON = {
           externalListingUrl: { oneOf: [{ type: 'string', format: 'uri', description: 'URL to external listing or detail page', example: 'https://www.zillow.com/homedetails/123-Main-St' }, { type: 'null' }], description: 'External listing URL (required field, can be null)' },
           shareUrl: { type: 'string', format: 'uri', description: 'Public Flypost share page URL', example: 'https://goflypost.com/e/event/evt_20250115_abc123_fpid' },
           imageUrl: { type: 'string', format: 'uri', description: 'Optional public HTTPS flyer image URL for consumer surfaces' },
+          distance_mi: { type: 'number', minimum: 0, description: 'Optional distance in miles from the query coordinate, present only on near-query responses. Computed from full-precision geo before where.* rounding, rounded to 2 decimals.', example: 0.42 },
           source: { type: 'object', description: 'Optional source provenance information', required: ['kind', 'url'], properties: { kind: { type: 'string', enum: ['mls', 'brokerage_roster', 'manual', 'third_party'], description: 'Source type', example: 'mls' }, url: { oneOf: [{ type: 'string', format: 'uri', description: 'Source URL', example: 'https://api.mls.com/listings/123' }, { type: 'null' }], description: 'Source URL (can be null)' } } }
         }
       },
@@ -885,6 +891,7 @@ const MCP_JSON = {
           externalListingUrl: { oneOf: [{ type: 'string', format: 'uri' }, { type: 'null' }], description: 'URL to external listing (required field, can be null)' },
           shareUrl: { type: 'string', format: 'uri', description: 'Public Flypost share page URL' },
           imageUrl: { type: 'string', format: 'uri', description: 'Optional public HTTPS flyer image URL' },
+          distance_mi: { type: 'number', minimum: 0, description: 'Optional distance in miles from the query coordinate, present only on near-query responses (rounded to 2 decimals).' },
           source: { type: 'object', required: ['kind', 'url'], properties: { kind: { type: 'string', enum: ['mls', 'brokerage_roster', 'manual', 'third_party'], description: 'Source type' }, url: { oneOf: [{ type: 'string', format: 'uri' }, { type: 'null' }], description: 'Source URL (can be null)' } } }
         }
       }
@@ -987,6 +994,7 @@ Fields:
   - externalListingUrl: string | null (required key, nullable value)
   - shareUrl: string (public Flypost share page URL)
   - imageUrl?: string (optional public HTTPS flyer image URL)
+  - distance_mi?: number (optional miles from query coordinate; near-query responses only, rounded to 2 decimals)
   - source?: { kind: enum, url: string | null }
     - kind: "mls" | "brokerage_roster" | "manual" | "third_party"
 
