@@ -1,0 +1,73 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+    run.googleapis.com/maxScale: '20'
+    run.googleapis.com/urls: '["https://flypostv4-498798854474.us-west1.run.app","https://flypostv4-a7jlfl42zq-uw.a.run.app"]'
+  labels:
+    cloud.googleapis.com/location: us-west1
+    commit-sha: 6590bd49adb12ecb15ac718614dfffdb0805022b
+    gcb-build-id: 0915dd9f-4084-4b9e-a894-2796281dda97
+    gcb-trigger-id: 3c359a8f-a13d-4650-83b1-fe6f589c61b9
+    gcb-trigger-region: global
+    managed-by: gcp-cloud-build-deploy-cloud-run
+  name: flypostv4
+  namespace: '498798854474'
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: '20'
+        run.googleapis.com/client-name: gcloud
+        run.googleapis.com/client-version: 571.0.0
+        run.googleapis.com/startup-cpu-boost: 'true'
+      labels:
+        client.knative.dev/nonce: ftiajluayi
+        commit-sha: 6590bd49adb12ecb15ac718614dfffdb0805022b
+        gcb-build-id: 0915dd9f-4084-4b9e-a894-2796281dda97
+        gcb-trigger-id: 3c359a8f-a13d-4650-83b1-fe6f589c61b9
+        gcb-trigger-region: global
+        managed-by: gcp-cloud-build-deploy-cloud-run
+        run.googleapis.com/startupProbeType: Default
+    spec:
+      containerConcurrency: 80
+      containers:
+      - env:
+        - name: FRONTEND_URL
+          value: https://flypost.netlify.app,https://app.goflypost.com,https://ask.goflypost.com,https://flypost-concierge-498798854474.us-west1.run.app
+        - name: OPENAI_API_KEY
+          value: <REDACTED-OPENAI_API_KEY>
+        - name: NODE_ENV
+          value: production
+        - name: GOOGLE_CLOUD_PROJECT
+          value: goflypost
+        - name: ENABLE_CONCIERGE
+          value: 'true'
+        - name: GEOCODER_API_KEY
+          value: <REDACTED-GEOCODER_API_KEY>
+        - name: GEOCODER_PROVIDER
+          value: google
+        - name: GEOCODER_CACHE_TTL_SECONDS
+          value: '86400'
+        image: us-west1-docker.pkg.dev/goflypost/cloud-run-source-deploy/v4/flypostv4:6590bd49adb12ecb15ac718614dfffdb0805022b
+        name: placeholder-1
+        ports:
+        - containerPort: 8080
+          name: http1
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 240
+      serviceAccountName: 498798854474-compute@developer.gserviceaccount.com
+      timeoutSeconds: 300
+  traffic:
+  - latestRevision: true
+    percent: 100

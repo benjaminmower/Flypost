@@ -1,0 +1,33 @@
+// VERIFIED LIVE EXPORT — fetched 2026-08-14 via the Firebase Rules Management API
+// (firebaserules.googleapis.com), ruleset projects/goflypost/rulesets/36eda389-0761-4a59-951b-ab81698fcc5c,
+// active release projects/goflypost/releases/cloud.firestore (created 2025-06-10, last updated 2025-08-18).
+//
+// No `firebase firestore:rules:get` CLI command exists; this was pulled directly from the API:
+//   ACCESS_TOKEN=$(gcloud auth print-access-token)
+//   curl -H "Authorization: Bearer $ACCESS_TOKEN" -H "x-goog-user-project: goflypost" \
+//     "https://firebaserules.googleapis.com/v1/projects/goflypost/rulesets/36eda389-0761-4a59-951b-ab81698fcc5c"
+//
+// This file was NOT in version control anywhere before now — firebase.json only declared
+// firestore.indexes, not firestore.rules, so this is the only record of it that will survive
+// a teardown. To redeploy on rebuild: reference this file from firebase.json's
+// `firestore.rules` key, then `firebase deploy --only firestore:rules`.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Publicly readable events; writes only via backend (Admin SDK bypasses rules)
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Sensitive collections (no client access)
+    match /api_keys/{doc} { allow read, write: if false; }
+    match /webhooks/{doc} { allow read, write: if false; }
+    match /event_submissions/{doc} { allow read, write: if false; }
+
+    // Fallback deny
+    match /{document=**} { allow read, write: if false; }
+  }
+}
